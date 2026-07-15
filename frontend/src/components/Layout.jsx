@@ -1,13 +1,22 @@
 import { useState } from 'react';
-import { Outlet, useMatches } from 'react-router-dom';
+import { Outlet, useLocation } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import TopBar from './TopBar';
 import SetupBanner from './SetupBanner';
 
+const PAGE_TITLES = {
+  '/': 'Dashboard',
+  '/services': 'Serviços',
+  '/databases': 'Bancos de Dados',
+  '/logs': 'Logs',
+  '/monitoring': 'Monitoramento',
+  '/settings': 'Configurações',
+};
+
 export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const matches = useMatches();
-  const title = matches.length > 0 ? (matches[matches.length - 1]?.handle?.title || 'TermuxPanel') : 'TermuxPanel';
+  const location = useLocation();
+  const title = PAGE_TITLES[location.pathname] || 'TermuxPanel';
 
   return (
     <div className="flex min-h-screen">
