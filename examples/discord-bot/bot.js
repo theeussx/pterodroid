@@ -1,5 +1,5 @@
 /**
- * Example service for TermuxPanel.
+ * Example service for Pterodroid.
  *
  * This file shows the shape any service should follow to work well with
  * the panel's process manager:

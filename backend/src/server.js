@@ -8,6 +8,7 @@ const { initDB, getDB } = require('./db');
 const { setupSockets } = require('./sockets');
 const pm = require('./services/processManager');
 const dbm = require('./services/dbInstanceManager');
+const tm = require('./services/tunnelManager');
 
 const authRoutes = require('./routes/auth');
 const serviceRoutes = require('./routes/services');
@@ -38,7 +39,7 @@ async function main() {
   app.get('*', (req, res, next) => {
     if (req.path.startsWith('/api')) return next();
     res.sendFile(path.join(frontendDist, 'index.html'), (err) => {
-      if (err) res.status(200).send('TermuxPanel backend is running. Build the frontend to serve the UI here.');
+      if (err) res.status(200).send('Pterodroid backend is running. Build the frontend to serve the UI here.');
     });
   });
 
@@ -55,7 +56,7 @@ async function main() {
   setupSockets(httpServer);
 
   httpServer.listen(config.PORT, () => {
-    console.log(`\n🚀 TermuxPanel backend listening on http://0.0.0.0:${config.PORT}\n`);
+    console.log(`\n🚀 Pterodroid backend listening on http://0.0.0.0:${config.PORT}\n`);
   });
 
   // Resume services that were running before the panel last stopped.
@@ -70,6 +71,7 @@ async function main() {
     try {
       await pm.stopAll();
       await dbm.stopAll();
+      await tm.stopAll();
     } catch (e) {
       console.error('Error during shutdown:', e.message);
     }

@@ -14,6 +14,8 @@ const path = require('path');
 const { getDB } = require('../db');
 const config = require('../config');
 const drivers = require('./dbDrivers');
+const { findAvailablePort } = require('./portFinder');
+const tunnelManager = require('./tunnelManager');
 
 class DBInstanceManager extends EventEmitter {
   constructor() {
@@ -48,6 +50,18 @@ class DBInstanceManager extends EventEmitter {
     const driver = this.driverFor(inst.type);
     const dataDirectory = this.dataDirFor(inst);
 
+    // Dynamic port allocation
+    let activePort = inst.port;
+    try {
+      activePort = await findAvailablePort(inst.port);
+      if (activePort !== inst.port) {
+        console.log(`[DB] Port ${inst.port} busy, using ${activePort} for ${inst.name}`);
+        db.prepare('UPDATE db_instances SET port=? WHERE id=?').run(activePort, instanceId);
+      }
+    } catch (err) {
+      console.error(`[DB] Failed to find available port for ${inst.name}:`, err.message);
+    }
+
     if (!inst.provisioned) {
       this.emit('status', { instanceId, status: 'provisioning' });
       db.prepare("UPDATE db_instances SET status='provisioning' WHERE id=?").run(instanceId);
@@ -67,7 +81,7 @@ class DBInstanceManager extends EventEmitter {
         .run(dataDirectory, instanceId);
     }
 
-    return this._spawn({ ...inst, data_directory: dataDirectory }, driver);
+    return this._spawn({ ...inst, data_directory: dataDirectory, port: activePort }, driver);
   }
 
   async stopInstance(instanceId) {
@@ -160,12 +174,20 @@ class DBInstanceManager extends EventEmitter {
     db.prepare("UPDATE db_instances SET status='running', pid=? WHERE id=?").run(child.pid, inst.id);
     this.emit('status', { instanceId: inst.id, status: 'running', pid: child.pid });
 
+    // Start tunnel if requested (for now we auto-start for all to enable remote access)
+    tunnelManager.startTunnel('db', inst.id, inst.port).catch(err => {
+      console.error(`[DB] Failed to start tunnel for ${inst.name}:`, err.message);
+    });
+
     return child.pid;
   }
 
   async _kill(instanceId) {
     const entry = this.procs.get(instanceId);
     if (!entry) return;
+
+    // Stop tunnel
+    tunnelManager.stopTunnel('db', instanceId).catch(() => {});
 
     entry.stopped = true;
 

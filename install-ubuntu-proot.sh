@@ -1,5 +1,5 @@
 #!/bin/bash
-# install-ubuntu-proot.sh — sets up TermuxPanel inside an Ubuntu proot
+# install-ubuntu-proot.sh — sets up Pterodroid inside an Ubuntu proot
 # (e.g. proot-distro on Termux).
 set -euo pipefail
 
@@ -24,8 +24,8 @@ if [ "$(id -u)" = "0" ]; then
   echo "=================================================="
   read -r -p "Criar um usuário comum agora para rodar o painel? [S/n] " ans
   if [[ ! "$ans" =~ ^[nN]$ ]]; then
-    read -r -p "Nome do usuário [termuxpanel]: " newuser
-    newuser="${newuser:-termuxpanel}"
+    read -r -p "Nome do usuário [pterodroid]: " newuser
+    newuser="${newuser:-pterodroid}"
     if ! id "$newuser" >/dev/null 2>&1; then
       apt-get update -qq
       apt-get install -y -qq sudo
@@ -48,11 +48,18 @@ fi
 echo "== Atualizando pacotes =="
 sudo -n apt-get update -qq 2>/dev/null || apt-get update -qq
 
-echo "== Instalando Node.js =="
+echo "== Instalando Node.js e Cloudflared =="
 if ! command -v node >/dev/null 2>&1; then
   (sudo -n apt-get install -y -qq nodejs npm 2>/dev/null || apt-get install -y -qq nodejs npm)
 fi
+if ! command -v cloudflared >/dev/null 2>&1; then
+  echo "Instalando cloudflared..."
+  curl -L --output cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
+  (sudo -n dpkg -i cloudflared.deb 2>/dev/null || dpkg -i cloudflared.deb)
+  rm cloudflared.deb
+fi
 node --version
+cloudflared --version
 
 echo ""
 echo "== Bancos de dados (opcional) =="

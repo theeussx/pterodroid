@@ -34,7 +34,7 @@ export default function Login() {
           <div className="w-12 h-12 rounded-xl bg-signal-soft border border-signal/30 flex items-center justify-center mb-4">
             <span className="w-3 h-3 rounded-full bg-signal animate-pulse-dot" />
           </div>
-          <h1 className="font-display font-semibold text-xl text-ink">TermuxPanel</h1>
+          <h1 className="font-display font-semibold text-xl text-ink">Pterodroid</h1>
           <p className="text-sm text-ink-faint mt-1">Painel pessoal de hospedagem</p>
         </div>
 

@@ -39,7 +39,9 @@ async function initDB() {
       last_started      DATETIME,
       last_stopped      DATETIME,
       created_at        DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at        DATETIME DEFAULT CURRENT_TIMESTAMP
+      updated_at        DATETIME DEFAULT CURRENT_TIMESTAMP,
+      port              INTEGER,
+      public_url        TEXT
     );
 
     CREATE TABLE IF NOT EXISTS db_instances (
@@ -53,6 +55,7 @@ async function initDB() {
       status         TEXT    DEFAULT 'stopped',
       pid            INTEGER,
       provisioned    INTEGER DEFAULT 0,
+      public_url     TEXT,
       created_at     DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at     DATETIME DEFAULT CURRENT_TIMESTAMP
     );
@@ -78,7 +81,7 @@ async function initDB() {
 
   // Default settings
   const defaults = [
-    ['panel_name', 'TermuxPanel'],
+    ['panel_name', 'Pterodroid'],
     ['panel_color', '#4f8ef7'],
     ['log_retention_days', '7'],
     ['setup_done', 'false'],

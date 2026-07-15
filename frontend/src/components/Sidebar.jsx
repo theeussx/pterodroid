@@ -29,7 +29,7 @@ export default function Sidebar({ open, onClose }) {
             <div className="w-7 h-7 rounded-md bg-signal-soft border border-signal/30 flex items-center justify-center">
               <span className="w-2 h-2 rounded-full bg-signal animate-pulse-dot" />
             </div>
-            <span className="font-display font-semibold text-ink tracking-tight">TermuxPanel</span>
+            <span className="font-display font-semibold text-ink tracking-tight">Pterodroid</span>
           </div>
           <button onClick={onClose} className="lg:hidden text-ink-faint hover:text-ink">
             <X size={18} />

@@ -86,12 +86,20 @@ export default function DatabaseDetailModal({ open, onClose, instanceId, onChang
           </div>
         </div>
 
-        {inst.data_directory && (
-          <div className="bg-raised rounded-lg p-3 text-xs">
-            <p className="text-ink-faint mb-1">Diretório de dados</p>
-            <p className="text-ink font-mono break-all">{inst.data_directory}</p>
-          </div>
-        )}
+        <div className="grid sm:grid-cols-2 gap-3">
+          {inst.data_directory && (
+            <div className="bg-raised rounded-lg p-3 text-xs">
+              <p className="text-ink-faint mb-1">Diretório de dados</p>
+              <p className="text-ink font-mono break-all">{inst.data_directory}</p>
+            </div>
+          )}
+          {inst.public_url && (
+            <div className="bg-signal-soft rounded-lg p-3 text-xs">
+              <p className="text-signal mb-1 font-semibold">Túnel TCP (Cloudflare)</p>
+              <p className="text-signal font-mono break-all">{inst.public_url.replace('https://', 'tcp://')}</p>
+            </div>
+          )}
+        </div>
 
         <LogViewer lines={lines} />
       </div>

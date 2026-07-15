@@ -96,6 +96,12 @@ export default function Databases() {
               <StatusDot status={d.status} showLabel={false} />
             </div>
 
+            {d.public_url && (
+              <div className="text-[10px] bg-signal-soft text-signal px-2 py-1 rounded border border-signal/20 truncate font-mono">
+                {d.public_url.replace('https://', 'tcp://')}
+              </div>
+            )}
+
             <div className="flex items-center justify-between mt-auto pt-2 border-t border-line-soft">
               <span className="text-[10px] uppercase tracking-wide text-ink-faint font-mono">
                 {d.provisioned ? 'provisionado' : 'não provisionado'}

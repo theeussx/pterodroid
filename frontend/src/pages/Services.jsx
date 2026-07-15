@@ -104,8 +104,17 @@ export default function Services() {
 
             {s.description && <p className="text-xs text-ink-dim line-clamp-2">{s.description}</p>}
 
+            {s.public_url && (
+              <div className="text-[10px] bg-signal-soft text-signal px-2 py-1 rounded border border-signal/20 truncate font-mono">
+                {s.public_url}
+              </div>
+            )}
+
             <div className="flex items-center justify-between mt-auto pt-2 border-t border-line-soft">
-              <span className="text-[10px] uppercase tracking-wide text-ink-faint font-mono">{s.type}</span>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] uppercase tracking-wide text-ink-faint font-mono">{s.type}</span>
+                {s.port && <span className="text-[10px] text-ink-faint font-mono">:{s.port}</span>}
+              </div>
               <div className="flex gap-1">
                 {s.status === 'running' ? (
                   <button disabled={busyId === s.id} onClick={() => handleAction(s.id, api.stopService, 'Parado')} className="p-1.5 text-ink-faint hover:text-error transition-colors disabled:opacity-40" title="Parar">

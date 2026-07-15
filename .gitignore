@@ -1,0 +1,24 @@
+# Dependências
+node_modules/
+dist/
+.env
+
+# Dados do Pterodroid
+data/
+backend/data/
+*.db
+*.log
+*.pid
+
+# Logs do Cloudflared
+.cloudflare/
+
+# IDEs e Sistema
+.vscode/
+.idea/
+.DS_Store
+thumbs.db
+
+# Temporários
+*.tmp
+*.bak

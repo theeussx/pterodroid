@@ -96,6 +96,20 @@ export default function ServiceDetailModal({ open, onClose, serviceId, onChanged
             <p className="text-ink-faint mb-1">Última inicialização</p>
             <p className="text-ink">{service.last_started ? new Date(service.last_started + 'Z').toLocaleString('pt-BR') : '—'}</p>
           </div>
+          {service.port && (
+            <div className="bg-raised rounded-lg p-3">
+              <p className="text-ink-faint mb-1">Porta Local</p>
+              <p className="text-ink font-mono">{service.port}</p>
+            </div>
+          )}
+          {service.public_url && (
+            <div className="bg-signal-soft rounded-lg p-3 col-span-2">
+              <p className="text-signal mb-1 font-semibold">URL Pública (Cloudflare)</p>
+              <a href={service.public_url} target="_blank" rel="noreferrer" className="text-signal underline break-all font-mono">
+                {service.public_url}
+              </a>
+            </div>
+          )}
         </div>
 
         <LogViewer lines={lines} onSendInput={service.status === 'running' ? sendInput : undefined} />

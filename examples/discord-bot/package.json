@@ -1,7 +1,7 @@
 {
   "name": "example-discord-bot",
   "version": "1.0.0",
-  "description": "Example bot service for TermuxPanel — demonstrates a service that plays nicely with the panel's process manager",
+  "description": "Example bot service for Pterodroid — demonstrates a service that plays nicely with the panel's process manager",
   "main": "bot.js",
   "type": "commonjs",
   "scripts": {

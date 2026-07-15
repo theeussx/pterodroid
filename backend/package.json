@@ -1,5 +1,5 @@
 {
-  "name": "termux-panel-backend",
+  "name": "pterodroid-backend",
   "version": "1.0.0",
   "description": "Personal hosting panel backend for Termux/Proot",
   "main": "src/server.js",

@@ -7,6 +7,8 @@ const { spawn } = require('child_process');
 const EventEmitter = require('events');
 const { getDB } = require('../db');
 const config = require('../config');
+const { findAvailablePort } = require('./portFinder');
+const tunnelManager = require('./tunnelManager');
 
 class ProcessManager extends EventEmitter {
   constructor() {
@@ -92,14 +94,28 @@ class ProcessManager extends EventEmitter {
 
   // ── Internal ──────────────────────────────────────────────────────────
 
-  _spawn(svc) {
+  async _spawn(svc) {
     const db = getDB();
-
-    let env = { ...process.env };
-    try { env = { ...env, ...JSON.parse(svc.environment || '{}') }; } catch { /* keep base env */ }
 
     const [cmd, ...args] = this._parseCommand(svc.command);
     const cwd = svc.working_directory?.trim() || process.env.HOME || '/tmp';
+
+    // Dynamic port allocation if service has a port defined
+    let env = { ...process.env };
+    try { env = { ...env, ...JSON.parse(svc.environment || '{}') }; } catch { /* keep base env */ }
+
+    if (svc.port) {
+      try {
+        const activePort = await findAvailablePort(svc.port);
+        if (activePort !== svc.port) {
+          console.log(`[SVC] Port ${svc.port} busy, using ${activePort} for ${svc.name}`);
+          db.prepare('UPDATE services SET port=? WHERE id=?').run(activePort, svc.id);
+        }
+        env.PORT = activePort.toString();
+      } catch (err) {
+        console.error(`[SVC] Failed to find available port for ${svc.name}:`, err.message);
+      }
+    }
 
     let child;
     try {
@@ -186,12 +202,22 @@ class ProcessManager extends EventEmitter {
       .run('running', child.pid, entry.restartCount, svc.id);
     this.emit('status', { serviceId: svc.id, status: 'running', pid: child.pid });
 
+    // Start tunnel if the service has a port
+    if (svc.port) {
+      tunnelManager.startTunnel('service', svc.id, env.PORT || svc.port).catch(err => {
+        console.error(`[SVC] Failed to start tunnel for ${svc.name}:`, err.message);
+      });
+    }
+
     return child.pid;
   }
 
   async _kill(serviceId, updateDB) {
     const entry = this.procs.get(serviceId);
     if (!entry) return;
+
+    // Stop tunnel
+    tunnelManager.stopTunnel('service', serviceId).catch(() => {});
 
     entry.stopped = true;
     if (entry.watchdog) clearTimeout(entry.watchdog);

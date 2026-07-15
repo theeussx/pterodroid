@@ -1,5 +1,5 @@
 #!/bin/bash
-# install-termux.sh — sets up TermuxPanel inside Termux.
+# install-termux.sh — sets up Pterodroid inside Termux.
 set -euo pipefail
 
 if [ -z "${PREFIX:-}" ] || [[ "$PREFIX" != *com.termux* ]]; then
@@ -13,8 +13,8 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 echo "== Atualizando pacotes =="
 pkg update -y
 
-echo "== Instalando Node.js =="
-pkg install -y nodejs
+echo "== Instalando Node.js e Cloudflared =="
+pkg install -y nodejs cloudflared
 
 echo ""
 echo "== Bancos de dados (opcional) =="

@@ -59,18 +59,19 @@ router.post('/', (req, res) => {
   const {
     name, description = '', type = 'node', command,
     working_directory = '', environment = '{}',
-    auto_restart = 1, restart_delay = 3, max_restarts = 10,
+    auto_restart = 1, restart_delay = 3, max_restarts = 10, port = null,
   } = req.body;
 
   const result = db.prepare(`
     INSERT INTO services
       (name, description, type, command, working_directory, environment,
-       auto_restart, restart_delay, max_restarts)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+       auto_restart, restart_delay, max_restarts, port)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     name.trim(), description.trim(), type, command.trim(),
     working_directory.trim(), sanitizeEnv(environment),
     auto_restart ? 1 : 0, parseInt(restart_delay, 10) || 3, parseInt(max_restarts, 10) || 10,
+    port ? parseInt(port, 10) : null,
   );
 
   const created = db.prepare('SELECT * FROM services WHERE id = ?').get(result.lastInsertRowid);
@@ -88,13 +89,13 @@ router.put('/:id', (req, res) => {
 
   const {
     name, description, type, command, working_directory,
-    environment, auto_restart, restart_delay, max_restarts,
+    environment, auto_restart, restart_delay, max_restarts, port,
   } = req.body;
 
   db.prepare(`
     UPDATE services SET
       name=?, description=?, type=?, command=?, working_directory=?,
-      environment=?, auto_restart=?, restart_delay=?, max_restarts=?,
+      environment=?, auto_restart=?, restart_delay=?, max_restarts=?, port=?,
       updated_at=CURRENT_TIMESTAMP
     WHERE id=?
   `).run(
@@ -107,6 +108,7 @@ router.put('/:id', (req, res) => {
     auto_restart != null ? (auto_restart ? 1 : 0) : existing.auto_restart,
     parseInt(restart_delay, 10) || existing.restart_delay,
     parseInt(max_restarts, 10) || existing.max_restarts,
+    port ? parseInt(port, 10) : (port === '' ? null : existing.port),
     existing.id,
   );
 

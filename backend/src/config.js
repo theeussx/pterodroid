@@ -4,7 +4,7 @@ const DATA_ROOT = process.env.DATA_ROOT || path.join(__dirname, '../../data');
 
 module.exports = {
   PORT: parseInt(process.env.PORT || '3001', 10),
-  JWT_SECRET: process.env.JWT_SECRET || 'termux-panel-secret-change-me-in-production',
+  JWT_SECRET: process.env.JWT_SECRET
   JWT_EXPIRES: '7d',
   DATA_ROOT,
   DB_PATH: process.env.DB_PATH || path.join(DATA_ROOT, 'panel.db'),

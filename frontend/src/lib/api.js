@@ -1,4 +1,4 @@
-const TOKEN_KEY = 'termuxpanel_token';
+const TOKEN_KEY = 'pterodroid_token';
 
 export function getToken() {
   return localStorage.getItem(TOKEN_KEY);

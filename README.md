@@ -1,4 +1,4 @@
-# TermuxPanel
+# Pterodroid
 
 Painel pessoal de hospedagem, inspirado no Pterodactyl, para rodar dentro do **Termux** ou de um **Ubuntu proot** no Android. Gerencia serviços (bots, APIs, sites), instâncias de banco de dados locais, logs em tempo real e monitoramento de recursos — tudo sem depender de systemd.
 
@@ -55,7 +55,7 @@ PostgreSQL e MariaDB **recusam rodar como root** — é uma proteção de segura
 ## Estrutura de pastas
 
 ```
-termux-panel/
+pterodroid/
 ├── panelctl.sh                 # start/stop/status/logs do painel (sem systemd)
 ├── install-termux.sh
 ├── install-ubuntu-proot.sh
@@ -102,8 +102,8 @@ termux-panel/
 ### Termux
 
 ```bash
-git clone <seu-repo> termux-panel   # ou copie a pasta pro celular
-cd termux-panel
+git clone <seu-repo> pterodroid   # ou copie a pasta pro celular
+cd pterodroid
 ./install-termux.sh
 ./panelctl.sh start
 ```
@@ -115,7 +115,7 @@ Acesse `http://localhost:3001` no navegador do celular, ou `http://<ip-do-celula
 ### Ubuntu Proot
 
 ```bash
-cd termux-panel
+cd pterodroid
 ./install-ubuntu-proot.sh
 ./panelctl.sh start
 ```

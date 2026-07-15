@@ -22,7 +22,7 @@ cmd_start() {
     echo "Já está rodando (pid $(cat "$PID_FILE"))."
     exit 0
   fi
-  echo "Iniciando TermuxPanel..."
+  echo "Iniciando Pterodroid..."
   cd "$BACKEND_DIR"
   nohup node src/server.js >> "$LOG_FILE" 2>&1 &
   echo $! > "$PID_FILE"
@@ -59,9 +59,9 @@ cmd_stop() {
 
 cmd_status() {
   if is_running; then
-    echo "TermuxPanel rodando (pid $(cat "$PID_FILE"))."
+    echo "Pterodroid rodando (pid $(cat "$PID_FILE"))."
   else
-    echo "TermuxPanel parado."
+    echo "Pterodroid parado."
   fi
 }
 

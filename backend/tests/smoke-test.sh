@@ -4,7 +4,7 @@
 # (with your real services configured) is already up.
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
-export DB_PATH="/tmp/termuxpanel-smoketest-$$.db"
+export DB_PATH="/tmp/pterodroid-smoketest-$$.db"
 export PORT=3099
 BASE="http://localhost:$PORT"
 rm -f "$DB_PATH"

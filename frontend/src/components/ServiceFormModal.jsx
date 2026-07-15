@@ -15,7 +15,7 @@ const TYPES = [
 
 const EMPTY = {
   name: '', description: '', type: 'node', command: '', working_directory: '',
-  environment: '{}', auto_restart: true, restart_delay: 3, max_restarts: 10,
+  environment: '{}', auto_restart: true, restart_delay: 3, max_restarts: 10, port: '',
 };
 
 export default function ServiceFormModal({ open, onClose, onSubmit, initial }) {
@@ -91,9 +91,15 @@ export default function ServiceFormModal({ open, onClose, onSubmit, initial }) {
           <MonoInput id="command" value={form.command} onChange={set('command')} placeholder="node index.js" required />
         </div>
 
-        <div>
-          <Label htmlFor="cwd">Diretório de trabalho (opcional)</Label>
-          <MonoInput id="cwd" value={form.working_directory} onChange={set('working_directory')} placeholder="/data/data/com.termux/files/home/meu-bot" />
+        <div className="grid sm:grid-cols-2 gap-4">
+          <div>
+            <Label htmlFor="cwd">Diretório de trabalho (opcional)</Label>
+            <MonoInput id="cwd" value={form.working_directory} onChange={set('working_directory')} placeholder="/home/user/app" />
+          </div>
+          <div>
+            <Label htmlFor="port">Porta (habilita acesso remoto)</Label>
+            <Input id="port" type="number" value={form.port} onChange={set('port')} placeholder="3000" />
+          </div>
         </div>
 
         <div>

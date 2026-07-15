@@ -16,7 +16,7 @@ const PAGE_TITLES = {
 export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const location = useLocation();
-  const title = PAGE_TITLES[location.pathname] || 'TermuxPanel';
+  const title = PAGE_TITLES[location.pathname] || 'Pterodroid';
 
   return (
     <div className="flex min-h-screen">
