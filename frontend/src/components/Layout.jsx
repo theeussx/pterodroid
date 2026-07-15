@@ -7,7 +7,7 @@ import SetupBanner from './SetupBanner';
 export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const matches = useMatches();
-  const title = matches[matches.length - 1]?.handle?.title || 'TermuxPanel';
+  const title = matches.length > 0 ? (matches[matches.length - 1]?.handle?.title || 'TermuxPanel') : 'TermuxPanel';
 
   return (
     <div className="flex min-h-screen">
