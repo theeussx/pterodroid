@@ -1,7 +1,10 @@
 const router = require('express').Router();
 const { getDB } = require('../db');
+const tm = require('../services/tunnelManager');
+const config = require('../config');
 
 const EDITABLE_KEYS = ['panel_name', 'panel_color', 'log_retention_days'];
+const PANEL_TUNNEL_ID = 'main';
 
 // GET /api/settings
 router.get('/', (req, res) => {
@@ -34,6 +37,43 @@ router.post('/complete-setup', (req, res) => {
     INSERT INTO settings (key, value) VALUES ('setup_done', 'true')
     ON CONFLICT(key) DO UPDATE SET value = 'true'
   `).run();
+  return res.json({ ok: true });
+});
+
+// GET /api/settings/cloudflared — is cloudflared installed and usable?
+// Shared by the remote-access panel and any service/database form that
+// wants to warn upfront, same idea as the /api/databases/engines check.
+router.get('/cloudflared', (req, res) => {
+  return res.json(tm.checkAvailable());
+});
+
+// GET /api/settings/remote-access — current state of the panel's OWN tunnel
+// (separate from per-service/per-database tunnels, which are tied to that
+// resource's own start/stop lifecycle instead).
+router.get('/remote-access', (req, res) => {
+  const availability = tm.checkAvailable();
+  const info = tm.getTunnelInfo('panel', PANEL_TUNNEL_ID);
+  return res.json({
+    ...availability,
+    active: !!info,
+    status: info?.status || 'stopped',
+    url: info?.url || null,
+  });
+});
+
+// POST /api/settings/remote-access/start
+router.post('/remote-access/start', async (req, res) => {
+  try {
+    await tm.startTunnel('panel', PANEL_TUNNEL_ID, config.PORT);
+    return res.json({ ok: true });
+  } catch (e) {
+    return res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/settings/remote-access/stop
+router.post('/remote-access/stop', async (req, res) => {
+  await tm.stopTunnel('panel', PANEL_TUNNEL_ID);
   return res.json({ ok: true });
 });
 

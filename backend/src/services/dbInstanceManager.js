@@ -15,7 +15,6 @@ const { getDB } = require('../db');
 const config = require('../config');
 const drivers = require('./dbDrivers');
 const { findAvailablePort } = require('./portFinder');
-const tunnelManager = require('./tunnelManager');
 
 class DBInstanceManager extends EventEmitter {
   constructor() {
@@ -174,10 +173,15 @@ class DBInstanceManager extends EventEmitter {
     db.prepare("UPDATE db_instances SET status='running', pid=? WHERE id=?").run(child.pid, inst.id);
     this.emit('status', { instanceId: inst.id, status: 'running', pid: child.pid });
 
-    // Start tunnel if requested (for now we auto-start for all to enable remote access)
-    tunnelManager.startTunnel('db', inst.id, inst.port).catch(err => {
-      console.error(`[DB] Failed to start tunnel for ${inst.name}:`, err.message);
-    });
+    // NOTE: databases are deliberately never tunneled. cloudflared Quick
+    // Tunnels (`--url http://localhost:PORT`) only proxy HTTP traffic — a
+    // Postgres/MySQL client speaking its own wire protocol can't get
+    // through one. Making this "work" for real needs a Named Tunnel with
+    // TCP ingress *and* cloudflared running on the connecting device too
+    // (`cloudflared access tcp`), which is a fair bit of setup on both
+    // ends — see the README if you actually need that. Showing a public
+    // URL here that quietly can't accept a real DB connection would be
+    // worse than not having the button at all.
 
     return child.pid;
   }
@@ -185,9 +189,6 @@ class DBInstanceManager extends EventEmitter {
   async _kill(instanceId) {
     const entry = this.procs.get(instanceId);
     if (!entry) return;
-
-    // Stop tunnel
-    tunnelManager.stopTunnel('db', instanceId).catch(() => {});
 
     entry.stopped = true;
 

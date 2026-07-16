@@ -1,6 +1,7 @@
 const router = require('express').Router();
 const { getDB } = require('../db');
 const pm = require('../services/processManager');
+const { scaffoldProjectDir, removeScaffoldedDir } = require('../services/projectScaffold');
 
 const VALID_TYPES = ['node', 'python', 'shell', 'bot', 'api', 'web', 'other'];
 
@@ -62,16 +63,26 @@ router.post('/', (req, res) => {
     auto_restart = 1, restart_delay = 3, max_restarts = 10, port = null,
   } = req.body;
 
+  // No working directory given → scaffold a dedicated "container" folder
+  // for this service's own files under PROJECTS_ROOT, instead of forcing
+  // the admin to have already mkdir'd something in Termux beforehand.
+  let finalWorkingDir = working_directory.trim();
+  let scaffolded = 0;
+  if (!finalWorkingDir) {
+    finalWorkingDir = scaffoldProjectDir(name);
+    scaffolded = 1;
+  }
+
   const result = db.prepare(`
     INSERT INTO services
       (name, description, type, command, working_directory, environment,
-       auto_restart, restart_delay, max_restarts, port)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       auto_restart, restart_delay, max_restarts, port, scaffolded_directory)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     name.trim(), description.trim(), type, command.trim(),
-    working_directory.trim(), sanitizeEnv(environment),
+    finalWorkingDir, sanitizeEnv(environment),
     auto_restart ? 1 : 0, parseInt(restart_delay, 10) || 3, parseInt(max_restarts, 10) || 10,
-    port ? parseInt(port, 10) : null,
+    port ? parseInt(port, 10) : null, scaffolded,
   );
 
   const created = db.prepare('SELECT * FROM services WHERE id = ?').get(result.lastInsertRowid);
@@ -122,6 +133,11 @@ router.delete('/:id', async (req, res) => {
   if (!svc) return res.status(404).json({ error: 'Service not found' });
 
   try { await pm.stopService(svc.id); } catch { /* already stopped */ }
+
+  const deleteFiles = req.query.deleteFiles === 'true' || req.body?.deleteFiles === true;
+  if (deleteFiles && svc.scaffolded_directory) {
+    removeScaffoldedDir(svc.working_directory);
+  }
 
   db.prepare('DELETE FROM services WHERE id = ?').run(svc.id);
   db.prepare('DELETE FROM logs WHERE service_id = ?').run(svc.id);

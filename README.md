@@ -39,13 +39,19 @@ Descubra o que o Pterodroid pode fazer por você:
 
 - 🛡️ **Watchdog Inteligente:** Um sistema de monitoramento integrado garante a resiliência dos seus serviços, reiniciando-os automaticamente em caso de falhas inesperadas, com políticas de *backoff* configuráveis.
 
+- 🌐 **Acesso Remoto via Cloudflare Tunnel:** Acesse o painel de qualquer lugar, sem precisar estar na mesma rede Wi-Fi, e exponha publicamente os sites/APIs que você hospedar — tudo com um clique, sem conta na Cloudflare.
+
+- 🔌 **Alocação Automática de Portas:** Se a porta escolhida para um serviço já estiver em uso, o painel encontra a próxima disponível automaticamente e injeta o valor real via variável de ambiente `PORT`.
+
+- 📁 **Containers de Projeto:** Ao criar um serviço sem apontar para uma pasta existente, o painel cria automaticamente um diretório dedicado em `~/pterodroid-projects/`, prontinho para você colocar seu código.
+
 - 🗄️ **Bancos de Dados Locais Simplificados:** Provisionamento e gerenciamento automatizado de instâncias **PostgreSQL** e **MySQL/MariaDB**, permitindo que você configure ambientes de desenvolvimento completos no seu dispositivo.
 
 - 📈 **Monitoramento de Recursos em Tempo Real:** Acompanhe o desempenho do seu sistema com gráficos dinâmicos de uso de CPU, RAM e espaço em disco, fornecendo insights valiosos sobre a saúde dos seus serviços.
 
 - 📝 **Visualização de Logs ao Vivo:** Acesse os logs de console (stdout/stderr) dos seus serviços em tempo real, facilitando a depuração e o acompanhamento de atividades via conexão WebSockets.
 
-- 🔒 **Segurança Robusta:** Autenticação de usuário baseada em JWT (JSON Web Tokens) com validade de 7 dias e armazenamento seguro de senhas utilizando o algoritmo `bcryptjs`.
+- 🔒 **Segurança Robusta:** Autenticação de usuário baseada em JWT (JSON Web Tokens) com validade de 7 dias, segredo gerado e persistido automaticamente no primeiro boot, e armazenamento seguro de senhas utilizando o algoritmo `bcryptjs`.
 
 - 📱 **Experiência Otimizada para Dispositivos Móveis:** Uma interface de usuário responsiva, construída com Tailwind CSS, que se adapta perfeitamente a telas de diferentes tamanhos, garantindo uma experiência consistente em smartphones e tablets.
 
@@ -67,6 +73,33 @@ graph TD
 
 ---
 
+## 🌐 Acesso Remoto (Cloudflare Tunnel)
+
+O painel usa [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/do-more-with-tunnels/trycloudflare/) no modo **Quick Tunnel** — sem precisar de conta na Cloudflare nem de domínio próprio. Isso gera uma URL pública aleatória (`https://algo-aleatorio.trycloudflare.com`) que redireciona para um serviço local.
+
+### Acesso remoto ao painel
+
+Em **Configurações → Acesso Remoto**, ative para gerar uma URL pública do painel inteiro. Assim dá pra acessar de qualquer lugar, incluindo de outro celular, sem estar na mesma rede Wi-Fi.
+
+> [!WARNING]
+> Essa URL não tem autenticação própria — qualquer pessoa com o link chega até a tela de login do painel. **Troque a senha padrão antes de ativar isso.** O painel te avisa se você ainda não trocou.
+
+### Expondo um serviço (site/API)
+
+Ao criar ou editar um serviço, preencha o campo **Porta**. Assim que o serviço iniciar:
+- Se a porta já estiver em uso, o painel escolhe automaticamente a próxima disponível.
+- A porta final é injetada como variável de ambiente `PORT` no processo — frameworks como Express, Flask, FastAPI etc. já leem essa variável por padrão.
+- Um túnel é aberto automaticamente e a URL pública aparece no card do serviço assim que o cloudflared conecta (alguns segundos).
+
+> [!NOTE]
+> A URL muda a cada reinício do serviço — Quick Tunnels não têm domínio fixo. Se você precisa de uma URL estável, crie um [Named Tunnel](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/) com um domínio seu na Cloudflare (`cloudflared tunnel login` → `cloudflared tunnel create` → `cloudflared tunnel route dns`), e aponte o `CLOUDFLARED_BIN`/config manualmente — isso foge do escopo de "um clique" do painel, mas é totalmente compatível com o cloudflared já instalado.
+
+### Por que bancos de dados não têm essa opção
+
+Quick Tunnels só carregam tráfego **HTTP/HTTPS**. O protocolo binário do PostgreSQL ou do MySQL não passa por esse tipo de túnel — só funcionaria com um Named Tunnel configurado para TCP, e mesmo assim o dispositivo que fosse conectar também precisaria rodar `cloudflared access tcp` localmente. Como isso não cabe em "fácil de configurar", o painel simplesmente não oferece essa opção para bancos — é melhor não ter o botão do que ter um botão que mostra uma URL e não conecta a nada.
+
+---
+
 ## 🛠️ Tecnologias Utilizadas
 
 O desenvolvimento do Pterodroid foi guiado pela escolha estratégica de tecnologias que garantem alta compatibilidade e desempenho em ambientes com recursos limitados, como o Termux, evitando dependências de compilação nativa (C++).
@@ -77,7 +110,9 @@ O desenvolvimento do Pterodroid foi guiado pela escolha estratégica de tecnolog
 | **Backend** | Node.js, Express, Socket.io | Ambiente JavaScript unificado. Express para API RESTful. Socket.io para comunicação em tempo real (logs e status). |
 | **Banco de Dados Interno** | SQLite via `sql.js` (WASM) | Solução de banco de dados leve e totalmente compatível com Termux, sem necessidade de `node-gyp` para compilação nativa. |
 | **Gerenciamento de Processos** | `child_process` do Node.js | Controle direto sobre os processos dos serviços, com monitoramento de stdout/stderr e reinício automático. |
-| **Autenticação** | JWT, `bcryptjs` | Segurança robusta para autenticação de usuários e hashing de senhas, sem dependências nativas. |
+| **Autenticação** | JWT, `bcryptjs` | Segurança robusta para autenticação de usuários e hashing de senhas, sem dependências nativas. Segredo JWT gerado e persistido automaticamente (`data/.jwt-secret`) se não configurado via `.env`. |
+| **Configuração** | `dotenv` | Leitura de `backend/.env` (veja `.env.example`) para porta, segredo JWT, diretórios de dados e projetos. Tudo opcional — funciona com zero configuração. |
+| **Acesso Remoto** | `cloudflared` (Quick Tunnels) | Exposição pública do painel e de serviços via Cloudflare Tunnel, sem conta ou domínio necessários. |
 | **Ícones** | `lucide-react` | Biblioteca de ícones leve, modular e otimizada para React, sem dependências nativas. |
 | **Bancos Gerenciados** | PostgreSQL, MySQL/MariaDB | Suporte para os principais sistemas de gerenciamento de banco de dados, provisionados como processos filhos diretos para integração simplificada. |
 
@@ -142,6 +177,19 @@ Para garantir que o Pterodroid e seus serviços continuem funcionando em segundo
 1. **Ative o Wake Lock:** Execute `termux-wake-lock` em uma sessão do Termux antes de iniciar o painel. Isso impede que o sistema Android suspenda o Termux para economizar bateria.
 
 1. **Otimização de Bateria:** Desative as otimizações de bateria para o aplicativo Termux nas configurações do seu Android. Isso evita que o sistema encerre o processo do Termux de forma agressiva.
+
+---
+
+## 🐛 Correções desta atualização
+
+Testado de ponta a ponta (backend real, Postgres e MariaDB reais, cloudflared real) antes de entregar. Encontrado e corrigido:
+
+- **Banco de dados não iniciava:** o `portFinder.js` escutava o evento `'listen'`, mas o Node emite `'listening'` — toda vez que uma porta estava livre (o caso normal), a checagem travava para sempre. Como toda instância de banco tem porta obrigatória, nenhuma nunca chegava a iniciar.
+- **"Baixe o banco" mesmo já instalado:** a checagem de binários usava `which`, que não vem instalado por padrão no Termux. Trocado por `command -v` (builtin do shell, sempre disponível) com um scan manual do `$PATH` como reforço.
+- **`config.js` com erro de sintaxe:** faltava uma vírgula, o que impedia o backend de sequer iniciar.
+- **Risco de crash do painel inteiro:** o `tunnelManager` não tinha handler para o evento `'error'` do processo filho — se o `cloudflared` não estivesse instalado, o Node derrubava o processo inteiro (não só a tentativa de túnel). Corrigido com tratamento de erro adequado.
+- **Migração de schema:** novas colunas (`port`, `public_url`, etc.) agora são adicionadas via `ALTER TABLE` a um banco já existente, em vez de só funcionarem em um banco novo. Seu `panel.db` atual é migrado automaticamente, sem perda de dados, na primeira vez que você rodar essa versão.
+- **Exposição de banco de dados via túnel removida:** Quick Tunnels só suportam HTTP, então essa opção nunca funcionaria de verdade para Postgres/MySQL — veja a seção de Acesso Remoto acima.
 
 ---
 

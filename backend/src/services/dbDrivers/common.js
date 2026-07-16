@@ -1,4 +1,5 @@
 const fs = require('fs');
+const path = require('path');
 const { execSync } = require('child_process');
 
 // Debian/Ubuntu's postgresql package (including inside Ubuntu-proot) installs
@@ -8,17 +9,37 @@ const { execSync } = require('child_process');
 const VERSIONED_DIRS = ['/usr/lib/postgresql'];
 
 /**
- * Returns the first binary from `candidates` that can be found — either a
- * bare name resolvable on PATH, or a full path discovered under a known
- * versioned-install directory. Returns null if nothing matches.
+ * Returns the first binary from `candidates` that can be found. Tries three
+ * strategies, each a fallback for the one before it:
+ *   1. `command -v` — a POSIX *shell builtin*, not an external program.
+ *      Unlike `which`, it can't be "not installed": every sh/bash has it.
+ *      (Termux does NOT ship `which` by default, which is exactly why the
+ *      old `which`-based check here reported postgres/mariadb as missing
+ *      even after `pkg install` — command -v has no such gap.)
+ *   2. A manual scan of $PATH directories, pure Node/fs, no shell at all —
+ *      belt-and-suspenders in case `execSync`'s shell is unusual.
+ *   3. Known versioned install dirs (Debian/Ubuntu postgresql layout).
  */
 function findBinary(candidates) {
   for (const name of candidates) {
     try {
-      const out = execSync(`which ${name} 2>/dev/null`, { encoding: 'utf8' }).trim();
+      const out = execSync(`command -v ${name} 2>/dev/null`, { encoding: 'utf8' }).trim();
       if (out) return name;
     } catch {
-      // not found on PATH, keep looking
+      // not found via shell builtin, keep looking
+    }
+  }
+
+  const pathDirs = (process.env.PATH || '').split(':').filter(Boolean);
+  for (const name of candidates) {
+    for (const dir of pathDirs) {
+      const full = path.join(dir, name);
+      try {
+        fs.accessSync(full, fs.constants.X_OK);
+        return full;
+      } catch {
+        // not here, keep looking
+      }
     }
   }
 

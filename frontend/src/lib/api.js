@@ -44,7 +44,7 @@ export const api = {
   getService: (id) => request(`/services/${id}`),
   createService: (payload) => request('/services', { method: 'POST', body: payload }),
   updateService: (id, payload) => request(`/services/${id}`, { method: 'PUT', body: payload }),
-  deleteService: (id) => request(`/services/${id}`, { method: 'DELETE' }),
+  deleteService: (id, deleteFiles = false) => request(`/services/${id}${deleteFiles ? '?deleteFiles=true' : ''}`, { method: 'DELETE' }),
   startService: (id) => request(`/services/${id}/start`, { method: 'POST' }),
   stopService: (id) => request(`/services/${id}/stop`, { method: 'POST' }),
   restartService: (id) => request(`/services/${id}/restart`, { method: 'POST' }),
@@ -71,4 +71,8 @@ export const api = {
   getSettings: () => request('/settings'),
   updateSettings: (payload) => request('/settings', { method: 'PUT', body: payload }),
   completeSetup: () => request('/settings/complete-setup', { method: 'POST' }),
+  cloudflaredStatus: () => request('/settings/cloudflared'),
+  remoteAccessStatus: () => request('/settings/remote-access'),
+  startRemoteAccess: () => request('/settings/remote-access/start', { method: 'POST' }),
+  stopRemoteAccess: () => request('/settings/remote-access/stop', { method: 'POST' }),
 };

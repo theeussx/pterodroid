@@ -18,14 +18,8 @@ async function findAvailablePort(basePort) {
 function isPortAvailable(port) {
   return new Promise((resolve) => {
     const server = net.createServer();
-    server.once('error', (err) => {
-      if (err.code === 'EADDRINUSE') {
-        resolve(false);
-      } else {
-        resolve(false); // Tratar outros erros como indisponível por segurança
-      }
-    });
-    server.once('listen', () => {
+    server.once('error', () => resolve(false));
+    server.once('listening', () => {
       server.close(() => resolve(true));
     });
     server.listen(port, '0.0.0.0');

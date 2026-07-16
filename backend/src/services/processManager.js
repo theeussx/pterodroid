@@ -77,7 +77,7 @@ class ProcessManager extends EventEmitter {
     const running = db.prepare("SELECT * FROM services WHERE status = 'running'").all();
     for (const svc of running) {
       try {
-        this._spawn(svc);
+        await this._spawn(svc);
         console.log(`↺  Restored service: ${svc.name}`);
       } catch (e) {
         console.error(`✗  Failed to restore ${svc.name}:`, e.message);
@@ -177,7 +177,11 @@ class ProcessManager extends EventEmitter {
 
           entry.watchdog = setTimeout(() => {
             const fresh = db.prepare('SELECT * FROM services WHERE id=?').get(svc.id);
-            if (fresh && !entry.stopped) this._spawn(fresh);
+            if (fresh && !entry.stopped) {
+              this._spawn(fresh).catch((err) => {
+                console.error(`✗  Auto-restart failed for ${svc.name}:`, err.message);
+              });
+            }
           }, delay);
           return; // this entry will be replaced by the respawn's own .set()
         }

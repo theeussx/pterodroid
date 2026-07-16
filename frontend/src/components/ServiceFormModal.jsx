@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
+import { Globe } from 'lucide-react';
 import Modal from './Modal';
 import Button from './Button';
 import { Label, Input, MonoInput, TextArea, Select, Toggle } from './Field';
+import { api } from '../lib/api';
 
 const TYPES = [
   { value: 'node', label: 'Node.js' },
@@ -23,6 +25,8 @@ export default function ServiceFormModal({ open, onClose, onSubmit, initial }) {
   const [envText, setEnvText] = useState('{}');
   const [envError, setEnvError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [cloudflaredOk, setCloudflaredOk] = useState(null);
+  const [cloudflaredMessage, setCloudflaredMessage] = useState('');
 
   useEffect(() => {
     if (open) {
@@ -30,6 +34,7 @@ export default function ServiceFormModal({ open, onClose, onSubmit, initial }) {
       setForm(base);
       setEnvText(initial?.environment || '{}');
       setEnvError('');
+      api.cloudflaredStatus().then((s) => { setCloudflaredOk(s.ok); setCloudflaredMessage(s.message || ''); }).catch(() => {});
     }
   }, [open, initial]);
 
@@ -94,13 +99,22 @@ export default function ServiceFormModal({ open, onClose, onSubmit, initial }) {
         <div className="grid sm:grid-cols-2 gap-4">
           <div>
             <Label htmlFor="cwd">Diretório de trabalho (opcional)</Label>
-            <MonoInput id="cwd" value={form.working_directory} onChange={set('working_directory')} placeholder="/home/user/app" />
+            <MonoInput id="cwd" value={form.working_directory} onChange={set('working_directory')} placeholder="deixe vazio para criar uma pasta automaticamente" />
           </div>
           <div>
             <Label htmlFor="port">Porta (habilita acesso remoto)</Label>
             <Input id="port" type="number" value={form.port} onChange={set('port')} placeholder="3000" />
           </div>
         </div>
+
+        {form.port && (
+          <p className="text-xs text-ink-faint -mt-2 flex items-start gap-1.5">
+            <Globe size={13} className="shrink-0 mt-0.5" />
+            {cloudflaredOk === false
+              ? <span className="text-provisioning">{cloudflaredMessage}</span>
+              : 'Se a porta estiver ocupada, o painel usa a próxima disponível automaticamente. A URL pública muda a cada reinício do serviço.'}
+          </p>
+        )}
 
         <div>
           <Label htmlFor="env">Variáveis de ambiente (JSON)</Label>

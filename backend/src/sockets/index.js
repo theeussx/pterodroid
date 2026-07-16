@@ -8,6 +8,7 @@ const { verifySocketToken } = require('../middleware/auth');
 const { getSnapshot } = require('../services/systemMonitor');
 const pm = require('../services/processManager');
 const dbm = require('../services/dbInstanceManager');
+const tm = require('../services/tunnelManager');
 
 const SNAPSHOT_INTERVAL_MS = 2000;
 
@@ -25,11 +26,13 @@ function setupSockets(httpServer) {
     next();
   });
 
-  // ── Forward process/db manager events to all clients ─────────────────
+  // ── Forward process/db/tunnel manager events to all clients ──────────
   pm.on('log', (payload) => io.emit('service:log', payload));
   pm.on('status', (payload) => io.emit('service:status', payload));
   dbm.on('log', (payload) => io.emit('db:log', payload));
   dbm.on('status', (payload) => io.emit('db:status', payload));
+  tm.on('status', (payload) => io.emit('tunnel:status', payload));
+  tm.on('url', (payload) => io.emit('tunnel:url', payload));
 
   // ── Periodic system snapshot, only while someone's listening ─────────
   let snapshotTimer = null;

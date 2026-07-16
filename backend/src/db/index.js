@@ -9,6 +9,21 @@ function getDB() {
   return db;
 }
 
+/**
+ * CREATE TABLE IF NOT EXISTS only helps on a brand-new database — it does
+ * nothing to a table that already exists but predates a newer column. This
+ * adds that column if it's missing, so panel.db from an older version of
+ * the app upgrades in place instead of needing to be deleted.
+ */
+function ensureColumn(database, table, column, definition) {
+  const cols = database.prepare(`PRAGMA table_info(${table})`).all();
+  const exists = cols.some((c) => c.name === column);
+  if (!exists) {
+    database.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+    console.log(`  ↳ migração: adicionada coluna ${table}.${column}`);
+  }
+}
+
 async function initDB() {
   db = await openDatabase(config.DB_PATH);
   db.pragma('foreign_keys = ON');
@@ -78,6 +93,19 @@ async function initDB() {
     CREATE INDEX IF NOT EXISTS idx_logs_service ON logs(service_id, timestamp DESC);
     CREATE INDEX IF NOT EXISTS idx_logs_db      ON logs(db_instance_id, timestamp DESC);
   `);
+
+  // ── Migrations (safe on both a fresh DB and an existing one) ────────────
+  ensureColumn(db, 'services', 'port', 'INTEGER');
+  ensureColumn(db, 'services', 'public_url', 'TEXT');
+  ensureColumn(db, 'services', 'scaffolded_directory', 'INTEGER DEFAULT 0');
+  ensureColumn(db, 'db_instances', 'port', 'INTEGER');
+  ensureColumn(db, 'db_instances', 'public_url', 'TEXT');
+
+  // Tunnels don't survive a panel restart (cloudflared isn't running
+  // anymore), so any public_url left over from before this boot is stale —
+  // showing it would be actively misleading, not just outdated.
+  db.exec("UPDATE services SET public_url = NULL WHERE public_url IS NOT NULL");
+  db.exec("UPDATE db_instances SET public_url = NULL WHERE public_url IS NOT NULL");
 
   // Default settings
   const defaults = [

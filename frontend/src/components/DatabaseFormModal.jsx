@@ -5,16 +5,18 @@ import Button from './Button';
 import { Label, Input, MonoInput, Select } from './Field';
 import { api } from '../lib/api';
 
+const EMPTY_FORM = { name: '', type: 'postgresql', port: 5432, db_username: 'panel', db_password: '' };
+
 export default function DatabaseFormModal({ open, onClose, onSubmit }) {
   const [engines, setEngines] = useState([]);
-  const [form, setForm] = useState({ name: '', type: 'postgresql', port: 5432, db_username: 'panel', db_password: '' });
+  const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [result, setResult] = useState(null);
 
   useEffect(() => {
     if (open) {
       api.dbEngines().then(setEngines).catch(() => {});
-      setForm({ name: '', type: 'postgresql', port: 5432, db_username: 'panel', db_password: '' });
+      setForm(EMPTY_FORM);
       setResult(null);
     }
   }, [open]);
