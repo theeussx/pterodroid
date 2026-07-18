@@ -37,6 +37,7 @@ module.exports = {
   DB_PATH: process.env.DB_PATH || path.join(DATA_ROOT, 'panel.db'),
   DATABASES_ROOT: path.join(DATA_ROOT, 'databases'),
   PROJECTS_ROOT: process.env.PROJECTS_ROOT || path.join(process.env.HOME || DATA_ROOT, 'pterodroid-projects'),
+  CLOUDFLARED_DIR: path.join(DATA_ROOT, 'cloudflared'),
   LOG_MAX_MEMORY: parseInt(process.env.LOG_MAX_MEMORY || '500', 10),
   LOG_MAX_DB: parseInt(process.env.LOG_MAX_DB || '1000', 10),
   RESTART_MAX: 10,         // consecutive auto-restarts before giving up

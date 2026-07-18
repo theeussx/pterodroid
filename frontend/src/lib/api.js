@@ -75,4 +75,11 @@ export const api = {
   remoteAccessStatus: () => request('/settings/remote-access'),
   startRemoteAccess: () => request('/settings/remote-access/start', { method: 'POST' }),
   stopRemoteAccess: () => request('/settings/remote-access/stop', { method: 'POST' }),
+
+  // domínio personalizado (named tunnel)
+  domainsStatus: () => request('/settings/domains'),
+  updateDomains: (payload) => request('/settings/domains', { method: 'PUT', body: payload }),
+  createNamedTunnel: (name) => request('/settings/domains/tunnel', { method: 'POST', body: { name } }),
+  applyDomains: () => request('/settings/domains/apply', { method: 'POST' }),
+  stopDomains: () => request('/settings/domains/stop', { method: 'POST' }),
 };

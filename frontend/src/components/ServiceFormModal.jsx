@@ -17,7 +17,7 @@ const TYPES = [
 
 const EMPTY = {
   name: '', description: '', type: 'node', command: '', working_directory: '',
-  environment: '{}', auto_restart: true, restart_delay: 3, max_restarts: 10, port: '',
+  environment: '{}', auto_restart: true, restart_delay: 3, max_restarts: 10, port: '', tunnel_hostname: '',
 };
 
 export default function ServiceFormModal({ open, onClose, onSubmit, initial }) {
@@ -108,12 +108,27 @@ export default function ServiceFormModal({ open, onClose, onSubmit, initial }) {
         </div>
 
         {form.port && (
-          <p className="text-xs text-ink-faint -mt-2 flex items-start gap-1.5">
-            <Globe size={13} className="shrink-0 mt-0.5" />
-            {cloudflaredOk === false
-              ? <span className="text-provisioning">{cloudflaredMessage}</span>
-              : 'Se a porta estiver ocupada, o painel usa a próxima disponível automaticamente. A URL pública muda a cada reinício do serviço.'}
-          </p>
+          <>
+            <div>
+              <Label htmlFor="tunnel_hostname">Domínio personalizado (opcional)</Label>
+              <MonoInput
+                id="tunnel_hostname"
+                value={form.tunnel_hostname}
+                onChange={set('tunnel_hostname')}
+                placeholder="site1 (usa o domínio base) ou site1.seudominio.com"
+              />
+              <p className="text-xs text-ink-faint mt-1">
+                Deixe vazio para usar a URL aleatória do acesso rápido. Preencha para usar seu próprio
+                domínio — configure o domínio base e crie o túnel nomeado em Configurações primeiro.
+              </p>
+            </div>
+            <p className="text-xs text-ink-faint -mt-2 flex items-start gap-1.5">
+              <Globe size={13} className="shrink-0 mt-0.5" />
+              {cloudflaredOk === false
+                ? <span className="text-provisioning">{cloudflaredMessage}</span>
+                : 'Se a porta estiver ocupada, o painel usa a próxima disponível automaticamente.'}
+            </p>
+          </>
         )}
 
         <div>

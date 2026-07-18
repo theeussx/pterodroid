@@ -104,10 +104,19 @@ export default function ServiceDetailModal({ open, onClose, serviceId, onChanged
           )}
           {service.public_url && (
             <div className="bg-signal-soft rounded-lg p-3 col-span-2">
-              <p className="text-signal mb-1 font-semibold">URL Pública (Cloudflare)</p>
+              <p className="text-signal mb-1 font-semibold">URL Pública (túnel rápido)</p>
               <a href={service.public_url} target="_blank" rel="noreferrer" className="text-signal underline break-all font-mono">
                 {service.public_url}
               </a>
+            </div>
+          )}
+          {!service.public_url && service.tunnel_hostname && (
+            <div className="bg-signal-soft rounded-lg p-3 col-span-2">
+              <p className="text-signal mb-1 font-semibold">Domínio configurado</p>
+              <a href={`https://${service.tunnel_hostname}`} target="_blank" rel="noreferrer" className="text-signal underline break-all font-mono">
+                {service.tunnel_hostname}
+              </a>
+              <p className="text-xs text-ink-faint mt-1">Ativo assim que o túnel nomeado estiver rodando (Configurações → Domínio personalizado).</p>
             </div>
           )}
         </div>

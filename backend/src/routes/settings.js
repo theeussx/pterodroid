@@ -1,6 +1,7 @@
 const router = require('express').Router();
 const { getDB } = require('../db');
 const tm = require('../services/tunnelManager');
+const ntm = require('../services/namedTunnelManager');
 const config = require('../config');
 
 const EDITABLE_KEYS = ['panel_name', 'panel_color', 'log_retention_days'];
@@ -74,6 +75,48 @@ router.post('/remote-access/start', async (req, res) => {
 // POST /api/settings/remote-access/stop
 router.post('/remote-access/stop', async (req, res) => {
   await tm.stopTunnel('panel', PANEL_TUNNEL_ID);
+  return res.json({ ok: true });
+});
+
+// ── Domínio personalizado (Named Tunnel) ──────────────────────────────
+
+// GET /api/settings/domains — full status: auth, tunnel, running, hostnames
+router.get('/domains', (req, res) => {
+  return res.json(ntm.status());
+});
+
+// PUT /api/settings/domains — set base domain and/or the panel's own hostname
+router.put('/domains', (req, res) => {
+  const { base_domain, panel_tunnel_hostname } = req.body || {};
+  if (base_domain !== undefined) ntm.setSetting('base_domain', base_domain.trim());
+  if (panel_tunnel_hostname !== undefined) ntm.setSetting('panel_tunnel_hostname', panel_tunnel_hostname.trim());
+  return res.json(ntm.status());
+});
+
+// POST /api/settings/domains/tunnel — one-time: create the named tunnel
+router.post('/domains/tunnel', async (req, res) => {
+  try {
+    const name = (req.body?.name || 'pterodroid').trim();
+    const result = await ntm.createTunnel(name);
+    return res.json({ ok: true, ...result });
+  } catch (e) {
+    return res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/settings/domains/apply — regenerate config, route DNS, restart
+router.post('/domains/apply', async (req, res) => {
+  try {
+    const result = await ntm.applyConfig();
+    return res.json({ ok: true, ...result });
+  } catch (e) {
+    return res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/settings/domains/stop
+router.post('/domains/stop', async (req, res) => {
+  await ntm.stop();
   return res.json({ ok: true });
 });
 

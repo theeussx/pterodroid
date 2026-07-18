@@ -60,7 +60,7 @@ router.post('/', (req, res) => {
   const {
     name, description = '', type = 'node', command,
     working_directory = '', environment = '{}',
-    auto_restart = 1, restart_delay = 3, max_restarts = 10, port = null,
+    auto_restart = 1, restart_delay = 3, max_restarts = 10, port = null, tunnel_hostname = null,
   } = req.body;
 
   // No working directory given → scaffold a dedicated "container" folder
@@ -76,13 +76,13 @@ router.post('/', (req, res) => {
   const result = db.prepare(`
     INSERT INTO services
       (name, description, type, command, working_directory, environment,
-       auto_restart, restart_delay, max_restarts, port, scaffolded_directory)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       auto_restart, restart_delay, max_restarts, port, scaffolded_directory, tunnel_hostname)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     name.trim(), description.trim(), type, command.trim(),
     finalWorkingDir, sanitizeEnv(environment),
     auto_restart ? 1 : 0, parseInt(restart_delay, 10) || 3, parseInt(max_restarts, 10) || 10,
-    port ? parseInt(port, 10) : null, scaffolded,
+    port ? parseInt(port, 10) : null, scaffolded, tunnel_hostname?.trim() || null,
   );
 
   const created = db.prepare('SELECT * FROM services WHERE id = ?').get(result.lastInsertRowid);
@@ -100,13 +100,13 @@ router.put('/:id', (req, res) => {
 
   const {
     name, description, type, command, working_directory,
-    environment, auto_restart, restart_delay, max_restarts, port,
+    environment, auto_restart, restart_delay, max_restarts, port, tunnel_hostname,
   } = req.body;
 
   db.prepare(`
     UPDATE services SET
       name=?, description=?, type=?, command=?, working_directory=?,
-      environment=?, auto_restart=?, restart_delay=?, max_restarts=?, port=?,
+      environment=?, auto_restart=?, restart_delay=?, max_restarts=?, port=?, tunnel_hostname=?,
       updated_at=CURRENT_TIMESTAMP
     WHERE id=?
   `).run(
@@ -120,6 +120,7 @@ router.put('/:id', (req, res) => {
     parseInt(restart_delay, 10) || existing.restart_delay,
     parseInt(max_restarts, 10) || existing.max_restarts,
     port ? parseInt(port, 10) : (port === '' ? null : existing.port),
+    tunnel_hostname !== undefined ? (tunnel_hostname?.trim() || null) : existing.tunnel_hostname,
     existing.id,
   );
 

@@ -9,6 +9,7 @@ const { setupSockets } = require('./sockets');
 const pm = require('./services/processManager');
 const dbm = require('./services/dbInstanceManager');
 const tm = require('./services/tunnelManager');
+const ntm = require('./services/namedTunnelManager');
 
 const authRoutes = require('./routes/auth');
 const serviceRoutes = require('./routes/services');
@@ -72,6 +73,7 @@ async function main() {
       await pm.stopAll();
       await dbm.stopAll();
       await tm.stopAll();
+      await ntm.stop();
     } catch (e) {
       console.error('Error during shutdown:', e.message);
     }

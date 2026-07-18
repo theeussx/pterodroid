@@ -98,8 +98,10 @@ async function initDB() {
   ensureColumn(db, 'services', 'port', 'INTEGER');
   ensureColumn(db, 'services', 'public_url', 'TEXT');
   ensureColumn(db, 'services', 'scaffolded_directory', 'INTEGER DEFAULT 0');
+  ensureColumn(db, 'services', 'tunnel_hostname', 'TEXT');
   ensureColumn(db, 'db_instances', 'port', 'INTEGER');
   ensureColumn(db, 'db_instances', 'public_url', 'TEXT');
+  ensureColumn(db, 'db_instances', 'tunnel_hostname', 'TEXT');
 
   // Tunnels don't survive a panel restart (cloudflared isn't running
   // anymore), so any public_url left over from before this boot is stale —

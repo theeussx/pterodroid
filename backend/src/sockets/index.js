@@ -9,6 +9,7 @@ const { getSnapshot } = require('../services/systemMonitor');
 const pm = require('../services/processManager');
 const dbm = require('../services/dbInstanceManager');
 const tm = require('../services/tunnelManager');
+const ntm = require('../services/namedTunnelManager');
 
 const SNAPSHOT_INTERVAL_MS = 2000;
 
@@ -33,6 +34,8 @@ function setupSockets(httpServer) {
   dbm.on('status', (payload) => io.emit('db:status', payload));
   tm.on('status', (payload) => io.emit('tunnel:status', payload));
   tm.on('url', (payload) => io.emit('tunnel:url', payload));
+  ntm.on('status', (payload) => io.emit('domains:status', payload));
+  ntm.on('log', (payload) => io.emit('domains:log', payload));
 
   // ── Periodic system snapshot, only while someone's listening ─────────
   let snapshotTimer = null;

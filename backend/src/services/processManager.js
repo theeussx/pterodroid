@@ -206,8 +206,11 @@ class ProcessManager extends EventEmitter {
       .run('running', child.pid, entry.restartCount, svc.id);
     this.emit('status', { serviceId: svc.id, status: 'running', pid: child.pid });
 
-    // Start tunnel if the service has a port
-    if (svc.port) {
+    // Quick Tunnel only when the service has a port but no custom domain —
+    // if tunnel_hostname is set, the Named Tunnel's ingress config already
+    // routes that hostname to this port (see namedTunnelManager.js), so
+    // starting a Quick Tunnel too would be redundant.
+    if (svc.port && !svc.tunnel_hostname) {
       tunnelManager.startTunnel('service', svc.id, env.PORT || svc.port).catch(err => {
         console.error(`[SVC] Failed to start tunnel for ${svc.name}:`, err.message);
       });

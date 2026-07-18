@@ -62,14 +62,14 @@ router.post('/', (req, res) => {
   if (err) return res.status(400).json({ error: err });
 
   const db = getDB();
-  const { name, type, port, db_username = 'root', db_password = '' } = req.body;
+  const { name, type, port, db_username = 'root', db_password = '', tunnel_hostname = null } = req.body;
 
   const password = db_password || Math.random().toString(36).slice(2, 12);
 
   const result = db.prepare(`
-    INSERT INTO db_instances (name, type, port, db_username, db_password)
-    VALUES (?, ?, ?, ?, ?)
-  `).run(name.trim(), type, parseInt(port, 10), db_username.trim() || 'root', password);
+    INSERT INTO db_instances (name, type, port, db_username, db_password, tunnel_hostname)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(name.trim(), type, parseInt(port, 10), db_username.trim() || 'root', password, tunnel_hostname?.trim() || null);
 
   const created = db.prepare('SELECT * FROM db_instances WHERE id = ?').get(result.lastInsertRowid);
   const { db_password: _pw, ...safe } = created;
