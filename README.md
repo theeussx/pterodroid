@@ -1,7 +1,7 @@
 <div align="center">
 <img src="https://github.com/theeussx/pterodroid/blob/main/pterodroid.png" alt="Pterodroid Banner" width="100%"/>
 
-# 🦖 Pterodroid
+# Pterodroid
 
 **O seu painel de hospedagem pessoal, otimizado para Android.**
 
