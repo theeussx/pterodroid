@@ -1,5 +1,5 @@
 <div align="center">
-<img src="https://files.manuscdn.com/user_upload_by_module/session_file/310519663139149735/HppavudFsKbclZQI.png" alt="Pterodroid Banner" width="100%"/>
+<img src="https://github.com/theeussx/pterodroid/blob/main/pterodroid.png" alt="Pterodroid Banner" width="100%"/>
 
 # 🦖 Pterodroid
 
