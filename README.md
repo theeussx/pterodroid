@@ -95,11 +95,23 @@ graph TD
     A[Frontend: React + Vite + Tailwind] -- REST API (JWT) + WebSocket --> B[Backend: Node.js + Express + Socket.io]
     B -- Gerencia --> C{"Process Manager (Watchdog)"}
     B -- Gerencia --> D{"DB Instance Manager"}
-    B -- Gerencia --> H{"Tunnel Managers (Quick & Named)"}
-    C -- Supervisiona --> E["Serviços do Usuário (Bots, APIs, Sites)"]
-    D -- Provisiona/Controla --> F["Bancos de Dados (PostgreSQL / MySQL)"]
-    H -- Expõe --> I["Serviços na Internet (via Cloudflare Tunnel)"]
+    B -- Orquestra --> H{"Tunnel Managers (Quick & Named)"}
+    C -- Supervisiona (HTTP/HTTPS) --> E["Serviços do Usuário (Bots, APIs, Sites)"]
+    D -- Gerencia --> F["Bancos de Dados (PostgreSQL / MySQL)"]
+    H -- Expõe (HTTP/HTTPS) --> I["Serviços na Internet (via Cloudflare Tunnel)"]
+    H -- Expõe (TCP, via Named Tunnel) --> J["Bancos de Dados na Internet (via Cloudflare Tunnel)"]
     B -- Persiste Dados --> G[("Banco Interno (SQLite WASM)")]
+
+    subgraph Detalhes do Processamento
+        E -- Logs/Status --> C
+        F -- Logs/Status --> D
+    end
+
+    subgraph Fluxo de Dados
+        E -- Porta Local --> H
+        F -- Porta Local --> H
+    end
+
 ```
 
 ---
