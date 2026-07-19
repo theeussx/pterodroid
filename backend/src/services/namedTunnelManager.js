@@ -2,28 +2,28 @@
  * NamedTunnelManager — the "bring your own domain" counterpart to the
  * Quick Tunnels in tunnelManager.js.
  *
- * Unlike a Quick Tunnel (one ephemeral process per exposed port, random
- * URL), a Named Tunnel is ONE persistent cloudflared process that reads a
- * config.yml full of ingress rules ("this hostname → this local port")
- * and proxies all of them at once. Getting here requires the admin to
- * have a Cloudflare account with a domain already added as a zone, and to
- * have run `cloudflared tunnel login` themselves once (an interactive
- * browser OAuth step this module cannot do on your behalf).
+ * cloudflared supports two genuinely different ways to run a persistent,
+ * multi-hostname tunnel, and this module supports both:
  *
- * Flow:
- *   1. checkAuth()      — is cert.pem present from a prior `tunnel login`?
- *   2. createTunnel()   — one-time: registers a tunnel with Cloudflare,
- *                         writes a credentials JSON we keep in our own
- *                         data dir (not ~/.cloudflared) for tidiness.
- *   3. applyConfig()    — regenerates config.yml from whatever hostnames
- *                         are currently configured on the panel + its
- *                         services/databases, runs `route dns` for each,
- *                         and (re)starts the single tunnel process.
+ *   MODE "cli" (locally-managed): `cloudflared tunnel login` (browser
+ *   OAuth, manual) → `cloudflared tunnel create NAME` → a config.yml this
+ *   module generates and keeps in sync with the panel's services/DBs →
+ *   `cloudflared tunnel --config FILE run NAME`. Fully automatable
+ *   end-to-end, including DNS (`tunnel route dns`) — but depends on the
+ *   CLI credential flow behaving, which varies across devices.
  *
- * Because ingress rules all live in one config for one process, adding or
- * changing a hostname means restarting that one process — briefly
- * interrupting every hostname it serves, not just the one that changed.
- * Acceptable for a personal panel; called out in the UI regardless.
+ *   MODE "token" (remotely-managed): create the tunnel in the Cloudflare
+ *   Zero Trust dashboard instead (Networks → Tunnels), which hands you a
+ *   single token. Run `cloudflared tunnel run --token TOKEN` and
+ *   cloudflared pulls its ingress config from Cloudflare's servers — no
+ *   local config.yml, no `tunnel create`, no cert.pem needed at all.
+ *   Simpler and more reliable in practice, but hostname→port routing has
+ *   to be configured in the dashboard's "Public Hostname" tab by hand;
+ *   this module can't drive that (it's not exposed over the tunnel CLI,
+ *   only the dashboard/API).
+ *
+ * Only one of the two can run at a time (one persistent process either
+ * way) — starting one stops the other if it was running.
  */
 const { spawn, execFileSync } = require('child_process');
 const fs = require('fs');
@@ -53,7 +53,7 @@ function isValidHostname(host) {
 class NamedTunnelManager extends EventEmitter {
   constructor() {
     super();
-    this.entry = null; // { process, stopped } for the single running tunnel
+    this.entry = null; // { process, stopped, mode } for the single running tunnel
   }
 
   get configPath() { return path.join(config.CLOUDFLARED_DIR, 'config.yml'); }
@@ -72,7 +72,8 @@ class NamedTunnelManager extends EventEmitter {
   getSettings() {
     const db = getDB();
     const rows = db.prepare(
-      "SELECT key, value FROM settings WHERE key IN ('base_domain','panel_tunnel_hostname','named_tunnel_name','named_tunnel_id')"
+      "SELECT key, value FROM settings WHERE key IN " +
+      "('base_domain','panel_tunnel_hostname','named_tunnel_name','named_tunnel_id','named_tunnel_token','named_tunnel_mode')"
     ).all();
     return Object.fromEntries(rows.map((r) => [r.key, r.value]));
   }
@@ -183,7 +184,7 @@ class NamedTunnelManager extends EventEmitter {
       }
     }
 
-    await this._restart();
+    await this._restartCli();
     return { hostnames };
   }
 
@@ -198,7 +199,7 @@ class NamedTunnelManager extends EventEmitter {
     return lines.join('\n') + '\n';
   }
 
-  async _restart() {
+  async _restartCli() {
     await this.stop();
 
     const settings = this.getSettings();
@@ -206,16 +207,45 @@ class NamedTunnelManager extends EventEmitter {
       'tunnel', '--config', this.configPath, 'run', settings.named_tunnel_name,
     ], { stdio: ['ignore', 'pipe', 'pipe'] });
 
-    const entry = { process: child, stopped: false };
+    this._trackProcess(child, 'cli');
+    this.setSetting('named_tunnel_mode', 'cli');
+  }
+
+  /** Alternative to the CLI flow above: run a tunnel created in the
+   * Cloudflare Zero Trust dashboard instead, using the token it gives
+   * you. No cert.pem, no local tunnel/config.yml — cloudflared fetches
+   * its ingress rules from Cloudflare directly. Hostname routing for
+   * this mode has to be set up in that same dashboard (Public Hostname
+   * tab), not through this panel.
+   */
+  async startTokenTunnel(token) {
+    const trimmed = (token || '').trim();
+    if (!trimmed) throw new Error('Cole o token do túnel (obtido no dashboard da Cloudflare).');
+
+    await this.stop();
+    this.setSetting('named_tunnel_token', trimmed);
+    this.setSetting('named_tunnel_mode', 'token');
+
+    const child = spawn(config.CLOUDFLARED_BIN, [
+      'tunnel', '--no-autoupdate', 'run', '--token', trimmed,
+    ], { stdio: ['ignore', 'pipe', 'pipe'] });
+
+    this._trackProcess(child, 'token');
+  }
+
+  /** Shared process-tracking: spawn result handling is identical for
+   * both modes, only the command that produced `child` differs. */
+  _trackProcess(child, mode) {
+    const entry = { process: child, stopped: false, mode };
     this.entry = entry;
-    this.emit('status', { status: 'starting' });
+    this.emit('status', { status: 'starting', mode });
 
     child.on('error', (err) => {
-      console.error('[NamedTunnel] failed to start:', err.message);
+      console.error(`[NamedTunnel:${mode}] failed to start:`, err.message);
       if (this.entry === entry) {
         entry.stopped = true;
         this.entry = null;
-        this.emit('status', { status: 'error', error: err.message });
+        this.emit('status', { status: 'error', error: err.message, mode });
       }
     });
 
@@ -229,7 +259,7 @@ class NamedTunnelManager extends EventEmitter {
     child.on('exit', () => {
       if (this.entry === entry) {
         this.entry = null;
-        this.emit('status', { status: entry.stopped ? 'stopped' : 'error' });
+        this.emit('status', { status: entry.stopped ? 'stopped' : 'error', mode });
       }
     });
   }
@@ -257,10 +287,13 @@ class NamedTunnelManager extends EventEmitter {
       tunnelCreated: !!settings.named_tunnel_id,
       tunnelName: settings.named_tunnel_name || null,
       running: this.isRunning(),
+      mode: this.entry?.mode || settings.named_tunnel_mode || null,
       baseDomain: settings.base_domain || null,
+      panelTunnelHostname: settings.panel_tunnel_hostname || null,
       panelHostname: settings.panel_tunnel_hostname
         ? hostnameFor(settings.panel_tunnel_hostname, settings.base_domain)
         : null,
+      tokenConfigured: !!settings.named_tunnel_token,
     };
   }
 }

@@ -114,6 +114,18 @@ router.post('/domains/apply', async (req, res) => {
   }
 });
 
+// POST /api/settings/domains/token — alternative flow: run a tunnel
+// created in the Cloudflare dashboard using its token, instead of the
+// CLI-managed flow above.
+router.post('/domains/token', async (req, res) => {
+  try {
+    await ntm.startTokenTunnel(req.body?.token);
+    return res.json({ ok: true, ...ntm.status() });
+  } catch (e) {
+    return res.status(500).json({ error: e.message });
+  }
+});
+
 // POST /api/settings/domains/stop
 router.post('/domains/stop', async (req, res) => {
   await ntm.stop();

@@ -98,9 +98,13 @@ Ao criar ou editar um serviço, preencha o campo **Porta**. Assim que o serviço
 
 Quick Tunnels só carregam tráfego **HTTP/HTTPS**. O protocolo binário do PostgreSQL ou do MySQL não passa por esse tipo de túnel — por isso a opção simples de acesso remoto não oferece isso para bancos. Só é possível com um domínio próprio (veja abaixo), e mesmo assim com uma ressalva importante.
 
-### Domínio personalizado (Named Tunnel)
+### Domínio personalizado
 
-Se você já tem conta na Cloudflare com um domínio adicionado como zona, dá pra usar um domínio de verdade em vez da URL aleatória — em **Configurações → Domínio personalizado**:
+Se você já tem conta na Cloudflare com um domínio adicionado como zona, dá pra usar um domínio de verdade em vez da URL aleatória — em **Configurações → Domínio personalizado**. Duas formas de configurar, mostradas lado a lado no painel; elas não rodam ao mesmo tempo (é sempre um processo cloudflared só).
+
+#### Opção A — Túnel gerenciado pelo painel (CLI)
+
+Totalmente automatizado, incluindo os registros DNS:
 
 1. **Autentique o cloudflared** — precisa ser feito manualmente, uma vez só, em um terminal:
    ```bash
@@ -115,9 +119,19 @@ Se você já tem conta na Cloudflare com um domínio adicionado como zona, dá p
 4. **Aplique** — regenera a configuração, cria os registros DNS (CNAME) automaticamente via `cloudflared tunnel route dns`, e reinicia o túnel.
 
 > [!WARNING]
-> Diferente do acesso rápido (um processo cloudflared por serviço), o domínio personalizado usa **um único processo** cloudflared com várias regras de roteamento. Isso significa que aplicar uma mudança reinicia esse processo inteiro, interrompendo brevemente **todos** os domínios configurados, não só o que mudou.
+> Como é **um único processo** cloudflared com várias regras de roteamento, aplicar uma mudança reinicia esse processo inteiro, interrompendo brevemente **todos** os domínios configurados, não só o que mudou.
 
-**Sobre bancos de dados com domínio personalizado:** tecnicamente possível (o Named Tunnel suporta roteamento TCP: `service: tcp://localhost:5432`), mas conectar não é tão simples quanto abrir uma URL. O dispositivo que for acessar o banco também precisa ter o cloudflared instalado e rodar:
+#### Opção B — Colar token do dashboard Cloudflare
+
+Alternativa mais simples de colocar pra funcionar, e o caminho recomendado se o fluxo de login por CLI der problema no seu aparelho (alguns ambientes Android/Termux têm restrições que atrapalham esse fluxo interativo). Crie o túnel direto pelo [dashboard Zero Trust](https://one.dash.cloudflare.com/) (Networks → Tunnels → Create a tunnel → Cloudflared), que te dá um comando parecido com:
+
+```bash
+cloudflared tunnel --no-autoupdate run --token eyJhIjoi...
+```
+
+Cole só o token (a parte depois de `--token`) no painel, em Configurações → Opção B. O painel roda e supervisiona esse processo — reinício automático incluso — mas o roteamento de cada domínio para sua porta local é feito **no dashboard**, na aba "Public Hostname" do túnel, não pelos campos de domínio dos formulários de serviço/banco (esses são específicos da Opção A).
+
+**Sobre bancos de dados com domínio personalizado:** tecnicamente possível em ambas as opções (Named Tunnel suporta roteamento TCP: `service: tcp://localhost:5432`), mas conectar não é tão simples quanto abrir uma URL. O dispositivo que for acessar o banco também precisa ter o cloudflared instalado e rodar:
 ```bash
 cloudflared access tcp --hostname banco1.meudominio.com --url 127.0.0.1:5432
 ```
@@ -216,6 +230,8 @@ Testado de ponta a ponta (backend real, Postgres e MariaDB reais, cloudflared re
 - **Migração de schema:** novas colunas (`port`, `public_url`, etc.) agora são adicionadas via `ALTER TABLE` a um banco já existente, em vez de só funcionarem em um banco novo. Seu `panel.db` atual é migrado automaticamente, sem perda de dados, na primeira vez que você rodar essa versão.
 - **Exposição de banco de dados via túnel rápido removida:** Quick Tunnels só suportam HTTP, então essa opção nunca funcionaria de verdade para Postgres/MySQL. Agora só é oferecida via domínio personalizado (Named Tunnel + `cloudflared access tcp` do lado de quem conecta) — veja a seção de Acesso Remoto acima.
 - **Novo: domínio personalizado (Named Tunnel):** configuração de domínio próprio para o painel, serviços e bancos, direto pela interface, com criação de túnel e registros DNS automatizados. Descoberto e corrigido no processo: `--config` é uma opção do comando pai `tunnel` e precisa vir *antes* do subcomando `run` (`cloudflared tunnel --config X run NOME`), não depois — só validado rodando contra o binário real.
+- **Novo: modo token (dashboard Cloudflare):** alternativa ao fluxo por CLI acima — cole o token de um túnel criado direto no dashboard Zero Trust e o painel supervisiona o processo. Mais confiável em ambientes Android/Termux onde o login interativo por CLI pode não completar direito.
+- **Corrigido: domínio do painel "sumia" ao recarregar a página** — o formulário sempre resetava o campo para vazio ao carregar o status, mesmo com um valor já salvo no backend (só o preview calculado aparecia, não o campo em si).
 
 ---
 

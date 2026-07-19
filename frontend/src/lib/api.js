@@ -81,5 +81,6 @@ export const api = {
   updateDomains: (payload) => request('/settings/domains', { method: 'PUT', body: payload }),
   createNamedTunnel: (name) => request('/settings/domains/tunnel', { method: 'POST', body: { name } }),
   applyDomains: () => request('/settings/domains/apply', { method: 'POST' }),
+  startTokenTunnel: (token) => request('/settings/domains/token', { method: 'POST', body: { token } }),
   stopDomains: () => request('/settings/domains/stop', { method: 'POST' }),
 };
