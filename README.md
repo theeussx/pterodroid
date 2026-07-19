@@ -93,9 +93,6 @@ O Pterodroid adota uma arquitetura de **Supervisor-Filho**, onde o componente de
 ```mermaid
 flowchart TB
 
-%% =========================
-%% ESTILOS
-%% =========================
 
 classDef mobile fill:#0ea5e9,stroke:#38bdf8,color:#fff,stroke-width:2px;
 classDef core fill:#1d4ed8,stroke:#60a5fa,color:#fff,stroke-width:3px;
@@ -106,13 +103,13 @@ classDef cloud fill:#2563eb,stroke:#60a5fa,color:#fff,stroke-width:2px;
 classDef storage fill:#475569,stroke:#94a3b8,color:#fff,stroke-width:2px;
 
 %% =========================
-%% CLIENTE
+%% CAMADA DO CLIENTE
 %% =========================
 
 CLIENT["📱<br><b>Pterodroid App</b><br>React • Vite • Tailwind"]:::mobile
 
 %% =========================
-%% CORE
+%% PTERODROID (Backend/Supervisor)
 %% =========================
 
 subgraph CORE["🧠 PTERODROID CORE"]
@@ -141,7 +138,7 @@ API --- SQL
 end
 
 %% =========================
-%% INFRA
+%% INFRAESTRUTURA LOCAL (Processos Filhos)
 %% =========================
 
 subgraph LOCAL["📦 Infraestrutura Local"]
@@ -157,7 +154,7 @@ FILES["📁 Arquivos<br/>Volumes"]:::storage
 end
 
 %% =========================
-%% INTERNET
+%% CONECTIVIDADE EXTERNA
 %% =========================
 
 subgraph INTERNET["☁️ Internet"]
@@ -168,7 +165,7 @@ TCP["🔌 TCP Services"]:::cloud
 end
 
 %% =========================
-%% FLUXOS
+%% FLUXOS DE DADOS
 %% =========================
 
 CLIENT -->|"REST API<br/>WebSocket"| API
