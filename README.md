@@ -91,26 +91,105 @@ Uma alternativa mais simples para conectar, onde o túnel é criado e configurad
 O Pterodroid adota uma arquitetura de **Supervisor-Filho**, onde o componente de backend atua como o orquestrador central. Ele é responsável por gerenciar diretamente todos os processos de serviço e banco de dados, eliminando a dependência de ferramentas externas como `pm2` ou `systemd`, o que é crucial para a compatibilidade em ambientes Android.
 
 ```mermaid
-graph TD
-    A[Frontend: React + Vite + Tailwind] -- REST API (JWT) + WebSocket --> B[Backend: Node.js + Express + Socket.io]
-    B -- Gerencia --> C{"Process Manager (Watchdog)"}
-    B -- Gerencia --> D{"DB Instance Manager"}
-    B -- Orquestra --> H{"Tunnel Managers (Quick & Named)"}
-    C -- Supervisiona (HTTP/HTTPS) --> E["Serviços do Usuário (Bots, APIs, Sites)"]
-    D -- Gerencia --> F["Bancos de Dados (PostgreSQL / MySQL)"]
-    H -- Expõe (HTTP/HTTPS) --> I["Serviços na Internet (via Cloudflare Tunnel)"]
-    H -- Expõe (TCP, via Named Tunnel) --> J["Bancos de Dados na Internet (via Cloudflare Tunnel)"]
-    B -- Persiste Dados --> G[("Banco Interno (SQLite WASM)")]
+flowchart TB
 
-    subgraph Detalhes do Processamento
-        E -- Logs/Status --> C
-        F -- Logs/Status --> D
-    end
+%% =========================
+%% ESTILOS
+%% =========================
 
-    subgraph Fluxo de Dados
-        E -- Porta Local --> H
-        F -- Porta Local --> H
-    end
+classDef mobile fill:#0ea5e9,stroke:#38bdf8,color:#fff,stroke-width:2px;
+classDef core fill:#1d4ed8,stroke:#60a5fa,color:#fff,stroke-width:3px;
+classDef engine fill:#0f766e,stroke:#2dd4bf,color:#fff,stroke-width:2px;
+classDef service fill:#f59e0b,stroke:#fbbf24,color:#111827,stroke-width:2px;
+classDef db fill:#7c3aed,stroke:#a78bfa,color:#fff,stroke-width:2px;
+classDef cloud fill:#2563eb,stroke:#60a5fa,color:#fff,stroke-width:2px;
+classDef storage fill:#475569,stroke:#94a3b8,color:#fff,stroke-width:2px;
+
+%% =========================
+%% CLIENTE
+%% =========================
+
+CLIENT["📱<br><b>Pterodroid App</b><br>React • Vite • Tailwind"]:::mobile
+
+%% =========================
+%% CORE
+%% =========================
+
+subgraph CORE["🧠 PTERODROID CORE"]
+
+API["🌐 API Gateway<br/>REST + JWT + WebSocket"]:::core
+
+AUTH["🔐 Authentication"]:::engine
+PROC["⚙️ Process Manager"]:::engine
+FILE["📂 File Manager"]:::engine
+DBM["🗄️ Database Manager"]:::engine
+TUN["🌍 Tunnel Manager"]:::engine
+MON["📈 Monitoring Engine"]:::engine
+TASK["⏰ Scheduler"]:::engine
+SQL["💾 SQLite WASM"]:::storage
+
+API --> AUTH
+API --> PROC
+API --> FILE
+API --> DBM
+API --> TUN
+API --> MON
+API --> TASK
+
+API --- SQL
+
+end
+
+%% =========================
+%% INFRA
+%% =========================
+
+subgraph LOCAL["📦 Infraestrutura Local"]
+
+BOTS["🤖 Bots<br/>Discord • Telegram"]:::service
+
+SITES["🌐 APIs<br/>Sites • Dashboards"]:::service
+
+DATABASE["🗄️ PostgreSQL<br/>MySQL<br/>MariaDB"]:::db
+
+FILES["📁 Arquivos<br/>Volumes"]:::storage
+
+end
+
+%% =========================
+%% INTERNET
+%% =========================
+
+subgraph INTERNET["☁️ Internet"]
+
+HTTP["🌎 HTTP / HTTPS"]:::cloud
+TCP["🔌 TCP Services"]:::cloud
+
+end
+
+%% =========================
+%% FLUXOS
+%% =========================
+
+CLIENT -->|"REST API<br/>WebSocket"| API
+
+PROC --> BOTS
+PROC --> SITES
+
+FILE --> FILES
+
+DBM --> DATABASE
+
+BOTS -. Logs .-> MON
+SITES -. Logs .-> MON
+DATABASE -. Métricas .-> MON
+
+BOTS -->|"Local Port"| TUN
+SITES -->|"Local Port"| TUN
+DATABASE -->|"TCP"| TUN
+
+TUN --> HTTP
+TUN --> TCP
 
 ```
 
