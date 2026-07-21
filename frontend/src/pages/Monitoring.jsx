@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Thermometer, ArrowDownToLine, ArrowUpFromLine } from 'lucide-react';
 import { useSystemSnapshot } from '../lib/hooks';
 import { api } from '../lib/api';
 import Card from '../components/Card';
@@ -9,6 +10,12 @@ function formatBytes(bytes) {
   if (!bytes) return '0 GB';
   const gb = bytes / 1024 ** 3;
   return gb >= 1 ? `${gb.toFixed(2)} GB` : `${(bytes / 1024 ** 2).toFixed(0)} MB`;
+}
+
+function formatRate(bytesPerSec) {
+  if (!bytesPerSec || bytesPerSec < 1024) return `${(bytesPerSec || 0).toFixed(0)} B/s`;
+  const kb = bytesPerSec / 1024;
+  return kb >= 1024 ? `${(kb / 1024).toFixed(1)} MB/s` : `${kb.toFixed(0)} KB/s`;
 }
 
 function formatUptime(seconds) {
@@ -53,12 +60,42 @@ export default function Monitoring() {
         </Card>
       </div>
 
+      <div className="grid sm:grid-cols-3 gap-4">
+        <Card className="flex items-center gap-3">
+          <ArrowDownToLine size={18} className="text-signal shrink-0" />
+          <div>
+            <p className="text-xs text-ink-faint">Download</p>
+            <p className="font-mono text-sm text-ink">{snapshot ? formatRate(snapshot.net.rxBytesPerSec) : '--'}</p>
+          </div>
+        </Card>
+        <Card className="flex items-center gap-3">
+          <ArrowUpFromLine size={18} className="text-signal shrink-0" />
+          <div>
+            <p className="text-xs text-ink-faint">Upload</p>
+            <p className="font-mono text-sm text-ink">{snapshot ? formatRate(snapshot.net.txBytesPerSec) : '--'}</p>
+          </div>
+        </Card>
+        <Card className="flex items-center gap-3">
+          <Thermometer size={18} className={snapshot?.temp != null ? 'text-provisioning shrink-0' : 'text-ink-faint shrink-0'} />
+          <div>
+            <p className="text-xs text-ink-faint">Temperatura</p>
+            <p className="font-mono text-sm text-ink">{snapshot?.temp != null ? `${snapshot.temp.toFixed(0)}°C` : 'indisponível'}</p>
+          </div>
+        </Card>
+      </div>
+
       <div className="grid lg:grid-cols-2 gap-4">
         <Card>
           <HistoryChart data={history} accessor={(d) => d.cpu} color="#3DDC84" label="CPU" />
         </Card>
         <Card>
           <HistoryChart data={history} accessor={(d) => d.mem.percent} color="#7C8CFF" label="Memória" />
+        </Card>
+        <Card>
+          <HistoryChart data={history} accessor={(d) => d.net.rxBytesPerSec / 1024} color="#3DDC84" label="Download" unit=" KB/s" max={100} />
+        </Card>
+        <Card>
+          <HistoryChart data={history} accessor={(d) => d.net.txBytesPerSec / 1024} color="#7C8CFF" label="Upload" unit=" KB/s" max={100} />
         </Card>
       </div>
 

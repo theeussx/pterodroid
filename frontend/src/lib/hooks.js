@@ -27,7 +27,28 @@ export function useSystemSnapshot() {
   return { snapshot, history };
 }
 
-/** Subscribes to live status changes for services, keyed by serviceId. */
+/** Tracks the actual socket connection state — not cosmetic, reflects
+ * whether live updates (logs, status, monitor snapshots) are really
+ * flowing right now. */
+export function useConnectionStatus() {
+  const [online, setOnline] = useState(false);
+
+  useEffect(() => {
+    const socket = getSocket();
+    if (!socket) return;
+    setOnline(socket.connected);
+    const onConnect = () => setOnline(true);
+    const onDisconnect = () => setOnline(false);
+    socket.on('connect', onConnect);
+    socket.on('disconnect', onDisconnect);
+    return () => {
+      socket.off('connect', onConnect);
+      socket.off('disconnect', onDisconnect);
+    };
+  }, []);
+
+  return online;
+}
 export function useServiceStatusEvents(onStatus) {
   useEffect(() => {
     const socket = getSocket();

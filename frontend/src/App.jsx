@@ -7,6 +7,7 @@ import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Services from './pages/Services';
 import Databases from './pages/Databases';
+import Files from './pages/Files';
 import Logs from './pages/Logs';
 import Monitoring from './pages/Monitoring';
 import Settings from './pages/Settings';
@@ -28,6 +29,7 @@ export default function App() {
               <Route index element={<Dashboard />} handle={{ title: 'Dashboard' }} />
               <Route path="services" element={<Services />} handle={{ title: 'Serviços' }} />
               <Route path="databases" element={<Databases />} handle={{ title: 'Bancos de Dados' }} />
+              <Route path="files" element={<Files />} handle={{ title: 'Arquivos' }} />
               <Route path="logs" element={<Logs />} handle={{ title: 'Logs' }} />
               <Route path="monitoring" element={<Monitoring />} handle={{ title: 'Monitoramento' }} />
               <Route path="settings" element={<Settings />} handle={{ title: 'Configurações' }} />

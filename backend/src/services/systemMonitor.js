@@ -4,6 +4,7 @@
  * and in Ubuntu-proot. No native/npm dependency needed.
  */
 const fs = require('fs');
+const path = require('path');
 const { execSync } = require('child_process');
 
 function readMeminfo() {
@@ -69,6 +70,67 @@ function readDisk() {
   }
 }
 
+let _prevNet = null;
+function readNetwork() {
+  try {
+    const raw = fs.readFileSync('/proc/net/dev', 'utf8');
+    const lines = raw.trim().split('\n').slice(2); // skip the two header lines
+    let rxTotal = 0;
+    let txTotal = 0;
+    for (const line of lines) {
+      const [iface, rest] = line.split(':');
+      if (!rest) continue;
+      const name = iface.trim();
+      if (name === 'lo') continue; // skip loopback — not real network traffic
+      const fields = rest.trim().split(/\s+/).map(Number);
+      rxTotal += fields[0] || 0; // bytes received
+      txTotal += fields[8] || 0; // bytes transmitted
+    }
+
+    const now = Date.now();
+    if (!_prevNet) {
+      _prevNet = { rxTotal, txTotal, ts: now };
+      return { rxBytesPerSec: 0, txBytesPerSec: 0, rxTotal, txTotal };
+    }
+
+    const dt = (now - _prevNet.ts) / 1000;
+    const rxRate = dt > 0 ? Math.max(0, (rxTotal - _prevNet.rxTotal) / dt) : 0;
+    const txRate = dt > 0 ? Math.max(0, (txTotal - _prevNet.txTotal) / dt) : 0;
+    _prevNet = { rxTotal, txTotal, ts: now };
+
+    return { rxBytesPerSec: rxRate, txBytesPerSec: txRate, rxTotal, txTotal };
+  } catch {
+    return { rxBytesPerSec: 0, txBytesPerSec: 0, rxTotal: 0, txTotal: 0 };
+  }
+}
+
+/** Android/Linux thermal zones — often present but sometimes permission-
+ * restricted depending on the device. Returns null (not 0) when
+ * unavailable, so the UI can tell "no sensor" apart from "0°C". */
+function readTemperature() {
+  try {
+    const zonesDir = '/sys/class/thermal';
+    if (!fs.existsSync(zonesDir)) return null;
+    const zones = fs.readdirSync(zonesDir).filter((z) => z.startsWith('thermal_zone'));
+    const readings = [];
+    for (const zone of zones) {
+      try {
+        const raw = fs.readFileSync(path.join(zonesDir, zone, 'temp'), 'utf8').trim();
+        const millideg = parseInt(raw, 10);
+        if (!Number.isNaN(millideg) && millideg > 0) {
+          // Some devices report plain °C already (small numbers like 45),
+          // most report millidegrees (45000). Normalize.
+          readings.push(millideg > 1000 ? millideg / 1000 : millideg);
+        }
+      } catch { /* this zone unreadable, try the next */ }
+    }
+    if (readings.length === 0) return null;
+    return Math.max(...readings);
+  } catch {
+    return null;
+  }
+}
+
 function readProcessList() {
   try {
     const out = execSync('ps aux 2>/dev/null || ps -eo pid,comm,%cpu,%mem 2>/dev/null', {
@@ -98,6 +160,8 @@ async function getSnapshot() {
     cpu: readCpu(),
     mem: readMeminfo(),
     disk: readDisk(),
+    net: readNetwork(),
+    temp: readTemperature(),
     uptime: readUptime(),
     ts: Date.now(),
   };

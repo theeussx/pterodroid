@@ -16,6 +16,7 @@ const serviceRoutes = require('./routes/services');
 const databaseRoutes = require('./routes/databases');
 const monitorRoutes = require('./routes/monitor');
 const settingsRoutes = require('./routes/settings');
+const fileRoutes = require('./routes/files');
 const { authMiddleware } = require('./middleware/auth');
 
 async function main() {
@@ -32,6 +33,7 @@ async function main() {
   app.use('/api/databases', authMiddleware, databaseRoutes);
   app.use('/api/monitor', authMiddleware, monitorRoutes);
   app.use('/api/settings', authMiddleware, settingsRoutes);
+  app.use('/api/files', authMiddleware, fileRoutes);
 
   // Serve the built frontend (frontend/dist) if present, so a single
   // `node src/server.js` can serve the whole panel on one port.

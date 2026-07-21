@@ -83,4 +83,62 @@ export const api = {
   applyDomains: () => request('/settings/domains/apply', { method: 'POST' }),
   startTokenTunnel: (token) => request('/settings/domains/token', { method: 'POST', body: { token } }),
   stopDomains: () => request('/settings/domains/stop', { method: 'POST' }),
+
+  // gerenciador de arquivos
+  listFiles: (path = '') => request(`/files/list?path=${encodeURIComponent(path)}`),
+  readFile: (path) => request(`/files/read?path=${encodeURIComponent(path)}`),
+  writeFile: (path, content) => request('/files/write', { method: 'PUT', body: { path, content } }),
+  mkdir: (path, name) => request('/files/mkdir', { method: 'POST', body: { path, name } }),
+  touchFile: (path, name) => request('/files/touch', { method: 'POST', body: { path, name } }),
+  renameFile: (path, name) => request('/files/rename', { method: 'POST', body: { path, name } }),
+  moveFile: (source, destDir) => request('/files/move', { method: 'POST', body: { source, destDir } }),
+  copyFile: (source, destDir) => request('/files/copy', { method: 'POST', body: { source, destDir } }),
+  deleteFiles: (paths) => request('/files', { method: 'DELETE', body: { paths } }),
+  searchFiles: (path, q) => request(`/files/search?path=${encodeURIComponent(path)}&q=${encodeURIComponent(q)}`),
+  filesAudit: (limit = 50) => request(`/files/audit?limit=${limit}`),
+
+  uploadFiles: async (dirPath, fileList, onProgress) => {
+    const formData = new FormData();
+    for (const f of fileList) formData.append('files', f);
+    const token = getToken();
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', `/api/files/upload?path=${encodeURIComponent(dirPath)}`);
+      if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable && onProgress) onProgress(Math.round((e.loaded / e.total) * 100));
+      };
+      xhr.onload = () => {
+        try {
+          const data = JSON.parse(xhr.responseText);
+          if (xhr.status >= 200 && xhr.status < 300) resolve(data);
+          else reject(new Error(data?.error || 'Upload falhou'));
+        } catch {
+          reject(new Error('Upload falhou'));
+        }
+      };
+      xhr.onerror = () => reject(new Error('Upload falhou (rede)'));
+      xhr.send(formData);
+    });
+  },
+
+  downloadFile: async (path, filename) => {
+    const token = getToken();
+    const res = await fetch(`/api/files/download?path=${encodeURIComponent(path)}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => null);
+      throw new Error(data?.error || 'Download falhou');
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  },
 };

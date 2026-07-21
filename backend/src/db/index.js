@@ -90,8 +90,18 @@ async function initDB() {
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
+    CREATE TABLE IF NOT EXISTS audit_log (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      action     TEXT NOT NULL,
+      target     TEXT NOT NULL,
+      detail     TEXT DEFAULT '',
+      username   TEXT DEFAULT '',
+      timestamp  DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
     CREATE INDEX IF NOT EXISTS idx_logs_service ON logs(service_id, timestamp DESC);
     CREATE INDEX IF NOT EXISTS idx_logs_db      ON logs(db_instance_id, timestamp DESC);
+    CREATE INDEX IF NOT EXISTS idx_audit_time    ON audit_log(timestamp DESC);
   `);
 
   // ── Migrations (safe on both a fresh DB and an existing one) ────────────

@@ -38,6 +38,13 @@ module.exports = {
   DATABASES_ROOT: path.join(DATA_ROOT, 'databases'),
   PROJECTS_ROOT: process.env.PROJECTS_ROOT || path.join(process.env.HOME || DATA_ROOT, 'pterodroid-projects'),
   CLOUDFLARED_DIR: path.join(DATA_ROOT, 'cloudflared'),
+  // File manager root — deliberately the Termux home, not the whole
+  // filesystem. Broad enough to cover PROJECTS_ROOT and anywhere else the
+  // person keeps files, without exposing OS-level paths from a panel that
+  // may now be reachable over the internet via a tunnel.
+  FILES_ROOT: process.env.FILES_ROOT || process.env.HOME || DATA_ROOT,
+  UPLOAD_MAX_BYTES: parseInt(process.env.UPLOAD_MAX_BYTES || String(200 * 1024 * 1024), 10), // 200MB
+  EDITOR_MAX_BYTES: 2 * 1024 * 1024, // 2MB — above this, the in-panel editor refuses to open a file
   LOG_MAX_MEMORY: parseInt(process.env.LOG_MAX_MEMORY || '500', 10),
   LOG_MAX_DB: parseInt(process.env.LOG_MAX_DB || '1000', 10),
   RESTART_MAX: 10,         // consecutive auto-restarts before giving up
