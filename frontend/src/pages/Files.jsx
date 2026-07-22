@@ -142,103 +142,105 @@ export default function Files() {
   const displayEntries = searchResults !== null ? searchResults : sortedEntries;
 
   return (
-    <UploadZone path={path} onUploaded={load}>
-      {({ openPicker }) => (
-        <div className="space-y-3">
-          <div className="flex items-center justify-between gap-2 flex-wrap">
-            <Breadcrumbs path={path} onNavigate={(p) => { setPath(p); setSearchResults(null); setSearchQuery(''); }} />
-            <div className="flex items-center gap-1.5">
-              <button onClick={openAudit} className="p-2 text-ink-faint hover:text-ink transition-colors" title="Atividade recente">
-                <History size={17} />
-              </button>
-              <button onClick={() => load()} className="p-2 text-ink-faint hover:text-ink transition-colors" title="Atualizar">
-                <RefreshCw size={17} />
-              </button>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 flex-wrap">
-            <div className="relative flex-1 min-w-[140px]">
-              <Search size={15} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-faint" />
-              <input
-                value={searchQuery}
-                onChange={(e) => runSearch(e.target.value)}
-                placeholder="Buscar arquivos..."
-                className="w-full bg-raised border border-line rounded-lg pl-8 pr-3 py-2 text-sm text-ink placeholder:text-ink-faint focus:border-signal focus:outline-none"
-              />
-              {searchQuery && (
-                <button onClick={() => { setSearchQuery(''); setSearchResults(null); }} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-faint hover:text-ink">
-                  <X size={14} />
+    <>
+      <UploadZone path={path} onUploaded={load}>
+        {({ openPicker }) => (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <Breadcrumbs path={path} onNavigate={(p) => { setPath(p); setSearchResults(null); setSearchQuery(''); }} />
+              <div className="flex items-center gap-1.5">
+                <button onClick={openAudit} className="p-2 text-ink-faint hover:text-ink transition-colors" title="Atividade recente">
+                  <History size={17} />
                 </button>
-              )}
-            </div>
-            <select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value)}
-              className="bg-raised border border-line rounded-lg px-2.5 py-2 text-xs text-ink-dim focus:outline-none focus:border-signal"
-            >
-              <option value="name">Nome</option>
-              <option value="size">Tamanho</option>
-              <option value="date">Data</option>
-              <option value="type">Tipo</option>
-            </select>
-            <Button variant="secondary" size="sm" onClick={() => setNewItemKind('dir')}>
-              <FolderPlus size={15} /> <span className="hidden sm:inline">Pasta</span>
-            </Button>
-            <Button variant="secondary" size="sm" onClick={() => setNewItemKind('file')}>
-              <FilePlus size={15} /> <span className="hidden sm:inline">Arquivo</span>
-            </Button>
-            <Button variant="primary" size="sm" onClick={openPicker}>
-              <Upload size={15} /> <span className="hidden sm:inline">Enviar</span>
-            </Button>
-          </div>
-
-          {selectionMode && (
-            <div className="flex items-center justify-between gap-2 bg-signal-soft border border-signal/30 rounded-lg px-3 py-2">
-              <span className="text-xs text-signal font-medium">{selected.size} selecionado(s)</span>
-              <div className="flex items-center gap-1">
-                <button onClick={handleDownloadSelected} className="p-1.5 text-ink-dim hover:text-ink" title="Baixar"><Download size={15} /></button>
-                <button onClick={() => setMoveMode('copy')} className="p-1.5 text-ink-dim hover:text-ink" title="Copiar"><Copy size={15} /></button>
-                <button onClick={() => setMoveMode('move')} className="p-1.5 text-ink-dim hover:text-ink" title="Mover"><Move size={15} /></button>
-                <button onClick={() => setDeleteConfirm(true)} className="p-1.5 text-error hover:text-error/80" title="Excluir"><Trash2 size={15} /></button>
-                <button onClick={clearSelection} className="p-1.5 text-ink-faint hover:text-ink ml-1" title="Cancelar"><X size={15} /></button>
+                <button onClick={() => load()} className="p-2 text-ink-faint hover:text-ink transition-colors" title="Atualizar">
+                  <RefreshCw size={17} />
+                </button>
               </div>
             </div>
-          )}
 
-          <Card padded={false}>
-            {!selectionMode && entries.length > 0 && !searchResults && (
-              <button
-                onClick={() => setSelectionMode(true)}
-                className="flex items-center gap-2 px-3 pt-3 text-xs text-ink-faint hover:text-ink transition-colors"
-              >
-                <ListChecks size={13} /> selecionar
-              </button>
-            )}
-            <div className="p-2">
-              {loading && <p className="text-sm text-ink-faint text-center py-8">Carregando...</p>}
-              {!loading && displayEntries.length === 0 && (
-                <p className="text-sm text-ink-faint text-center py-8">
-                  {searchResults !== null ? 'Nenhum resultado.' : 'Pasta vazia.'}
-                </p>
-              )}
-              {!loading && displayEntries.map((entry) => (
-                <FileRow
-                  key={entry.path || entry.name}
-                  entry={entry}
-                  selected={selected.has(entry.name)}
-                  selectionMode={selectionMode}
-                  onOpen={searchResults !== null
-                    ? () => { setPath(parentPath(entry.path)); setSearchResults(null); setSearchQuery(''); }
-                    : openEntry}
-                  onToggleSelect={toggleSelect}
-                  onLongPress={startSelection}
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="relative flex-1 min-w-[140px]">
+                <Search size={15} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-faint" />
+                <input
+                  value={searchQuery}
+                  onChange={(e) => runSearch(e.target.value)}
+                  placeholder="Buscar arquivos..."
+                  className="w-full bg-raised border border-line rounded-lg pl-8 pr-3 py-2 text-sm text-ink placeholder:text-ink-faint focus:border-signal focus:outline-none"
                 />
-              ))}
+                {searchQuery && (
+                  <button onClick={() => { setSearchQuery(''); setSearchResults(null); }} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-faint hover:text-ink">
+                    <X size={14} />
+                  </button>
+                )}
+              </div>
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value)}
+                className="bg-raised border border-line rounded-lg px-2.5 py-2 text-xs text-ink-dim focus:outline-none focus:border-signal"
+              >
+                <option value="name">Nome</option>
+                <option value="size">Tamanho</option>
+                <option value="date">Data</option>
+                <option value="type">Tipo</option>
+              </select>
+              <Button variant="secondary" size="sm" onClick={() => setNewItemKind('dir')}>
+                <FolderPlus size={15} /> <span className="hidden sm:inline">Pasta</span>
+              </Button>
+              <Button variant="secondary" size="sm" onClick={() => setNewItemKind('file')}>
+                <FilePlus size={15} /> <span className="hidden sm:inline">Arquivo</span>
+              </Button>
+              <Button variant="primary" size="sm" onClick={openPicker}>
+                <Upload size={15} /> <span className="hidden sm:inline">Enviar</span>
+              </Button>
             </div>
-          </Card>
-        </div>
-      )}
+
+            {selectionMode && (
+              <div className="flex items-center justify-between gap-2 bg-signal-soft border border-signal/30 rounded-lg px-3 py-2">
+                <span className="text-xs text-signal font-medium">{selected.size} selecionado(s)</span>
+                <div className="flex items-center gap-1">
+                  <button onClick={handleDownloadSelected} className="p-1.5 text-ink-dim hover:text-ink" title="Baixar"><Download size={15} /></button>
+                  <button onClick={() => setMoveMode('copy')} className="p-1.5 text-ink-dim hover:text-ink" title="Copiar"><Copy size={15} /></button>
+                  <button onClick={() => setMoveMode('move')} className="p-1.5 text-ink-dim hover:text-ink" title="Mover"><Move size={15} /></button>
+                  <button onClick={() => setDeleteConfirm(true)} className="p-1.5 text-error hover:text-error/80" title="Excluir"><Trash2 size={15} /></button>
+                  <button onClick={clearSelection} className="p-1.5 text-ink-faint hover:text-ink ml-1" title="Cancelar"><X size={15} /></button>
+                </div>
+              </div>
+            )}
+
+            <Card padded={false}>
+              {!selectionMode && entries.length > 0 && !searchResults && (
+                <button
+                  onClick={() => setSelectionMode(true)}
+                  className="flex items-center gap-2 px-3 pt-3 text-xs text-ink-faint hover:text-ink transition-colors"
+                >
+                  <ListChecks size={13} /> selecionar
+                </button>
+              )}
+              <div className="p-2">
+                {loading && <p className="text-sm text-ink-faint text-center py-8">Carregando...</p>}
+                {!loading && displayEntries.length === 0 && (
+                  <p className="text-sm text-ink-faint text-center py-8">
+                    {searchResults !== null ? 'Nenhum resultado.' : 'Pasta vazia.'}
+                  </p>
+                )}
+                {!loading && displayEntries.map((entry) => (
+                  <FileRow
+                    key={entry.path || entry.name}
+                    entry={entry}
+                    selected={selected.has(entry.name)}
+                    selectionMode={selectionMode}
+                    onOpen={searchResults !== null
+                      ? () => { setPath(parentPath(entry.path)); setSearchResults(null); setSearchQuery(''); }
+                      : openEntry}
+                    onToggleSelect={toggleSelect}
+                    onLongPress={startSelection}
+                  />
+                ))}
+              </div>
+            </Card>
+          </div>
+        )}
+      </UploadZone>
 
       {newItemKind && (
         <NewItemModal
@@ -293,6 +295,6 @@ export default function Files() {
           </div>
         </div>
       )}
-    </UploadZone>
+    </>
   );
 }
