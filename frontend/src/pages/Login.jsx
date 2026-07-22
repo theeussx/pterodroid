@@ -27,16 +27,16 @@ export default function Login() {
     }
   };
 
-  return (
-    <div className="min-h-screen flex items-center justify-center px-4">
-      <div className="w-full max-w-sm">
-        <div className="flex flex-col items-center mb-8">
-          <div className="w-12 h-12 rounded-xl bg-signal-soft border border-signal/30 flex items-center justify-center mb-4">
-            <span className="w-3 h-3 rounded-full bg-signal animate-pulse-dot" />
-          </div>
-          <h1 className="font-display font-semibold text-xl text-ink">Pterodroid</h1>
-          <p className="text-sm text-ink-faint mt-1">Painel pessoal de hospedagem</p>
-        </div>
+ return (
+  <div className="min-h-screen flex items-center justify-center px-4">
+    <div className="w-full max-w-sm">
+      <div className="flex flex-col items-center mb-8">
+        <img src="public/images/logo.jpg" alt="Pterodroid" 
+          className="w-12 h-12 object-contain mb-4"
+        />
+        <h1 className="font-display font-semibold text-xl text-ink">Pterodroid</h1>
+        <p className="text-sm text-ink-faint mt-1">Painel pessoal de hospedagem</p>
+      </div>
 
         <form onSubmit={handleSubmit} className="bg-surface border border-line rounded-xl p-6 space-y-4">
           <div>

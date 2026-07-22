@@ -27,6 +27,12 @@ export default function Layout() {
           <SetupBanner />
           <Outlet />
         </main>
+        <footer className="w-full pb-6 pt-2 flex justify-center items-center">
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/50 text-xs font-medium text-zinc-500 dark:text-zinc-400 shadow-sm">
+            <span className="text-sm">©</span>
+            <span>2026 Pterodroid. Desenvolvido por Mateus. Todos os direitos reservados.</span>
+          </div>
+        </footer>
       </div>
     </div>
   );

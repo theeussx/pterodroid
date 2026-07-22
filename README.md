@@ -201,5 +201,5 @@ Este projeto é distribuído sob a **Licença MIT**. Para mais detalhes, consult
 
 <div align="center">
 <img src="https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/heart.svg" width="20" height="20" alt="Heart Icon" />
-  Feito com ❤️ por <a href="https://github.com/theeussx">Matheus</a>
+  Feito com ❤️ por <a href="https://github.com/theeussx">Mateus</a>
 </div>
