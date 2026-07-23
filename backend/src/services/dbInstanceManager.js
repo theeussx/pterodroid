@@ -14,7 +14,7 @@ const path = require('path');
 const { getDB } = require('../db');
 const config = require('../config');
 const drivers = require('./dbDrivers');
-const { findAvailablePort } = require('./portFinder');
+const { isPortAvailable } = require('./portFinder');
 
 class DBInstanceManager extends EventEmitter {
   constructor() {
@@ -49,16 +49,25 @@ class DBInstanceManager extends EventEmitter {
     const driver = this.driverFor(inst.type);
     const dataDirectory = this.dataDirFor(inst);
 
-    // Dynamic port allocation
-    let activePort = inst.port;
-    try {
-      activePort = await findAvailablePort(inst.port);
-      if (activePort !== inst.port) {
-        console.log(`[DB] Port ${inst.port} busy, using ${activePort} for ${inst.name}`);
-        db.prepare('UPDATE db_instances SET port=? WHERE id=?').run(activePort, instanceId);
-      }
-    } catch (err) {
-      console.error(`[DB] Failed to find available port for ${inst.name}:`, err.message);
+    // Unlike a service's port (an implementation detail, fine to move
+    // since it's normally reached through a tunnel/proxy anyway), a
+    // database's port is a stable contract — connection strings and
+    // other services hardcode it. Silently reassigning it here (like
+    // services do) would leave anything already pointed at the original
+    // port unable to connect, which looks exactly like "the database
+    // broke". Fail clearly instead, so the admin can free the port or
+    // change it deliberately (via the update endpoint) rather than have
+    // it move under them.
+    const portFree = await isPortAvailable(inst.port);
+    if (!portFree) {
+      const err = new Error(
+        `Porta ${inst.port} já está em uso por outro processo. Pare o que está usando essa porta, ` +
+        `ou edite esta instância para usar outra porta antes de iniciar.`
+      );
+      err.status = 409;
+      db.prepare("UPDATE db_instances SET status='error' WHERE id=?").run(instanceId);
+      this.emit('status', { instanceId, status: 'error', error: err.message });
+      throw err;
     }
 
     if (!inst.provisioned) {
@@ -80,7 +89,7 @@ class DBInstanceManager extends EventEmitter {
         .run(dataDirectory, instanceId);
     }
 
-    return this._spawn({ ...inst, data_directory: dataDirectory, port: activePort }, driver);
+    return this._spawn({ ...inst, data_directory: dataDirectory }, driver);
   }
 
   async stopInstance(instanceId) {

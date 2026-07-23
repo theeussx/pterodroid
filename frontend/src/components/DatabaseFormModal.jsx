@@ -7,19 +7,21 @@ import { api } from '../lib/api';
 
 const EMPTY_FORM = { name: '', type: 'postgresql', port: 5432, db_username: 'panel', db_password: '', tunnel_hostname: '' };
 
-export default function DatabaseFormModal({ open, onClose, onSubmit }) {
+export default function DatabaseFormModal({ open, onClose, onSubmit, initial }) {
   const [engines, setEngines] = useState([]);
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [result, setResult] = useState(null);
 
+  const isEdit = !!initial;
+
   useEffect(() => {
     if (open) {
       api.dbEngines().then(setEngines).catch(() => {});
-      setForm(EMPTY_FORM);
+      setForm(initial ? { ...EMPTY_FORM, ...initial, tunnel_hostname: initial.tunnel_hostname || '' } : EMPTY_FORM);
       setResult(null);
     }
-  }, [open]);
+  }, [open, initial]);
 
   const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }));
 
@@ -61,21 +63,29 @@ export default function DatabaseFormModal({ open, onClose, onSubmit }) {
     <Modal
       open={open}
       onClose={onClose}
-      title="Nova instância de banco"
+      title={isEdit ? `Editar ${initial.name}` : 'Nova instância de banco'}
       footer={
         <>
           <Button variant="ghost" onClick={onClose}>Cancelar</Button>
-          <Button variant="primary" onClick={handleSubmit} loading={saving}>Criar</Button>
+          <Button variant="primary" onClick={handleSubmit} loading={saving}>{isEdit ? 'Salvar' : 'Criar'}</Button>
         </>
       }
     >
       <form onSubmit={handleSubmit} className="space-y-4">
+        {isEdit && (
+          <p className="text-xs text-ink-faint flex items-start gap-1.5 -mt-1">
+            <Info size={13} className="shrink-0 mt-0.5" />
+            Pare a instância antes de editar. Motor e senha não podem ser alterados depois de provisionados —
+            para mudar de motor, crie uma nova instância.
+          </p>
+        )}
+
         <div>
           <Label htmlFor="dbtype">Motor</Label>
-          <Select id="dbtype" value={form.type} onChange={handleTypeChange}>
+          <Select id="dbtype" value={form.type} onChange={handleTypeChange} disabled={isEdit}>
             {engines.map((e) => <option key={e.type} value={e.type}>{e.label}</option>)}
           </Select>
-          {selectedEngine && !selectedEngine.ok && (
+          {selectedEngine && !selectedEngine.ok && !isEdit && (
             <p className="text-xs text-provisioning flex items-start gap-1.5 mt-2">
               <AlertTriangle size={13} className="shrink-0 mt-0.5" /> {selectedEngine.message}
             </p>
@@ -94,14 +104,16 @@ export default function DatabaseFormModal({ open, onClose, onSubmit }) {
           </div>
           <div>
             <Label htmlFor="dbuser">Usuário</Label>
-            <MonoInput id="dbuser" value={form.db_username} onChange={set('db_username')} />
+            <MonoInput id="dbuser" value={form.db_username} onChange={set('db_username')} disabled={isEdit} />
           </div>
         </div>
 
-        <div>
-          <Label htmlFor="dbpass">Senha (deixe vazio para gerar automaticamente)</Label>
-          <MonoInput id="dbpass" type="password" value={form.db_password} onChange={set('db_password')} placeholder="••••••••" />
-        </div>
+        {!isEdit && (
+          <div>
+            <Label htmlFor="dbpass">Senha (deixe vazio para gerar automaticamente)</Label>
+            <MonoInput id="dbpass" type="password" value={form.db_password} onChange={set('db_password')} placeholder="••••••••" />
+          </div>
+        )}
 
         <div className="border-t border-line-soft pt-4">
           <Label htmlFor="db_tunnel_hostname">Domínio personalizado (opcional, avançado)</Label>

@@ -63,17 +63,66 @@ router.post('/', (req, res) => {
 
   const db = getDB();
   const { name, type, port, db_username = 'root', db_password = '', tunnel_hostname = null } = req.body;
+  const portNum = parseInt(port, 10);
+
+  const conflict = db.prepare('SELECT name FROM db_instances WHERE port = ?').get(portNum);
+  if (conflict) {
+    return res.status(409).json({
+      error: `A porta ${portNum} já está configurada para a instância "${conflict.name}". Escolha outra porta.`,
+    });
+  }
 
   const password = db_password || Math.random().toString(36).slice(2, 12);
 
   const result = db.prepare(`
     INSERT INTO db_instances (name, type, port, db_username, db_password, tunnel_hostname)
     VALUES (?, ?, ?, ?, ?, ?)
-  `).run(name.trim(), type, parseInt(port, 10), db_username.trim() || 'root', password, tunnel_hostname?.trim() || null);
+  `).run(name.trim(), type, portNum, db_username.trim() || 'root', password, tunnel_hostname?.trim() || null);
 
   const created = db.prepare('SELECT * FROM db_instances WHERE id = ?').get(result.lastInsertRowid);
   const { db_password: _pw, ...safe } = created;
   return res.status(201).json({ ...safe, generatedPassword: db_password ? undefined : password });
+});
+
+// PUT /api/databases/:id — mainly for fixing a port conflict without
+// losing the provisioned data directory. Blocked while running so the
+// live process's actual bound port never disagrees with what's stored.
+router.put('/:id', (req, res) => {
+  const db = getDB();
+  const existing = db.prepare('SELECT * FROM db_instances WHERE id = ?').get(req.params.id);
+  if (!existing) return res.status(404).json({ error: 'Database instance not found' });
+  if (existing.status === 'running' || dbm.getRuntimeInfo(existing.id)) {
+    return res.status(409).json({ error: 'Pare a instância antes de editar.' });
+  }
+
+  const { name, port, db_username, tunnel_hostname } = req.body;
+
+  if (port !== undefined) {
+    const portNum = parseInt(port, 10);
+    if (isNaN(portNum)) return res.status(400).json({ error: 'Porta inválida' });
+    const conflict = db.prepare('SELECT name FROM db_instances WHERE port = ? AND id != ?').get(portNum, existing.id);
+    if (conflict) {
+      return res.status(409).json({
+        error: `A porta ${portNum} já está configurada para a instância "${conflict.name}". Escolha outra porta.`,
+      });
+    }
+  }
+
+  db.prepare(`
+    UPDATE db_instances SET
+      name=?, port=?, db_username=?, tunnel_hostname=?, updated_at=CURRENT_TIMESTAMP
+    WHERE id=?
+  `).run(
+    (name ?? existing.name).trim(),
+    port !== undefined ? parseInt(port, 10) : existing.port,
+    (db_username ?? existing.db_username).trim() || existing.db_username,
+    tunnel_hostname !== undefined ? (tunnel_hostname?.trim() || null) : existing.tunnel_hostname,
+    existing.id,
+  );
+
+  const updated = db.prepare('SELECT * FROM db_instances WHERE id = ?').get(existing.id);
+  const { db_password: _pw, ...safe } = updated;
+  return res.json(safe);
 });
 
 // DELETE /api/databases/:id
@@ -95,7 +144,7 @@ router.post('/:id/start', async (req, res) => {
     const pid = await dbm.startInstance(parseInt(req.params.id, 10));
     return res.json({ ok: true, pid });
   } catch (e) {
-    return res.status(500).json({ error: e.message });
+    return res.status(e.status || 500).json({ error: e.message });
   }
 });
 
@@ -115,7 +164,7 @@ router.post('/:id/restart', async (req, res) => {
     const pid = await dbm.restartInstance(parseInt(req.params.id, 10));
     return res.json({ ok: true, pid });
   } catch (e) {
-    return res.status(500).json({ error: e.message });
+    return res.status(e.status || 500).json({ error: e.message });
   }
 });
 
