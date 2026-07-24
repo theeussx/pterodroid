@@ -33,27 +33,27 @@ export default function Sidebar({ open, onClose }) {
   }, [open]);
 
   return (
-    <>
-      {open && (
-        <div className="fixed inset-0 bg-void/70 z-30 lg:hidden" onClick={onClose} />
-      )}
-      <aside
-        className={`fixed lg:sticky top-0 left-0 h-screen bg-surface border-r-2 border-signal/10
-          flex flex-col z-40 transition-all duration-200 shrink-0
-          ${collapsed ? 'lg:w-[76px]' : 'lg:w-64'} w-64
-          ${open ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}
-      >
-        <div className="flex items-center justify-between px-5 h-16 border-b border-line shrink-0">
-          <button onClick={() => navigate('/')} className={`flex items-center gap-2.5 min-w-0 ${collapsed ? 'lg:mx-auto' : ''}`}>
-            <div className="w-7 h-7 rounded-md bg-signal-soft border border-signal/30 flex items-center justify-center shrink-0">
-              <span className={`w-2 h-2 rounded-full animate-pulse-dot ${online ? 'bg-signal' : 'bg-ink-faint'}`} />
-            </div>
-            {!collapsed && <span className="font-display font-semibold text-ink tracking-tight lg:inline">Pterodroid</span>}
-          </button>
-          <button onClick={onClose} className="lg:hidden text-ink-faint hover:text-ink">
-            <X size={18} />
-          </button>
-        </div>
+  <>
+    {open && (
+      <div className="fixed inset-0 bg-void/70 z-30 lg:hidden" onClick={onClose} />
+    )}
+    <aside
+      className={`fixed lg:sticky top-0 left-0 h-screen bg-surface border-r-2 border-signal/10
+        flex flex-col z-40 transition-all duration-200 shrink-0
+        ${collapsed ? 'lg:w-[76px]' : 'lg:w-64'} w-64
+        ${open ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}
+    >
+      <div className="flex items-center justify-between px-5 h-16 border-b border-line shrink-0">
+        <button onClick={() => navigate('/')} className={`flex items-center gap-2.5 min-w-0 ${collapsed ? 'lg:mx-auto' : ''}`}>
+          <img src="public/images/logo.jpg" alt="Logo Pterodroid" 
+            className="w-7 h-7 object-contain shrink-0"
+          />
+          {!collapsed && <span className="font-display font-semibold text-ink tracking-tight lg:inline">Pterodroid</span>}
+        </button>
+        <button onClick={onClose} className="lg:hidden text-ink-faint hover:text-ink">
+          <X size={18} />
+        </button>
+      </div>
 
         {/* Server status card — real connection state + quick jump-off points, doubles as the "quick actions" the sidebar needs */}
         <button
