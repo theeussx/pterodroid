@@ -130,6 +130,9 @@ module.exports = {
         '--socket', path.join(dataDirectory, 'mysql.sock'),
         '--pid-file', path.join(dataDirectory, 'mysqld.pid'),
         '--port', String(port),
+        // CORREÇÃO PARA O TERMUX: Redireciona os logs informativos/erros para um arquivo físico.
+        // Isso evita entupimento do pipe stderr do Node.js, prevenindo o "Normal shutdown" precoce.
+        '--log-error=' + path.join(dataDirectory, 'mariadb.log'),
       ],
     };
   },

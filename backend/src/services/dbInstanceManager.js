@@ -157,9 +157,22 @@ class DBInstanceManager extends EventEmitter {
       entry.logs.push(log);
       if (entry.logs.length > config.LOG_MAX_MEMORY) entry.logs.shift();
 
-      if (level === 'error') {
-        db.prepare('INSERT INTO logs(db_instance_id, level, message) VALUES(?,?,?)')
-          .run(inst.id, level, message.slice(0, 2000));
+      // FILTRO: Motores de DB jogam informativos comuns como [Note] e [Warning] no stderr.
+      // Filtramos isso para não disparar escritas síncronas desnecessárias no SQLite.
+      const isRealError = level === 'error' && 
+                          !message.includes('[Warning]') && 
+                          !message.includes('[Note]');
+
+      if (isRealError) {
+        // setImmediate desvincula a query da execução principal do pipe, impedindo Deadlocks no Termux
+        setImmediate(() => {
+          try {
+            db.prepare('INSERT INTO logs(db_instance_id, level, message) VALUES(?,?,?)')
+              .run(inst.id, level, message.slice(0, 2000));
+          } catch (e) {
+            console.error("Erro ao persistir logs do banco de dados:", e);
+          }
+        });
       }
       this.emit('log', { instanceId: inst.id, ...log });
     };
@@ -214,12 +227,14 @@ class DBInstanceManager extends EventEmitter {
         const t = setTimeout(() => {
           try { proc.kill('SIGKILL'); } catch { /* already gone */ }
           resolve();
-        }, config.SIGTERM_WAIT * 2);
-        proc.once('exit', () => { clearTimeout(t); resolve(); });
+        }, 20000);
+
+        proc.once('exit', () => {
+          clearTimeout(t);
+          resolve();
+        });
       });
     }
-    // The 'exit' listener registered in _spawn does the DB write, the
-    // status emit, and the map cleanup — nothing left to do here.
   }
 }
 
