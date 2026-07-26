@@ -5,11 +5,7 @@
 
 **O seu painel de hospedagem pessoal, otimizado para Android.**
 
-![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)
-[![Node.js](https://img.shields.io/badge/Node.js-339933?style=for-the-badge&logo=nodedotjs&logoColor=white)](https://nodejs.org/)
-[![React](https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)](https://reactjs.org/)
-[![TailwindCSS](https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)](https://tailwindcss.com/)
-[![SQLite](https://img.shields.io/badge/SQLite-07405E?style=for-the-badge&logo=sqlite&logoColor=white)](https://www.sqlite.org/)
+![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)[![Node.js](https://img.shields.io/badge/Node.js-339933?style=for-the-badge&logo=nodedotjs&logoColor=white)](https://nodejs.org/)[![React](https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)](https://reactjs.org/)[![TailwindCSS](https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)](https://tailwindcss.com/)[![SQLite](https://img.shields.io/badge/SQLite-07405E?style=for-the-badge&logo=sqlite&logoColor=white)](https://www.sqlite.org/)
 
 <p align="center">
 <a href="#sobre-o-projeto">Sobre</a> •
@@ -80,9 +76,9 @@ Neste modo, o Pterodroid automatiza a criação do túnel, a geração do arquiv
 
 1. **Autenticar o ****`cloudflared`****:** Execute `cloudflared tunnel login` em um terminal no seu dispositivo. Isso abrirá uma página no navegador para você fazer login na sua conta Cloudflare e autorizar o `cloudflared`.
 
-1. **Criar o Túnel Nomeado:** No painel do Pterodroid, você pode criar um túnel nomeado e definir seu domínio base e hostnames para o painel e seus serviços.
+2. **Criar o Túnel Nomeado:** No painel do Pterodroid, você pode criar um túnel nomeado e definir seu domínio base e hostnames para o painel e seus serviços.
 
-1. **Aplicar Configuração:** O painel irá gerar a configuração, rotear o DNS e iniciar o túnel. Isso pode causar uma breve interrupção nos serviços.
+3. **Aplicar Configuração:** O painel irá gerar a configuração, rotear o DNS e iniciar o túnel. Isso pode causar uma breve interrupção nos serviços.
 
 #### Opção B: Colar Token do Dashboard Cloudflare (Remotely-managed)
 
@@ -97,7 +93,7 @@ Uma alternativa mais simples para conectar, onde o túnel é criado e configurad
 O Pterodroid adota uma arquitetura de **Supervisor-Filho**, onde o componente de backend atua como o orquestrador central. Ele é responsável por gerenciar diretamente todos os processos de serviço e banco de dados, eliminando a dependência de ferramentas externas como `pm2` ou `systemd`, o que é crucial para a compatibilidade em ambientes Android.
 
 <div align="center">
-<img src="https://github.com/theeussx/pterodroid/blob/main/arquitetura.png" alt="Pterodroid Architecture Diagram" width="100%" />
+<img src="https://github.com/theeussx/pterodroid/blob/main/arquitetura_v2.png" alt="Pterodroid Architecture Diagram" width="100%" />
 </div>
 
 ---
@@ -122,6 +118,37 @@ O desenvolvimento do Pterodroid foi guiado pela escolha estratégica de tecnolog
 ---
 
 ## 🚀 Guia de Instalação
+
+Siga os passos abaixo para configurar o Pterodroid no seu dispositivo Android ou em um ambiente Docker.
+
+### Instalação em Ambiente Docker
+
+Para rodar o Pterodroid em um ambiente Docker, siga estas instruções:
+
+1. **Pré-requisitos:** Certifique-se de ter o Docker e o Docker Compose instalados em seu sistema.
+
+2. **Clone o repositório:**
+
+   ```bash
+   git clone https://github.com/theeussx/pterodroid.git
+   cd pterodroid
+   ```
+
+3. **Crie os arquivos de configuração Docker:**Crie um `Dockerfile`, `docker-compose.yml` e `.dockerignore` na raiz do projeto com o conteúdo fornecido anteriormente.
+
+4. **Inicie o Pterodroid:**Construa a imagem e inicie o container com Docker Compose:
+
+   ```bash
+   docker-compose up -d --build
+   ```
+
+5. **Acesse o Painel:**Após a inicialização, o painel estará disponível em `http://localhost:3001`.
+
+   > [!IMPORTANT]O Pterodroid interage com o daemon Docker do host. Certifique-se de que o usuário Docker no container tenha permissão para acessar o socket `/var/run/docker.sock` do host. Isso é configurado no `docker-compose.yml`.
+
+   > [!WARNING]Para produção, é **altamente recomendável** definir uma `JWT_SECRET` forte. Você pode fazer isso adicionando `JWT_SECRET=sua_chave_secreta_aqui` no arquivo `docker-compose.yml` ou em um arquivo `.env`.
+
+### Instalação em Ambiente Android (Termux )
 
 Siga os passos abaixo para configurar o Pterodroid no seu dispositivo Android.
 
@@ -177,9 +204,9 @@ Para garantir que o Pterodroid e seus serviços continuem funcionando em segundo
 
 1. **Instale o Termux:API:** `pkg install termux-api -y`
 
-1. **Ative o Wake Lock:** Execute `termux-wake-lock` em uma sessão do Termux antes de iniciar o painel. Isso impede que o sistema Android suspenda o Termux para economizar bateria.
+2. **Ative o Wake Lock:** Execute `termux-wake-lock` em uma sessão do Termux antes de iniciar o painel. Isso impede que o sistema Android suspenda o Termux para economizar bateria.
 
-1. **Otimização de Bateria:** Desative as otimizações de bateria para o aplicativo Termux nas configurações do seu Android. Isso evita que o sistema encerre o processo do Termux de forma agressiva.
+3. **Otimização de Bateria:** Desative as otimizações de bateria para o aplicativo Termux nas configurações do seu Android. Isso evita que o sistema encerre o processo do Termux de forma agressiva.
 
 ---
 
@@ -189,13 +216,13 @@ Sua colaboração é muito bem-vinda! Se você tem ideias, encontrou um bug ou d
 
 1. **Faça um Fork** do projeto para o seu próprio repositório.
 
-1. **Crie uma nova Branch** para sua feature ou correção: `git checkout -b feature/minha-nova-feature`.
+2. **Crie uma nova Branch** para sua feature ou correção: `git checkout -b feature/minha-nova-feature`.
 
-1. **Realize suas alterações** e comente-as de forma clara e concisa.
+3. **Realize suas alterações** e comente-as de forma clara e concisa.
 
-1. **Envie suas alterações** para o seu repositório: `git push origin feature/minha-nova-feature`.
+4. **Envie suas alterações** para o seu repositório: `git push origin feature/minha-nova-feature`.
 
-1. **Abra um Pull Request** para o repositório principal, descrevendo suas mudanças.
+5. **Abra um Pull Request** para o repositório principal, descrevendo suas mudanças.
 
 ---
 
