@@ -93,7 +93,7 @@ Uma alternativa mais simples para conectar, onde o túnel é criado e configurad
 O Pterodroid adota uma arquitetura de **Supervisor-Filho**, onde o componente de backend atua como o orquestrador central. Ele é responsável por gerenciar diretamente todos os processos de serviço e banco de dados, eliminando a dependência de ferramentas externas como `pm2` ou `systemd`, o que é crucial para a compatibilidade em ambientes Android.
 
 <div align="center">
-<img src="https://github.com/theeussx/pterodroid/blob/main/arquitetura_v2.png" alt="Pterodroid Architecture Diagram" width="100%" />
+<img src="https://github.com/theeussx/pterodroid/blob/main/arquitetura.png" alt="Pterodroid Architecture Diagram" width="100%" />
 </div>
 
 ---
