@@ -1,0 +1,35 @@
+
+version: '3.8'
+
+services:
+  pterodroid:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: pterodroid
+    ports:
+      - "3001:3001"
+    volumes:
+      # Persist application data, including the internal SQLite database
+      - pterodroid_data:/home/appuser/data
+      # Mount host Docker socket to allow Pterodroid to manage Docker containers
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Optional: Volumes for user projects and files managed by Pterodroid
+      # - pterodroid_projects:/home/appuser/projects
+      # - pterodroid_files:/home/appuser/files
+    environment:
+      # Set environment variables, these will override defaults in Dockerfile
+      # JWT_SECRET should be a strong, random string for production
+      # - JWT_SECRET=your_jwt_secret_here
+      # - PORT=3001 # Default is 3001, can be changed if needed
+      # DATA_ROOT, PROJECTS_ROOT, FILES_ROOT are set in Dockerfile, but can be overridden here
+    restart: unless-stopped
+
+volumes:
+  pterodroid_data:
+    driver: local
+  # Optional volumes for user projects and files
+  # pterodroid_projects:
+  #   driver: local
+  # pterodroid_files:
+  #   driver: local

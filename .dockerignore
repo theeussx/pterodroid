@@ -1,0 +1,13 @@
+
+node_modules
+npm-debug.log
+.git
+.env
+.DS_Store
+
+# Exclude backend dev/test files
+backend/tests
+
+# Exclude frontend dev files
+frontend/node_modules
+frontend/dist
