@@ -1,0 +1,77 @@
+'use strict';
+
+const { getDB } = require('../db');
+const { DockerEngine, parseDockerHost } = require('./dockerEngine');
+
+// Uma instância DockerEngine por host cadastrado, reaproveitada entre
+// requests — abrir uma conexão HTTP nova a cada chamada seria desperdício,
+// e pro caso TCP remoto pode ser bem mais lento.
+const clients = new Map();
+
+function rowToClient(row) {
+  if (clients.has(row.id)) return clients.get(row.id);
+  const conn = parseDockerHost(row.connection);
+  const tls = row.tls_ca ? { ca: row.tls_ca, cert: row.tls_cert, key: row.tls_key } : null;
+  const engine = new DockerEngine({ ...conn, tls });
+  clients.set(row.id, engine);
+  return engine;
+}
+
+function invalidate(hostId) {
+  clients.delete(hostId);
+}
+
+function listHosts() {
+  const db = getDB();
+  return db.prepare('SELECT id, name, connection, is_default, last_ping_ok, last_ping_at, created_at FROM docker_hosts ORDER BY created_at ASC').all();
+}
+
+function getHostRow(id) {
+  const db = getDB();
+  return db.prepare('SELECT * FROM docker_hosts WHERE id = ?').get(id);
+}
+
+function addHost({ name, connection, tls_ca = null, tls_cert = null, tls_key = null, is_default = false }) {
+  if (!name?.trim()) throw new Error('Nome é obrigatório');
+  if (!connection?.trim()) throw new Error('Endereço de conexão é obrigatório');
+  parseDockerHost(connection); // valida o formato cedo, antes de gravar algo inválido
+
+  const db = getDB();
+  if (is_default) db.prepare('UPDATE docker_hosts SET is_default = 0').run();
+  const result = db.prepare(`
+    INSERT INTO docker_hosts (name, connection, tls_ca, tls_cert, tls_key, is_default)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(name.trim(), connection.trim(), tls_ca, tls_cert, tls_key, is_default ? 1 : 0);
+
+  return getHostRow(result.lastInsertRowid);
+}
+
+function removeHost(id) {
+  invalidate(id);
+  const db = getDB();
+  db.prepare('DELETE FROM docker_hosts WHERE id = ?').run(id);
+}
+
+/** Testa a conexão de verdade e atualiza o status salvo — é o que dá pra "tela amigável" do brief em vez de um erro cru. */
+async function pingHost(id) {
+  const row = getHostRow(id);
+  if (!row) throw new Error('Host não encontrado');
+  const db = getDB();
+  const engine = rowToClient(row);
+  try {
+    const info = await engine.version();
+    db.prepare('UPDATE docker_hosts SET last_ping_ok = 1, last_ping_at = CURRENT_TIMESTAMP WHERE id = ?').run(id);
+    return { ok: true, info };
+  } catch (err) {
+    db.prepare('UPDATE docker_hosts SET last_ping_ok = 0, last_ping_at = CURRENT_TIMESTAMP WHERE id = ?').run(id);
+    return { ok: false, error: err.message };
+  }
+}
+
+function engineFor(id) {
+  const row = getHostRow(id);
+  if (!row) throw new Error('Host não encontrado');
+  return rowToClient(row);
+}
+
+module.exports = { listHosts, getHostRow, addHost, removeHost, pingHost, engineFor, invalidate };

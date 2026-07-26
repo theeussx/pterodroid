@@ -6,7 +6,7 @@ const path = require('path');
 const config = require('./config');
 const { initDB, getDB } = require('./db');
 const { setupSockets } = require('./sockets');
-const pm = require('./services/processManager');
+const driver = require('./services/serviceDriverRegistry');
 const dbm = require('./services/dbInstanceManager');
 const tm = require('./services/tunnelManager');
 const ntm = require('./services/namedTunnelManager');
@@ -17,6 +17,7 @@ const databaseRoutes = require('./routes/databases');
 const monitorRoutes = require('./routes/monitor');
 const settingsRoutes = require('./routes/settings');
 const fileRoutes = require('./routes/files');
+const dockerRoutes = require('./routes/docker');
 const { authMiddleware } = require('./middleware/auth');
 
 async function main() {
@@ -34,6 +35,7 @@ async function main() {
   app.use('/api/monitor', authMiddleware, monitorRoutes);
   app.use('/api/settings', authMiddleware, settingsRoutes);
   app.use('/api/files', authMiddleware, fileRoutes);
+  app.use('/api/docker', authMiddleware, dockerRoutes);
 
   // Serve the built frontend (frontend/dist) if present, so a single
   // `node src/server.js` can serve the whole panel on one port.
@@ -63,7 +65,7 @@ async function main() {
   });
 
   // Resume services that were running before the panel last stopped.
-  await pm.restoreAll();
+  await driver.restoreAll();
 
   // ── Graceful shutdown ────────────────────────────────────────────────
   let shuttingDown = false;
@@ -72,7 +74,7 @@ async function main() {
     shuttingDown = true;
     console.log(`\n${signal} received — stopping services and flushing database...`);
     try {
-      await pm.stopAll();
+      await driver.stopAll();
       await dbm.stopAll();
       await tm.stopAll();
       await ntm.stop();

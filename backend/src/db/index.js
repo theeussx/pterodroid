@@ -99,6 +99,19 @@ async function initDB() {
       timestamp  DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
+    CREATE TABLE IF NOT EXISTS docker_hosts (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      name          TEXT    NOT NULL,
+      connection    TEXT    NOT NULL, -- ex: 'unix:///var/run/docker.sock' ou 'tcp://192.168.1.50:2376'
+      tls_ca        TEXT    DEFAULT NULL,
+      tls_cert      TEXT    DEFAULT NULL,
+      tls_key       TEXT    DEFAULT NULL,
+      is_default    INTEGER DEFAULT 0,
+      last_ping_ok  INTEGER DEFAULT NULL,
+      last_ping_at  DATETIME,
+      created_at    DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
     CREATE INDEX IF NOT EXISTS idx_logs_service ON logs(service_id, timestamp DESC);
     CREATE INDEX IF NOT EXISTS idx_logs_db      ON logs(db_instance_id, timestamp DESC);
     CREATE INDEX IF NOT EXISTS idx_audit_time    ON audit_log(timestamp DESC);
@@ -109,6 +122,20 @@ async function initDB() {
   ensureColumn(db, 'services', 'public_url', 'TEXT');
   ensureColumn(db, 'services', 'scaffolded_directory', 'INTEGER DEFAULT 0');
   ensureColumn(db, 'services', 'tunnel_hostname', 'TEXT');
+
+  // Campos do driver Docker (ver serviceDriverRegistry.js) — todos
+  // nulos/com default, então serviços existentes continuam intactos como
+  // runtime_type='process' e nunca tocam nessas colunas.
+  ensureColumn(db, 'services', 'runtime_type', "TEXT DEFAULT 'process'");
+  ensureColumn(db, 'services', 'docker_host_id', 'INTEGER');
+  ensureColumn(db, 'services', 'image', 'TEXT');
+  ensureColumn(db, 'services', 'container_id', 'TEXT');
+  ensureColumn(db, 'services', 'volumes', "TEXT DEFAULT '[]'");
+  ensureColumn(db, 'services', 'docker_networks', "TEXT DEFAULT '[]'");
+  ensureColumn(db, 'services', 'docker_ports', "TEXT DEFAULT '[]'");
+  ensureColumn(db, 'services', 'cpu_limit', 'REAL');
+  ensureColumn(db, 'services', 'memory_limit', 'INTEGER');
+
   ensureColumn(db, 'db_instances', 'port', 'INTEGER');
   ensureColumn(db, 'db_instances', 'public_url', 'TEXT');
   ensureColumn(db, 'db_instances', 'tunnel_hostname', 'TEXT');

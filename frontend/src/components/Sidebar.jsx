@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Server, Database, FolderOpen, ScrollText, Activity, Settings,
-  LogOut, X, ChevronsLeft, ChevronsRight, Cpu, MemoryStick,
+  LogOut, X, ChevronsLeft, ChevronsRight, Cpu, MemoryStick, Container,
 } from 'lucide-react';
 import { useAuth } from '../stores/AuthContext';
 import { useConnectionStatus, useSystemSnapshot } from '../lib/hooks';
@@ -11,6 +11,7 @@ import { api } from '../lib/api';
 const NAV = [
   { to: '/', label: 'Visão geral', icon: LayoutDashboard, end: true },
   { to: '/services', label: 'Serviços', icon: Server },
+  { to: '/docker', label: 'Docker', icon: Container },
   { to: '/databases', label: 'Bancos de Dados', icon: Database },
   { to: '/files', label: 'Arquivos', icon: FolderOpen },
   { to: '/logs', label: 'Logs', icon: ScrollText },

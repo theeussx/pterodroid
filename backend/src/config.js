@@ -52,4 +52,10 @@ module.exports = {
   SIGTERM_WAIT: 5000,      // ms to wait after SIGTERM before SIGKILL
   DB_FLUSH_DEBOUNCE: 1000, // ms — how often panel.db is written to disk
   CLOUDFLARED_BIN: process.env.CLOUDFLARED_BIN || 'cloudflared',
+  // Atalho pra um único host Docker via env, no mesmo formato que a CLI do
+  // Docker usa (DOCKER_HOST) — útil pra quem só tem uma máquina Docker e
+  // não quer cadastrar nada pela UI. Hosts adicionais sempre passam pela
+  // tabela docker_hosts (ver dockerHostManager.js), não por aqui.
+  DOCKER_DEFAULT_HOST: process.env.DOCKER_HOST || null,
+  DOCKER_API_VERSION: process.env.DOCKER_API_VERSION || 'v1.43',
 };

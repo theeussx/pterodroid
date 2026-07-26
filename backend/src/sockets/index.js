@@ -7,6 +7,7 @@ const { Server } = require('socket.io');
 const { verifySocketToken } = require('../middleware/auth');
 const { getSnapshot } = require('../services/systemMonitor');
 const pm = require('../services/processManager');
+const dockerDriver = require('../services/dockerServiceDriver');
 const dbm = require('../services/dbInstanceManager');
 const tm = require('../services/tunnelManager');
 const ntm = require('../services/namedTunnelManager');
@@ -28,8 +29,14 @@ function setupSockets(httpServer) {
   });
 
   // ── Forward process/db/tunnel manager events to all clients ──────────
+  // processManager (local) e dockerServiceDriver (containers) emitem no
+  // mesmo formato de propósito — o frontend recebe 'service:log'/
+  // 'service:status' pra qualquer serviço, sem saber (nem precisar saber)
+  // qual dos dois driver está por trás.
   pm.on('log', (payload) => io.emit('service:log', payload));
   pm.on('status', (payload) => io.emit('service:status', payload));
+  dockerDriver.on('log', (payload) => io.emit('service:log', payload));
+  dockerDriver.on('status', (payload) => io.emit('service:status', payload));
   dbm.on('log', (payload) => io.emit('db:log', payload));
   dbm.on('status', (payload) => io.emit('db:status', payload));
   tm.on('status', (payload) => io.emit('tunnel:status', payload));

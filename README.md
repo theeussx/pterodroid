@@ -1,7 +1,7 @@
 <div align="center">
 <img src="https://github.com/theeussx/pterodroid/blob/main/pterodroid.png" alt="Pterodroid Logo" width="200" height="200" />
 
-# Pterodroid docker engine?
+# Pterodroid
 
 **O seu painel de hospedagem pessoal, otimizado para Android.**
 

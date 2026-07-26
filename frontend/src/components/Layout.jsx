@@ -7,6 +7,7 @@ import SetupBanner from './SetupBanner';
 const PAGE_TITLES = {
   '/': 'Dashboard',
   '/services': 'Serviços',
+  '/docker': 'Docker',
   '/databases': 'Bancos de Dados',
   '/logs': 'Logs',
   '/monitoring': 'Monitoramento',
@@ -36,3 +37,4 @@ export default function Layout() {
       </div>
     </div>
   );
+}

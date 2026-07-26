@@ -51,6 +51,16 @@ export const api = {
   sendServiceInput: (id, text) => request(`/services/${id}/input`, { method: 'POST', body: { text } }),
   serviceLogs: (id, limit = 200) => request(`/services/${id}/logs?limit=${limit}`),
 
+  // docker
+  listDockerHosts: () => request('/docker/hosts'),
+  createDockerHost: (payload) => request('/docker/hosts', { method: 'POST', body: payload }),
+  deleteDockerHost: (id) => request(`/docker/hosts/${id}`, { method: 'DELETE' }),
+  pingDockerHost: (id) => request(`/docker/hosts/${id}/ping`, { method: 'POST' }),
+  listHostContainers: (id) => request(`/docker/hosts/${id}/containers`),
+  listHostImages: (id) => request(`/docker/hosts/${id}/images`),
+  listHostVolumes: (id) => request(`/docker/hosts/${id}/volumes`),
+  listHostNetworks: (id) => request(`/docker/hosts/${id}/networks`),
+
   // databases
   listDatabases: () => request('/databases'),
   dbEngines: () => request('/databases/engines'),

@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Plus, Play, Square, RotateCw, Trash2, Pencil, Terminal } from 'lucide-react';
+import { Plus, Play, Square, RotateCw, Trash2, Pencil, Terminal, Container } from 'lucide-react';
 import { api } from '../lib/api';
 import { useServiceStatusEvents } from '../lib/hooks';
 import Card from '../components/Card';
@@ -97,7 +97,7 @@ export default function Services() {
             <div className="flex items-start justify-between gap-2">
               <button onClick={() => setDetailId(s.id)} className="text-left min-w-0 group">
                 <p className="font-medium text-ink truncate group-hover:text-signal transition-colors">{s.name}</p>
-                <p className="text-xs text-ink-faint font-mono truncate">{s.command}</p>
+                <p className="text-xs text-ink-faint font-mono truncate">{s.runtime_type === 'docker' ? s.image : s.command}</p>
               </button>
               <StatusDot status={s.status} showLabel={false} />
             </div>
@@ -112,7 +112,13 @@ export default function Services() {
 
             <div className="flex items-center justify-between mt-auto pt-2 border-t border-line-soft">
               <div className="flex items-center gap-2">
-                <span className="text-[10px] uppercase tracking-wide text-ink-faint font-mono">{s.type}</span>
+                {s.runtime_type === 'docker' ? (
+                  <span className="text-[10px] uppercase tracking-wide text-ink-faint font-mono flex items-center gap-1">
+                    <Container size={10} /> container
+                  </span>
+                ) : (
+                  <span className="text-[10px] uppercase tracking-wide text-ink-faint font-mono">{s.type}</span>
+                )}
                 {s.port && <span className="text-[10px] text-ink-faint font-mono">:{s.port}</span>}
               </div>
               <div className="flex gap-1">

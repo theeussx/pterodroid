@@ -6,7 +6,7 @@ import LogViewer from './LogViewer';
 import { api } from '../lib/api';
 import { useLiveLogs } from '../lib/hooks';
 import { useToast } from '../stores/ToastContext';
-import { Play, Square, RotateCw } from 'lucide-react';
+import { Play, Square, RotateCw, Container } from 'lucide-react';
 
 export default function ServiceDetailModal({ open, onClose, serviceId, onChanged }) {
   const [service, setService] = useState(null);
@@ -52,13 +52,26 @@ export default function ServiceDetailModal({ open, onClose, serviceId, onChanged
     );
   }
 
+  const isDocker = service.runtime_type === 'docker';
+  const runtime = service.runtime;
+
   return (
     <Modal open={open} onClose={onClose} title={service.name} size="xl">
       <div className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-4">
             <StatusDot status={service.status} />
-            {service.runtime?.pid && <span className="text-xs font-mono text-ink-faint">pid {service.runtime.pid}</span>}
+            {isDocker && (
+              <span className="text-xs text-ink-faint flex items-center gap-1">
+                <Container size={12} /> container
+              </span>
+            )}
+            {!isDocker && runtime?.pid && <span className="text-xs font-mono text-ink-faint">pid {runtime.pid}</span>}
+            {isDocker && service.container_id && (
+              <span className="text-xs font-mono text-ink-faint" title={service.container_id}>
+                {service.container_id.slice(0, 12)}
+              </span>
+            )}
             {service.restart_count > 0 && (
               <span className="text-xs text-provisioning">{service.restart_count} reinício(s)</span>
             )}
@@ -80,18 +93,45 @@ export default function ServiceDetailModal({ open, onClose, serviceId, onChanged
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-          <div className="bg-raised rounded-lg p-3">
-            <p className="text-ink-faint mb-1">Tipo</p>
-            <p className="text-ink font-mono">{service.type}</p>
-          </div>
-          <div className="bg-raised rounded-lg p-3">
-            <p className="text-ink-faint mb-1">Auto-restart</p>
-            <p className="text-ink">{service.auto_restart ? 'Ativado' : 'Desativado'}</p>
-          </div>
-          <div className="bg-raised rounded-lg p-3 col-span-2 sm:col-span-1">
-            <p className="text-ink-faint mb-1">Comando</p>
-            <p className="text-ink font-mono truncate" title={service.command}>{service.command}</p>
-          </div>
+          {isDocker ? (
+            <>
+              <div className="bg-raised rounded-lg p-3">
+                <p className="text-ink-faint mb-1">Imagem</p>
+                <p className="text-ink font-mono truncate" title={service.image}>{service.image}</p>
+              </div>
+              <div className="bg-raised rounded-lg p-3">
+                <p className="text-ink-faint mb-1">Auto-restart</p>
+                <p className="text-ink">{service.auto_restart ? 'Ativado (política nativa Docker)' : 'Desativado'}</p>
+              </div>
+              {runtime?.cpuPercent != null && (
+                <div className="bg-raised rounded-lg p-3">
+                  <p className="text-ink-faint mb-1">CPU</p>
+                  <p className="text-ink font-mono">{runtime.cpuPercent}%</p>
+                </div>
+              )}
+              {runtime?.memUsageMB != null && (
+                <div className="bg-raised rounded-lg p-3">
+                  <p className="text-ink-faint mb-1">Memória</p>
+                  <p className="text-ink font-mono">{runtime.memUsageMB}{runtime.memLimitMB ? ` / ${runtime.memLimitMB}` : ''} MB</p>
+                </div>
+              )}
+            </>
+          ) : (
+            <>
+              <div className="bg-raised rounded-lg p-3">
+                <p className="text-ink-faint mb-1">Tipo</p>
+                <p className="text-ink font-mono">{service.type}</p>
+              </div>
+              <div className="bg-raised rounded-lg p-3">
+                <p className="text-ink-faint mb-1">Auto-restart</p>
+                <p className="text-ink">{service.auto_restart ? 'Ativado' : 'Desativado'}</p>
+              </div>
+              <div className="bg-raised rounded-lg p-3 col-span-2 sm:col-span-1">
+                <p className="text-ink-faint mb-1">Comando</p>
+                <p className="text-ink font-mono truncate" title={service.command}>{service.command}</p>
+              </div>
+            </>
+          )}
           <div className="bg-raised rounded-lg p-3">
             <p className="text-ink-faint mb-1">Última inicialização</p>
             <p className="text-ink">{service.last_started ? new Date(service.last_started + 'Z').toLocaleString('pt-BR') : '—'}</p>
@@ -121,7 +161,12 @@ export default function ServiceDetailModal({ open, onClose, serviceId, onChanged
           )}
         </div>
 
-        <LogViewer lines={lines} onSendInput={service.status === 'running' ? sendInput : undefined} />
+        <LogViewer lines={lines} onSendInput={!isDocker && service.status === 'running' ? sendInput : undefined} />
+        {isDocker && (
+          <p className="text-xs text-ink-faint -mt-2">
+            Entrada interativa em container ainda não está disponível aqui — use o terminal web (em breve) pra sessões via docker exec.
+          </p>
+        )}
       </div>
     </Modal>
   );
