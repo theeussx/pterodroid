@@ -3,7 +3,7 @@ import { UploadCloud } from 'lucide-react';
 import { api } from '../../lib/api';
 import { useToast } from '../../stores/ToastContext';
 
-export default function UploadZone({ path, onUploaded, children }) {
+export default function UploadZone({ path, onUploaded, children, uploadFn = api.uploadFiles }) {
   const [dragging, setDragging] = useState(false);
   const [uploads, setUploads] = useState([]); // [{name, progress}]
   const dragCounter = useRef(0);
@@ -15,7 +15,7 @@ export default function UploadZone({ path, onUploaded, children }) {
     if (files.length === 0) return;
     setUploads(files.map((f) => ({ name: f.name, progress: 0 })));
     try {
-      await api.uploadFiles(path, files, (pct) => {
+      await uploadFn(path, files, (pct) => {
         setUploads((prev) => prev.map((u) => ({ ...u, progress: pct })));
       });
       notify(`${files.length} arquivo(s) enviado(s)`, 'success');
@@ -25,7 +25,7 @@ export default function UploadZone({ path, onUploaded, children }) {
     } finally {
       setUploads([]);
     }
-  }, [path, onUploaded, notify]);
+  }, [path, onUploaded, notify, uploadFn]);
 
   const onDrop = (e) => {
     e.preventDefault();

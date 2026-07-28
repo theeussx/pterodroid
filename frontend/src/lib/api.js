@@ -107,6 +107,61 @@ export const api = {
   searchFiles: (path, q) => request(`/files/search?path=${encodeURIComponent(path)}&q=${encodeURIComponent(q)}`),
   filesAudit: (limit = 50) => request(`/files/audit?limit=${limit}`),
 
+  // arquivos por serviço (mesmo formato das globais acima, só que escopadas por serviço)
+  listServiceFiles: (id, path = '/') => request(`/services/${id}/files/list?path=${encodeURIComponent(path)}`),
+  readServiceFile: (id, path) => request(`/services/${id}/files/read?path=${encodeURIComponent(path)}`),
+  writeServiceFile: (id, path, content) => request(`/services/${id}/files/write`, { method: 'PUT', body: { path, content } }),
+  mkdirService: (id, path, name) => request(`/services/${id}/files/mkdir`, { method: 'POST', body: { path, name } }),
+  touchServiceFile: (id, path, name) => request(`/services/${id}/files/touch`, { method: 'POST', body: { path, name } }),
+  renameServiceFile: (id, path, name) => request(`/services/${id}/files/rename`, { method: 'POST', body: { path, name } }),
+  moveServiceFile: (id, source, destDir) => request(`/services/${id}/files/move`, { method: 'POST', body: { source, destDir } }),
+  deleteServiceFiles: (id, paths) => request(`/services/${id}/files`, { method: 'DELETE', body: { paths } }),
+
+  uploadServiceFiles: async (id, dirPath, fileList, onProgress) => {
+    const formData = new FormData();
+    for (const f of fileList) formData.append('files', f);
+    const token = getToken();
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', `/api/services/${id}/files/upload?path=${encodeURIComponent(dirPath)}`);
+      if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable && onProgress) onProgress(Math.round((e.loaded / e.total) * 100));
+      };
+      xhr.onload = () => {
+        try {
+          const data = JSON.parse(xhr.responseText);
+          if (xhr.status >= 200 && xhr.status < 300) resolve(data);
+          else reject(new Error(data?.error || 'Upload falhou'));
+        } catch {
+          reject(new Error('Upload falhou'));
+        }
+      };
+      xhr.onerror = () => reject(new Error('Upload falhou (rede)'));
+      xhr.send(formData);
+    });
+  },
+
+  downloadServiceFile: async (id, filePath, filename) => {
+    const token = getToken();
+    const res = await fetch(`/api/services/${id}/files/download?path=${encodeURIComponent(filePath)}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => null);
+      throw new Error(data?.error || 'Download falhou');
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  },
+
   uploadFiles: async (dirPath, fileList, onProgress) => {
     const formData = new FormData();
     for (const f of fileList) formData.append('files', f);

@@ -78,10 +78,17 @@ class DockerEngineClient {
   }
 
   /** Ciclo completo de request — resolve com a response crua assim que os headers chegam; quem chamou lê o corpo. */
-  _send(method, apiPath, { query, body, headers = {} } = {}) {
+  _send(method, apiPath, { query, body, rawBody, headers = {} } = {}) {
     const options = this._baseOptions(method, apiPath, query, headers);
     let payload = null;
-    if (body !== undefined) {
+    if (rawBody !== undefined) {
+      // Corpo binário pronto (ex.: tar pro /archive) — vai direto, sem
+      // passar por JSON.stringify. Quem chamou já deve ter setado o
+      // Content-Type certo em headers.
+      payload = rawBody;
+      options.headers['Content-Type'] = options.headers['Content-Type'] || 'application/octet-stream';
+      options.headers['Content-Length'] = payload.length;
+    } else if (body !== undefined) {
       payload = Buffer.from(JSON.stringify(body));
       options.headers['Content-Type'] = 'application/json';
       options.headers['Content-Length'] = payload.length;

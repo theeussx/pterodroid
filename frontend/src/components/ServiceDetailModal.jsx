@@ -3,19 +3,28 @@ import Modal from './Modal';
 import Button from './Button';
 import StatusDot from './StatusDot';
 import LogViewer from './LogViewer';
+import ServiceFileBrowser from './files/ServiceFileBrowser';
 import { api } from '../lib/api';
 import { useLiveLogs } from '../lib/hooks';
 import { useToast } from '../stores/ToastContext';
-import { Play, Square, RotateCw, Container } from 'lucide-react';
+import { Play, Square, RotateCw, Container, LayoutGrid, ScrollText, FolderOpen } from 'lucide-react';
+
+const TABS = [
+  { id: 'overview', label: 'Visão Geral', icon: LayoutGrid },
+  { id: 'logs', label: 'Logs', icon: ScrollText },
+  { id: 'files', label: 'Arquivos', icon: FolderOpen },
+];
 
 export default function ServiceDetailModal({ open, onClose, serviceId, onChanged }) {
   const [service, setService] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [tab, setTab] = useState('overview');
   const { notify } = useToast();
   const { lines, seedOnce } = useLiveLogs('service', serviceId);
 
   useEffect(() => {
     if (!open || !serviceId) return;
+    setTab('overview');
     api.getService(serviceId)
       .then((data) => { setService(data); seedOnce(data.recentLogs || []); })
       .catch((e) => notify(e.message, 'error'));
@@ -54,6 +63,7 @@ export default function ServiceDetailModal({ open, onClose, serviceId, onChanged
 
   const isDocker = service.runtime_type === 'docker';
   const runtime = service.runtime;
+  const filesReady = !isDocker || !!service.container_id;
 
   return (
     <Modal open={open} onClose={onClose} title={service.name} size="xl">
@@ -92,80 +102,115 @@ export default function ServiceDetailModal({ open, onClose, serviceId, onChanged
           </div>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-          {isDocker ? (
-            <>
-              <div className="bg-raised rounded-lg p-3">
-                <p className="text-ink-faint mb-1">Imagem</p>
-                <p className="text-ink font-mono truncate" title={service.image}>{service.image}</p>
-              </div>
-              <div className="bg-raised rounded-lg p-3">
-                <p className="text-ink-faint mb-1">Auto-restart</p>
-                <p className="text-ink">{service.auto_restart ? 'Ativado (política nativa Docker)' : 'Desativado'}</p>
-              </div>
-              {runtime?.cpuPercent != null && (
-                <div className="bg-raised rounded-lg p-3">
-                  <p className="text-ink-faint mb-1">CPU</p>
-                  <p className="text-ink font-mono">{runtime.cpuPercent}%</p>
-                </div>
-              )}
-              {runtime?.memUsageMB != null && (
-                <div className="bg-raised rounded-lg p-3">
-                  <p className="text-ink-faint mb-1">Memória</p>
-                  <p className="text-ink font-mono">{runtime.memUsageMB}{runtime.memLimitMB ? ` / ${runtime.memLimitMB}` : ''} MB</p>
-                </div>
-              )}
-            </>
-          ) : (
-            <>
-              <div className="bg-raised rounded-lg p-3">
-                <p className="text-ink-faint mb-1">Tipo</p>
-                <p className="text-ink font-mono">{service.type}</p>
-              </div>
-              <div className="bg-raised rounded-lg p-3">
-                <p className="text-ink-faint mb-1">Auto-restart</p>
-                <p className="text-ink">{service.auto_restart ? 'Ativado' : 'Desativado'}</p>
-              </div>
-              <div className="bg-raised rounded-lg p-3 col-span-2 sm:col-span-1">
-                <p className="text-ink-faint mb-1">Comando</p>
-                <p className="text-ink font-mono truncate" title={service.command}>{service.command}</p>
-              </div>
-            </>
-          )}
-          <div className="bg-raised rounded-lg p-3">
-            <p className="text-ink-faint mb-1">Última inicialização</p>
-            <p className="text-ink">{service.last_started ? new Date(service.last_started + 'Z').toLocaleString('pt-BR') : '—'}</p>
-          </div>
-          {service.port && (
-            <div className="bg-raised rounded-lg p-3">
-              <p className="text-ink-faint mb-1">Porta Local</p>
-              <p className="text-ink font-mono">{service.port}</p>
-            </div>
-          )}
-          {service.public_url && (
-            <div className="bg-signal-soft rounded-lg p-3 col-span-2">
-              <p className="text-signal mb-1 font-semibold">URL Pública (túnel rápido)</p>
-              <a href={service.public_url} target="_blank" rel="noreferrer" className="text-signal underline break-all font-mono">
-                {service.public_url}
-              </a>
-            </div>
-          )}
-          {!service.public_url && service.tunnel_hostname && (
-            <div className="bg-signal-soft rounded-lg p-3 col-span-2">
-              <p className="text-signal mb-1 font-semibold">Domínio configurado</p>
-              <a href={`https://${service.tunnel_hostname}`} target="_blank" rel="noreferrer" className="text-signal underline break-all font-mono">
-                {service.tunnel_hostname}
-              </a>
-              <p className="text-xs text-ink-faint mt-1">Ativo assim que o túnel nomeado estiver rodando (Configurações → Domínio personalizado).</p>
-            </div>
-          )}
+        <div className="flex items-center gap-1 border-b border-line-soft -mx-1 px-1">
+          {TABS.map((t) => {
+            const Icon = t.icon;
+            const active = tab === t.id;
+            return (
+              <button
+                key={t.id}
+                onClick={() => setTab(t.id)}
+                className={`flex items-center gap-1.5 px-3 py-2 text-sm border-b-2 -mb-px transition-colors ${
+                  active ? 'border-signal text-signal font-medium' : 'border-transparent text-ink-faint hover:text-ink'
+                }`}
+              >
+                <Icon size={14} /> {t.label}
+              </button>
+            );
+          })}
         </div>
 
-        <LogViewer lines={lines} onSendInput={!isDocker && service.status === 'running' ? sendInput : undefined} />
-        {isDocker && (
-          <p className="text-xs text-ink-faint -mt-2">
-            Entrada interativa em container ainda não está disponível aqui — use o terminal web (em breve) pra sessões via docker exec.
-          </p>
+        {tab === 'overview' && (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+            {isDocker ? (
+              <>
+                <div className="bg-raised rounded-lg p-3">
+                  <p className="text-ink-faint mb-1">Imagem</p>
+                  <p className="text-ink font-mono truncate" title={service.image}>{service.image}</p>
+                </div>
+                <div className="bg-raised rounded-lg p-3">
+                  <p className="text-ink-faint mb-1">Auto-restart</p>
+                  <p className="text-ink">{service.auto_restart ? 'Ativado (política nativa Docker)' : 'Desativado'}</p>
+                </div>
+                {runtime?.cpuPercent != null && (
+                  <div className="bg-raised rounded-lg p-3">
+                    <p className="text-ink-faint mb-1">CPU</p>
+                    <p className="text-ink font-mono">{runtime.cpuPercent}%</p>
+                  </div>
+                )}
+                {runtime?.memUsageMB != null && (
+                  <div className="bg-raised rounded-lg p-3">
+                    <p className="text-ink-faint mb-1">Memória</p>
+                    <p className="text-ink font-mono">{runtime.memUsageMB}{runtime.memLimitMB ? ` / ${runtime.memLimitMB}` : ''} MB</p>
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
+                <div className="bg-raised rounded-lg p-3">
+                  <p className="text-ink-faint mb-1">Tipo</p>
+                  <p className="text-ink font-mono">{service.type}</p>
+                </div>
+                <div className="bg-raised rounded-lg p-3">
+                  <p className="text-ink-faint mb-1">Auto-restart</p>
+                  <p className="text-ink">{service.auto_restart ? 'Ativado' : 'Desativado'}</p>
+                </div>
+                <div className="bg-raised rounded-lg p-3 col-span-2 sm:col-span-1">
+                  <p className="text-ink-faint mb-1">Comando</p>
+                  <p className="text-ink font-mono truncate" title={service.command}>{service.command}</p>
+                </div>
+              </>
+            )}
+            <div className="bg-raised rounded-lg p-3">
+              <p className="text-ink-faint mb-1">Última inicialização</p>
+              <p className="text-ink">{service.last_started ? new Date(service.last_started + 'Z').toLocaleString('pt-BR') : '—'}</p>
+            </div>
+            {service.port && (
+              <div className="bg-raised rounded-lg p-3">
+                <p className="text-ink-faint mb-1">Porta Local</p>
+                <p className="text-ink font-mono">{service.port}</p>
+              </div>
+            )}
+            {service.public_url && (
+              <div className="bg-signal-soft rounded-lg p-3 col-span-2">
+                <p className="text-signal mb-1 font-semibold">URL Pública (túnel rápido)</p>
+                <a href={service.public_url} target="_blank" rel="noreferrer" className="text-signal underline break-all font-mono">
+                  {service.public_url}
+                </a>
+              </div>
+            )}
+            {!service.public_url && service.tunnel_hostname && (
+              <div className="bg-signal-soft rounded-lg p-3 col-span-2">
+                <p className="text-signal mb-1 font-semibold">Domínio configurado</p>
+                <a href={`https://${service.tunnel_hostname}`} target="_blank" rel="noreferrer" className="text-signal underline break-all font-mono">
+                  {service.tunnel_hostname}
+                </a>
+                <p className="text-xs text-ink-faint mt-1">Ativo assim que o túnel nomeado estiver rodando (Configurações → Domínio personalizado).</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {tab === 'logs' && (
+          <div>
+            <LogViewer lines={lines} onSendInput={!isDocker && service.status === 'running' ? sendInput : undefined} />
+            {isDocker && (
+              <p className="text-xs text-ink-faint mt-2">
+                Entrada interativa em container ainda não está disponível aqui — use o terminal web (em breve) pra sessões via docker exec.
+              </p>
+            )}
+          </div>
+        )}
+
+        {tab === 'files' && (
+          filesReady
+            ? <ServiceFileBrowser serviceId={serviceId} />
+            : (
+              <div className="text-center py-10">
+                <FolderOpen size={24} className="mx-auto text-ink-faint mb-2" />
+                <p className="text-sm text-ink-dim">Inicie o serviço pelo menos uma vez pra criar o container antes de gerenciar os arquivos.</p>
+              </div>
+            )
         )}
       </div>
     </Modal>

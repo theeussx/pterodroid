@@ -135,6 +135,8 @@ class DockerServiceDriver extends EventEmitter {
     super();
     /** @type {Map<number, object>} serviceId -> snapshot normalizado */
     this.cache = new Map();
+    /** @type {Map<number, {stop: Function}>} serviceId -> handle do streamLogs ao vivo */
+    this.logStreams = new Map();
     this.pollTimer = null;
   }
 
@@ -169,6 +171,7 @@ class DockerServiceDriver extends EventEmitter {
     this._ensurePolling();
 
     const fresh = this._getRow(db, serviceId);
+    this._startLogStream(serviceId, fresh.container_id, engine);
     if (fresh.port && !fresh.tunnel_hostname) {
       tunnelManager.startTunnel('service', serviceId, fresh.port).catch((err) => {
         console.error(`[DOCKER] Falha ao iniciar tunnel pra ${fresh.name}:`, err.message);
@@ -185,6 +188,7 @@ class DockerServiceDriver extends EventEmitter {
     const engine = hosts.engineFor(svc.docker_host_id);
 
     tunnelManager.stopTunnel('service', serviceId).catch(() => {});
+    this._stopLogStream(serviceId);
 
     try {
       await engine.stopContainer(svc.container_id);
@@ -256,6 +260,7 @@ class DockerServiceDriver extends EventEmitter {
       try {
         const engine = hosts.engineFor(svc.docker_host_id);
         await engine.startContainer(svc.container_id); // no-op se já estiver rodando
+        this._startLogStream(svc.id, svc.container_id, engine);
       } catch (e) {
         console.error(`✗  Falha ao restaurar container de ${svc.name}:`, e.message);
         db.prepare("UPDATE services SET status='error' WHERE id=?").run(svc.id);
@@ -264,12 +269,13 @@ class DockerServiceDriver extends EventEmitter {
     if (running.length) this._ensurePolling();
   }
 
-  /** Ver nota no topo do arquivo: containers remotos sobrevivem ao painel de propósito. Só para o poll local. */
+  /** Ver nota no topo do arquivo: containers remotos sobrevivem ao painel de propósito. Só para o poll local e os streams de log (essas conexões são do painel, não do container). */
   async stopAll() {
     if (this.pollTimer) {
       clearInterval(this.pollTimer);
       this.pollTimer = null;
     }
+    for (const serviceId of [...this.logStreams.keys()]) this._stopLogStream(serviceId);
   }
 
   // ── Internos ──────────────────────────────────────────────────────────
@@ -300,6 +306,49 @@ class DockerServiceDriver extends EventEmitter {
   _ensurePolling() {
     if (this.pollTimer) return;
     this.pollTimer = setInterval(() => this._pollAll().catch(() => {}), POLL_INTERVAL_MS);
+  }
+
+  /**
+   * Liga o follow=1 de logs pro container e emite 'log' por linha completa,
+   * no mesmo formato {serviceId, level, message, ts} que o processManager
+   * usa — é isso que faz sockets/index.js e o LogViewer não precisarem
+   * saber se um serviço é processo local ou container.
+   */
+  async _startLogStream(serviceId, containerId, engine) {
+    if (this.logStreams.has(serviceId)) return; // já tem um stream ligado pra esse serviço
+    let partial = '';
+    try {
+      const handle = await engine.streamLogs(containerId, {
+        tail: 0, // histórico já vem de getLogs() quando a tela abre; aqui é só o que acontecer daqui pra frente
+        onLine: (text, stream) => {
+          partial += text;
+          const lines = partial.split('\n');
+          partial = lines.pop(); // pedaço sem quebra de linha ainda — guarda pro próximo chunk
+          for (const line of lines) {
+            if (!line) continue;
+            this.emit('log', { serviceId, level: stream === 'stderr' ? 'error' : 'info', message: line, ts: Date.now() });
+          }
+        },
+        onError: () => {
+          // Conexão do stream caiu (host reiniciou, rede oscilou...) — não é
+          // erro fatal do serviço em si, só para de acompanhar ao vivo; o
+          // próximo poll de status ainda funciona normalmente.
+          this.logStreams.delete(serviceId);
+        },
+      });
+      this.logStreams.set(serviceId, handle);
+    } catch {
+      // Container pode não existir mais, host pode estar fora do ar — sem
+      // stream ao vivo por enquanto, tudo bem, getLogs() sob demanda continua funcionando.
+    }
+  }
+
+  _stopLogStream(serviceId) {
+    const handle = this.logStreams.get(serviceId);
+    if (handle) {
+      handle.stop();
+      this.logStreams.delete(serviceId);
+    }
   }
 
   async _pollAll() {

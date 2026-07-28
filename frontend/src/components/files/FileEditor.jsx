@@ -4,7 +4,7 @@ import { api } from '../../lib/api';
 import Button from '../Button';
 import { useToast } from '../../stores/ToastContext';
 
-export default function FileEditor({ path, onClose, onSaved }) {
+export default function FileEditor({ path, onClose, onSaved, readFn = api.readFile, writeFn = api.writeFile }) {
   const [content, setContent] = useState('');
   const [original, setOriginal] = useState('');
   const [loading, setLoading] = useState(true);
@@ -13,7 +13,7 @@ export default function FileEditor({ path, onClose, onSaved }) {
 
   useEffect(() => {
     setLoading(true);
-    api.readFile(path)
+    readFn(path)
       .then((r) => { setContent(r.content); setOriginal(r.content); })
       .catch((e) => { notify(e.message, 'error'); onClose(); })
       .finally(() => setLoading(false));
@@ -24,7 +24,7 @@ export default function FileEditor({ path, onClose, onSaved }) {
   const save = useCallback(async () => {
     setSaving(true);
     try {
-      await api.writeFile(path, content);
+      await writeFn(path, content);
       setOriginal(content);
       notify('Arquivo salvo', 'success');
       onSaved?.();

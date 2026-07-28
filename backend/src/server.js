@@ -17,6 +17,7 @@ const databaseRoutes = require('./routes/databases');
 const monitorRoutes = require('./routes/monitor');
 const settingsRoutes = require('./routes/settings');
 const fileRoutes = require('./routes/files');
+const serviceFileRoutes = require('./routes/serviceFiles');
 const dockerRoutes = require('./routes/docker');
 const { authMiddleware } = require('./middleware/auth');
 
@@ -35,6 +36,7 @@ async function main() {
   app.use('/api/monitor', authMiddleware, monitorRoutes);
   app.use('/api/settings', authMiddleware, settingsRoutes);
   app.use('/api/files', authMiddleware, fileRoutes);
+  app.use('/api/services/:id/files', authMiddleware, serviceFileRoutes);
   app.use('/api/docker', authMiddleware, dockerRoutes);
 
   // Serve the built frontend (frontend/dist) if present, so a single

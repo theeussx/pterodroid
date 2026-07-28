@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useMemo, useCallback } from 'react';
-import { Pause, Play, Trash2, Copy, Check, AlertTriangle } from 'lucide-react';
+import { Pause, Play, Trash2, Copy, Check, AlertTriangle, Download } from 'lucide-react';
 
 const LEVELS = ['info', 'warn', 'error', 'debug'];
 const LEVEL_STYLE = {
@@ -82,6 +82,19 @@ export default function LogViewer({ lines, height = 'h-80', onSendInput, emptyLa
     });
   }, [visible]);
 
+  const downloadAll = useCallback(() => {
+    const text = visible.map((l) => l.message.replace(/\n$/, '')).join('\n');
+    const blob = new Blob([text], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `logs-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }, [visible]);
+
   const submitInput = (e) => {
     e.preventDefault();
     if (!input.trim()) return;
@@ -122,6 +135,9 @@ export default function LogViewer({ lines, height = 'h-80', onSendInput, emptyLa
         </button>
         <button onClick={copyAll} className="text-ink-faint hover:text-ink p-1 shrink-0" title="Copiar">
           {copied ? <Check size={13} className="text-running" /> : <Copy size={13} />}
+        </button>
+        <button onClick={downloadAll} className="text-ink-faint hover:text-ink p-1 shrink-0" title="Baixar como .txt">
+          <Download size={13} />
         </button>
         <button onClick={clear} className="text-ink-faint hover:text-error p-1 shrink-0" title="Limpar">
           <Trash2 size={13} />

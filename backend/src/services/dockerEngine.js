@@ -134,6 +134,29 @@ class DockerEngine extends EventEmitter {
     return this.client.request('GET', `/containers/${id}/stats`, { query: { stream: 0 } });
   }
 
+  /**
+   * Logs ao vivo (follow=1) — chama onLine(text, stream) a cada pedaço que
+   * chega, até stop() ser chamado. Não promete que `text` termina em
+   * quebra de linha (TCP não respeita isso); quem consome (ver
+   * dockerServiceDriver) já sabe bufferizar até fechar uma linha.
+   */
+  async streamLogs(id, { onLine, onError, tail = 0 } = {}) {
+    const info = await this.inspectContainer(id);
+    const res = await this.client.requestStream('GET', `/containers/${id}/logs`, {
+      query: { stdout: 1, stderr: 1, follow: 1, tail, timestamps: 0 },
+    });
+    res.on('error', (err) => onError?.(err));
+    if (info.Config && info.Config.Tty) {
+      res.on('data', (chunk) => onLine(chunk.toString('utf8'), 'tty'));
+    } else {
+      demuxDockerStream(res, {
+        onStdout: (buf) => onLine(buf.toString('utf8'), 'stdout'),
+        onStderr: (buf) => onLine(buf.toString('utf8'), 'stderr'),
+      });
+    }
+    return { stop: () => res.destroy() };
+  }
+
   // ── Exec (base pro terminal web — ver nota no smoke test) ────────────
   async execCreate(id, { cmd, tty = true, env } = {}) {
     return this.client.request('POST', `/containers/${id}/exec`, {
@@ -143,6 +166,58 @@ class DockerEngine extends EventEmitter {
   /** Devolve o socket cru já "sequestrado" — quem chamar escreve teclas do usuário nele e lê a saída do terminal dele. */
   async execStart(execId, { tty = true } = {}) {
     return this.client.hijack('POST', `/exec/${execId}/start`, { body: { Detach: false, Tty: tty } });
+  }
+
+  /**
+   * Roda um comando não-interativo até ele sair e devolve stdout/stderr já
+   * separados + o exit code — base do gerenciador de arquivos por container
+   * (ls/mkdir/rm/mv). Sempre `tty: false`: com tty ligado o Docker mistura
+   * stdout+stderr num stream só e não dá pra demultiplexar depois.
+   * `cmd` é um array (argv), nunca uma string de shell montada por nós —
+   * quando precisa de glob (`*`) o caller usa `['sh', '-c', script, '--', arg]`
+   * com o valor variável indo em `arg`, nunca colado dentro de `script`.
+   */
+  async execRun(id, { cmd, env } = {}) {
+    const { Id: execId } = await this.execCreate(id, { cmd, tty: false, env });
+    const res = await this.client.requestStream('POST', `/exec/${execId}/start`, {
+      body: { Detach: false, Tty: false },
+    });
+    const stdoutChunks = [];
+    const stderrChunks = [];
+    await new Promise((resolve, reject) => {
+      res.on('error', reject);
+      demuxDockerStream(res, {
+        onStdout: (buf) => stdoutChunks.push(buf),
+        onStderr: (buf) => stderrChunks.push(buf),
+      });
+      res.on('end', resolve);
+    });
+    const { ExitCode } = await this.client.request('GET', `/exec/${execId}/json`);
+    return {
+      exitCode: ExitCode,
+      stdout: Buffer.concat(stdoutChunks).toString('utf8'),
+      stderr: Buffer.concat(stderrChunks).toString('utf8'),
+    };
+  }
+
+  // ── Archive (base do File Manager por container) ──────────────────────
+  /** Baixa um arquivo ou pasta do container como tar cru — quem chamar faz o parse (ver miniTar.js). */
+  async getArchive(id, pathInContainer) {
+    const res = await this.client.requestStream('GET', `/containers/${id}/archive`, {
+      query: { path: pathInContainer },
+    });
+    const chunks = [];
+    for await (const chunk of res) chunks.push(chunk);
+    return Buffer.concat(chunks);
+  }
+
+  /** Extrai um tar (ver miniTar.js) dentro do container, na pasta de destino indicada. */
+  async putArchive(id, destDirPath, tarBuffer) {
+    return this.client.request('PUT', `/containers/${id}/archive`, {
+      query: { path: destDirPath },
+      rawBody: tarBuffer,
+      headers: { 'Content-Type': 'application/x-tar' },
+    });
   }
 
   // ── Imagens ─────────────────────────────────────────────────────────
