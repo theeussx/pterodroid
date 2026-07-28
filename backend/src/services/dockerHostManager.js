@@ -1,5 +1,7 @@
 'use strict';
 
+const fs = require('fs');
+const path = require('path');
 const { getDB } = require('../db');
 const { DockerEngine, parseDockerHost } = require('./dockerEngine');
 
@@ -24,6 +26,41 @@ function invalidate(hostId) {
 function listHosts() {
   const db = getDB();
   return db.prepare('SELECT id, name, connection, is_default, last_ping_ok, last_ping_at, created_at FROM docker_hosts ORDER BY created_at ASC').all();
+}
+
+function ensureDefaultHost() {
+  const db = getDB();
+  const existing = db.prepare('SELECT id FROM docker_hosts WHERE is_default = 1 LIMIT 1').get();
+  if (existing) return existing.id;
+
+  const candidates = [];
+  const envHost = process.env.DOCKER_HOST || process.env.DOCKER_DEFAULT_HOST;
+  if (envHost) candidates.push(envHost);
+
+  const socketCandidates = [
+    '/var/run/docker.sock',
+    path.join(process.env.HOME || '', '.docker', 'docker.sock'),
+    '/run/docker.sock',
+  ];
+  for (const socketPath of socketCandidates) {
+    if (fs.existsSync(socketPath)) {
+      candidates.push(`unix://${socketPath}`);
+      break;
+    }
+  }
+
+  const connection = candidates[0] || 'unix:///var/run/docker.sock';
+  try {
+    parseDockerHost(connection);
+  } catch (err) {
+    return null;
+  }
+
+  const result = db.prepare(`
+    INSERT INTO docker_hosts (name, connection, is_default, last_ping_ok)
+    VALUES (?, ?, 1, 0)
+  `).run('Local Docker', connection);
+  return result.lastInsertRowid;
 }
 
 function getHostRow(id) {
@@ -74,4 +111,4 @@ function engineFor(id) {
   return rowToClient(row);
 }
 
-module.exports = { listHosts, getHostRow, addHost, removeHost, pingHost, engineFor, invalidate };
+module.exports = { listHosts, getHostRow, addHost, removeHost, pingHost, engineFor, invalidate, ensureDefaultHost };

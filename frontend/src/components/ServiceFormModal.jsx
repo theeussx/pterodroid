@@ -173,7 +173,10 @@ export default function ServiceFormModal({ open, onClose, onSubmit, initial }) {
             </div>
             <div>
               <Label htmlFor="command">Comando (opcional — sobrescreve o CMD padrão da imagem)</Label>
-              <MonoInput id="command" value={form.command} onChange={set('command')} placeholder="deixe vazio para usar o padrão da imagem" />
+              <MonoInput id="command" value={form.command} onChange={set('command')} placeholder="deixe vazio para usar o padrão da imagem e montar /app automaticamente" />
+              <p className="text-xs text-ink-faint mt-1">
+                Se deixar vazio, o painel cria uma pasta para os arquivos e monta ela em /app dentro do container para você hospedar o projeto ali.
+              </p>
             </div>
           </>
         ) : (

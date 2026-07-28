@@ -19,14 +19,15 @@ function slugify(name) {
 
 /** Creates and returns a unique, empty directory under PROJECTS_ROOT for `name`. */
 function scaffoldProjectDir(name) {
-  if (!fs.existsSync(config.PROJECTS_ROOT)) fs.mkdirSync(config.PROJECTS_ROOT, { recursive: true });
+  const projectsRoot = process.env.PROJECTS_ROOT || config.PROJECTS_ROOT;
+  if (!fs.existsSync(projectsRoot)) fs.mkdirSync(projectsRoot, { recursive: true });
 
   const base = slugify(name);
-  let dir = path.join(config.PROJECTS_ROOT, base);
+  let dir = path.join(projectsRoot, base);
   let n = 1;
   while (fs.existsSync(dir)) {
     n += 1;
-    dir = path.join(config.PROJECTS_ROOT, `${base}-${n}`);
+    dir = path.join(projectsRoot, `${base}-${n}`);
   }
   fs.mkdirSync(dir, { recursive: true });
   return dir;

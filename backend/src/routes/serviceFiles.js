@@ -4,7 +4,7 @@ const multer = require('multer');
 const { getDB } = require('../db');
 const config = require('../config');
 const { createFileManager, PathError } = require('../services/fileManager');
-const { createDockerFileManager, DockerFileError } = require('../services/dockerFileManager');
+const { normalizeWorkingDirectory } = require('../services/serviceWorkspace');
 const hosts = require('../services/dockerHostManager');
 
 function audit(req, service, action, target, detail = '') {
@@ -23,13 +23,17 @@ function loadManager(req) {
   if (!service) { const e = new Error('Serviço não encontrado'); e.status = 404; throw e; }
 
   if (service.runtime_type === 'docker') {
-    if (!service.container_id) {
-      const e = new Error('Esse serviço ainda não tem container criado — inicie-o pelo menos uma vez antes de gerenciar os arquivos');
+    const normalizedDir = normalizeWorkingDirectory(service.working_directory);
+    if (!normalizedDir) {
+      const e = new Error('Esse serviço não tem um diretório de trabalho definido');
       e.status = 409;
       throw e;
     }
-    const engine = hosts.engineFor(service.docker_host_id);
-    return { service, fm: createDockerFileManager(engine, service.container_id), isDocker: true };
+    if (normalizedDir !== service.working_directory) {
+      getDB().prepare('UPDATE services SET working_directory = ? WHERE id = ?').run(normalizedDir, service.id);
+      service.working_directory = normalizedDir;
+    }
+    return { service, fm: createFileManager(normalizedDir), isDocker: false };
   }
 
   if (!service.working_directory) {
@@ -134,10 +138,6 @@ router.get('/download', async (req, res) => {
 });
 
 // POST /api/services/:id/files/upload  (multipart, field "files", target dir em query.path)
-// Container não tem um caminho de disco local pra receber o multer.diskStorage
-// direto — o upload vai pra memória e é escrito via putArchive() depois.
-const memoryUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: config.UPLOAD_MAX_BYTES } });
-
 router.post('/upload', async (req, res) => {
   let ctx;
   try {
@@ -145,35 +145,16 @@ router.post('/upload', async (req, res) => {
   } catch (err) {
     return res.status(err.status || 500).json({ error: err.message });
   }
-  const { service, fm, isDocker } = ctx;
+  const { service, fm } = ctx;
 
-  if (isDocker) {
-    memoryUpload.array('files', 20)(req, res, async (err) => {
-      if (err) {
-        const status = err instanceof multer.MulterError ? 400 : (err.status || 500);
-        return res.status(status).json({ error: err.message });
-      }
-      const files = req.files || [];
-      const results = [];
-      for (const f of files) {
-        const name = Buffer.from(f.originalname, 'latin1').toString('utf8');
-        try {
-          await fm.write(path.posix.join(req.query.path || '/', name), f.buffer);
-          audit(req, service, 'upload', path.posix.join(req.query.path || '/', name), `${f.size} bytes`);
-          results.push({ name, size: f.size });
-        } catch (writeErr) {
-          results.push({ name, error: writeErr.message });
-        }
-      }
-      res.json({ ok: results.every((r) => !r.error), files: results });
-    });
-    return;
-  }
-
-  const diskUpload = multer({
+  const upload = multer({
     storage: multer.diskStorage({
       destination: (r, file, cb) => {
-        try { cb(null, fm.resolveSafePath(req.query.path || '')); } catch (e) { cb(e); }
+        try {
+          cb(null, fm.resolveSafePath(req.query.path || ''));
+        } catch (e) {
+          cb(e);
+        }
       },
       filename: (r, file, cb) => {
         try {
@@ -185,7 +166,7 @@ router.post('/upload', async (req, res) => {
     limits: { fileSize: config.UPLOAD_MAX_BYTES },
   });
 
-  diskUpload.array('files', 20)(req, res, (err) => {
+  upload.array('files', 20)(req, res, (err) => {
     if (err) {
       const status = err instanceof multer.MulterError ? 400 : (err.status || 500);
       return res.status(status).json({ error: err.message });

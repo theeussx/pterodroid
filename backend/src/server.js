@@ -7,6 +7,7 @@ const config = require('./config');
 const { initDB, getDB } = require('./db');
 const { setupSockets } = require('./sockets');
 const driver = require('./services/serviceDriverRegistry');
+const dockerHostManager = require('./services/dockerHostManager');
 const dbm = require('./services/dbInstanceManager');
 const tm = require('./services/tunnelManager');
 const ntm = require('./services/namedTunnelManager');
@@ -23,6 +24,7 @@ const { authMiddleware } = require('./middleware/auth');
 
 async function main() {
   await initDB();
+  dockerHostManager.ensureDefaultHost?.();
 
   const app = express();
   app.use(cors());

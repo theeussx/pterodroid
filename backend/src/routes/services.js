@@ -2,7 +2,8 @@ const router = require('express').Router();
 const { getDB } = require('../db');
 const driver = require('../services/serviceDriverRegistry');
 const { dockerDriver } = driver;
-const { scaffoldProjectDir, removeScaffoldedDir } = require('../services/projectScaffold');
+const { removeScaffoldedDir } = require('../services/projectScaffold');
+const { resolveServiceWorkspace } = require('../services/serviceWorkspace');
 
 const VALID_TYPES = ['node', 'python', 'shell', 'bot', 'api', 'web', 'other'];
 const RUNTIME_TYPES = ['process', 'docker'];
@@ -93,16 +94,18 @@ router.post('/', (req, res) => {
 
   const isDocker = runtime_type === 'docker';
 
-  // No working directory given → scaffold a dedicated "container" folder
-  // for this service's own files under PROJECTS_ROOT — só faz sentido pra
-  // processo local; um serviço docker usa volumes (ou nenhum), não uma
-  // pasta do Termux.
-  let finalWorkingDir = working_directory.trim();
-  let scaffolded = 0;
-  if (!isDocker && !finalWorkingDir) {
-    finalWorkingDir = scaffoldProjectDir(name);
-    scaffolded = 1;
-  }
+  const workspace = resolveServiceWorkspace({
+    name,
+    runtime_type,
+    working_directory,
+    volumes,
+    image,
+    command,
+  });
+  const finalWorkingDir = workspace.finalWorkingDir;
+  const scaffolded = workspace.scaffolded;
+  const resolvedVolumes = workspace.volumes;
+  const resolvedCommand = workspace.command;
 
   const result = db.prepare(`
     INSERT INTO services
@@ -112,12 +115,12 @@ router.post('/', (req, res) => {
        cpu_limit, memory_limit)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
-    name.trim(), description.trim(), type, command.trim(),
+    name.trim(), description.trim(), type, resolvedCommand.trim(),
     finalWorkingDir, sanitizeEnv(environment),
     auto_restart ? 1 : 0, parseInt(restart_delay, 10) || 3, parseInt(max_restarts, 10) || 10,
     port ? parseInt(port, 10) : null, scaffolded, tunnel_hostname?.trim() || null,
     runtime_type, isDocker ? docker_host_id : null, isDocker ? image?.trim() : null,
-    sanitizeJSONArray(volumes), sanitizeJSONArray(docker_networks), sanitizeJSONArray(docker_ports),
+    sanitizeJSONArray(resolvedVolumes), sanitizeJSONArray(docker_networks), sanitizeJSONArray(docker_ports),
     isDocker ? (cpu_limit || null) : null, isDocker ? (memory_limit || null) : null,
   );
 

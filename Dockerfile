@@ -1,14 +1,14 @@
-
 # Stage 1: Build the frontend
-FROM node:20-alpine as frontend-builder
+FROM node:20-alpine AS frontend-builder
 WORKDIR /app/frontend
 COPY frontend/package.json frontend/package-lock.json ./ 
-RUN npm ci --omit=dev
+# Removido --omit=dev para manter o Vite disponível para compilação
+RUN npm ci
 COPY frontend/ ./
 RUN npm run build
 
 # Stage 2: Build the backend and serve the frontend
-FROM node:20-alpine as backend-builder
+FROM node:20-alpine AS backend-builder
 WORKDIR /app
 COPY backend/package.json backend/package-lock.json ./backend/
 WORKDIR /app/backend
@@ -19,38 +19,36 @@ COPY backend/ ./
 FROM node:20-alpine
 WORKDIR /app
 
-# Install necessary packages for system monitoring and cloudflared (if needed)
-# The original project uses `cloudflared` and reads system info from `/proc`, `/sys`
-# For a Dockerized environment, `cloudflared` might be run as a sidecar or separately.
-# System monitoring will be limited to the container's view of /proc and /sys.
-# We'll include `curl` and `git` for potential runtime needs, though `git` might be removed for smaller image.
+# Instala pacotes necessários para monitoramento e utilitários
 RUN apk add --no-cache curl git
 
-# Copy backend and built frontend from previous stages
+# Cria o grupo e o usuário antes de gerenciar arquivos ou permissões
+RUN addgroup --system appgroup && adduser --system appuser --ingroup appgroup
+
+# Copia a pasta do backend para o local correto
 COPY --from=backend-builder /app/backend /app/backend
-COPY --from=frontend-builder /app/frontend/dist /app/backend/frontend/dist
+
+# CORREÇÃO CRÚRGICA: Copia para o caminho exato exigido pelo backend (../../frontend/dist)
+COPY --from=frontend-builder /app/frontend/dist /app/frontend/dist
 
 WORKDIR /app/backend
 
 # Expose the application port
 EXPOSE 3001
 
-# Create a non-root user for security
-RUN addgroup --system appgroup && adduser --system appuser --ingroup appgroup
+# Cria os diretórios necessários e ajusta as permissões antes de rodar o container
+RUN mkdir -p /home/appuser/data /workspaces/pterodroid/data/projects /workspaces/pterodroid/data/files && \
+    chown -R appuser:appgroup /home/appuser/data /workspaces/pterodroid/data/projects /workspaces/pterodroid/data/files /app
+
+# Usuário padrão do container (sobrescrito por user: "root" no compose para ler o docker.sock)
 USER appuser
 
-# Create data directories and set permissions
-# These paths are derived from backend/src/config.js
-# We'll use /home/appuser/data for persistent data
-# And /home/appuser/projects and /home/appuser/files for user projects/files
-RUN mkdir -p /home/appuser/data /home/appuser/projects /home/appuser/files && \
-    chown -R appuser:appgroup /home/appuser/data /home/appuser/projects /home/appuser/files
-
-# Set environment variables (these can be overridden by docker-compose or .env)
-ENV PORT=3001 \
+# Configuração de variáveis de ambiente com NODE_ENV de produção ativo por padrão
+ENV NODE_ENV=production \
+    PORT=3001 \
     DATA_ROOT=/home/appuser/data \
-    PROJECTS_ROOT=/home/appuser/projects \
-    FILES_ROOT=/home/appuser/files
+    PROJECTS_ROOT=/workspaces/pterodroid/data/projects \
+    FILES_ROOT=/workspaces/pterodroid/data/files
 
 # Command to run the application
 CMD ["node", "src/server.js"]
