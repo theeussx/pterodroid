@@ -34,9 +34,10 @@ services:
     # grupo é bem mais seguro do que rodar o container inteiro como root
     # (que era o que o compose fazia antes, anulando o usuário sem
     # privilégios criado no Dockerfile).
-    # Descubra o GID no host com:  getent group docker | cut -d: -f3
+    # No ambiente atual o GID do grupo docker é 989; se seu host usar outro
+    # valor, defina DOCKER_GID explicitamente antes de subir o compose.
     group_add:
-      - "${DOCKER_GID:-988}"
+      - "${DOCKER_GID:-989}"
 
     restart: unless-stopped
 

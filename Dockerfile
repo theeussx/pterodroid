@@ -34,6 +34,8 @@ WORKDIR /app
 COPY --from=backend-deps /app/backend/node_modules ./backend/node_modules
 COPY backend/ ./backend/
 COPY --from=frontend-builder /app/frontend/dist ./frontend/dist
+COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
 
 # Um único diretório de dados, com tudo dentro (banco, workspaces,
 # cloudflared). A versão anterior espalhava isso entre /home/appuser/data e
@@ -46,10 +48,10 @@ ENV NODE_ENV=production \
 
 RUN mkdir -p /data/workspaces && chown -R node:node /data /app
 
-# Usuário sem privilégios por padrão. Para gerenciar o Docker do host é
-# preciso acesso ao socket — veja a nota sobre `group_add` no
-# docker-compose.yml (preferível a rodar como root).
-USER node
+# O entrypoint ajusta as permissões do volume montado em /data antes de
+# iniciar o processo como usuário node. Isso evita falhas de EACCES quando o
+# host compartilha um diretório com ownership diferente.
+USER root
 
 EXPOSE 3001
 
@@ -59,5 +61,5 @@ EXPOSE 3001
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
   CMD curl -fsS http://127.0.0.1:3001/api/health || exit 1
 
-ENTRYPOINT ["/sbin/tini", "--"]
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 CMD ["node", "backend/src/server.js"]
