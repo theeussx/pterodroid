@@ -98,16 +98,32 @@ class CompatDB {
   _scheduleFlush() {
     this._dirty = true;
     if (this._timer) return;
-    this._timer = setTimeout(() => this.flush(), require('../config').DB_FLUSH_DEBOUNCE);
+    this._timer = setTimeout(() => {
+      // O flush agendado roda fora de qualquer try/catch de chamador: se
+      // ele lançar (disco cheio, diretório removido, permissão negada), a
+      // exceção sobe até o topo e derruba o painel inteiro por causa de
+      // uma escrita de log. Registrar e seguir é o comportamento certo —
+      // os dados continuam em memória e a próxima tentativa pode dar certo.
+      try {
+        this.flush();
+      } catch (err) {
+        console.error('[db] falha ao gravar o banco em disco:', err.message);
+      }
+    }, require('../config').DB_FLUSH_DEBOUNCE);
+    // unref: um flush pendente não deve segurar o processo vivo.
+    this._timer.unref?.();
   }
 
   flush() {
     if (this._timer) { clearTimeout(this._timer); this._timer = null; }
     if (!this._dirty) return;
     const bytes = this.raw.export();
-    const tmp = this.filePath + '.tmp';
+    const tmp = `${this.filePath}.tmp`;
+    // Garante o diretório: em Termux é comum o usuário mover/limpar pastas
+    // com o painel rodando.
+    fs.mkdirSync(path.dirname(this.filePath), { recursive: true });
     fs.writeFileSync(tmp, Buffer.from(bytes));
-    fs.renameSync(tmp, this.filePath); // atomic-ish swap, avoids truncated file on crash
+    fs.renameSync(tmp, this.filePath); // troca atômica: nunca deixa um arquivo truncado
     this._dirty = false;
   }
 

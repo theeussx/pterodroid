@@ -4,34 +4,49 @@
  * boundary for this feature: it resolves the requested path against the
  * manager's root and refuses anything that lands outside it, whether via
  * '..' segments, an absolute-path override, or a symlink that points out
- * of bounds. No other function here touches fs.* with a path that hasn't
- * been through it.
+ * of bounds. No other function here touches fs.* with a caller-supplied
+ * path that hasn't been through it.
  *
- * createFileManager(rootDir) builds one instance scoped to any directory —
- * the global Files page uses one rooted at config.FILES_ROOT (via the
- * default export below, unchanged from before), and routes/serviceFiles.js
- * creates one per process-backed service, rooted at its working_directory.
- * Same security guarantees either way; only the root differs.
+ * createFileManager(root) builds one scoped to any directory — a service's
+ * workspace gets one rooted at its own folder, and the global Files page
+ * uses one rooted at config.FILES_ROOT. Same behaviour and same guarantees
+ * either way; only the root differs.
  */
 const fs = require('fs');
 const path = require('path');
 const config = require('../config');
 
 class PathError extends Error {
-  constructor(message) {
+  constructor(message, status = 400) {
     super(message);
-    this.status = 400;
+    this.status = status;
   }
 }
+
+/** Caracteres proibidos em nome de arquivo, incluindo os do Windows (para não gerar nomes impossíveis de baixar). */
+const INVALID_NAME_CHARS = /[/\\\0:*?"<>|]/;
+const RESERVED_NAMES = new Set(['.', '..', '']);
 
 function createFileManager(rootDir) {
   const root = () => path.resolve(rootDir);
 
-  /** The one function every operation below funnels through. */
-  function resolveSafePath(relativePath = '') {
-    if (typeof relativePath !== 'string') throw new PathError('Caminho inválido');
-
+  /**
+   * Garante que a raiz exista. Chamado no começo de toda operação: o
+   * workspace de um serviço pode ter sido apagado por fora, e o certo é
+   * recriá-lo em vez de devolver ENOENT pro usuário (Etapa 3/4).
+   */
+  function ensureRoot() {
     const base = root();
+    fs.mkdirSync(base, { recursive: true });
+    return base;
+  }
+
+  /** The one function every operation below funnels through. */
+  function resolveSafePath(relativePath = '', { mustExist = false } = {}) {
+    if (typeof relativePath !== 'string') throw new PathError('Caminho inválido');
+    if (relativePath.includes('\0')) throw new PathError('Caminho inválido');
+
+    const base = ensureRoot();
     // An absolute-looking input ("/etc/passwd") would otherwise make
     // path.resolve discard our root entirely — strip leading slashes so it's
     // always treated as relative to the root.
@@ -46,10 +61,26 @@ function createFileManager(rootDir) {
     // walks them before we compare). This second check catches the sneakier
     // case: a symlink that legitimately lives inside the root but points
     // outside it.
+    const realBase = fs.realpathSync(base);
     if (fs.existsSync(target)) {
       const real = fs.realpathSync(target);
-      if (real !== base && !real.startsWith(base + path.sep)) {
+      if (real !== realBase && !real.startsWith(realBase + path.sep)) {
         throw new PathError('Esse caminho é um link simbólico que aponta para fora da área permitida');
+      }
+    } else {
+      if (mustExist) throw new PathError('Arquivo ou pasta não encontrado', 404);
+      // O alvo ainda não existe: valida o ancestral mais próximo que
+      // existe, senão um symlink no meio do caminho ("uploads" → /etc)
+      // deixaria a escrita cair fora da raiz.
+      let parent = path.dirname(target);
+      while (parent !== base && parent.startsWith(base + path.sep) && !fs.existsSync(parent)) {
+        parent = path.dirname(parent);
+      }
+      if (fs.existsSync(parent)) {
+        const realParent = fs.realpathSync(parent);
+        if (realParent !== realBase && !realParent.startsWith(realBase + path.sep)) {
+          throw new PathError('Esse caminho passa por um link simbólico que aponta para fora da área permitida');
+        }
       }
     }
 
@@ -63,9 +94,50 @@ function createFileManager(rootDir) {
 
   function validateName(name) {
     if (!name || typeof name !== 'string') throw new PathError('Nome inválido');
-    if (name === '.' || name === '..') throw new PathError('Nome inválido');
-    if (/[/\\\0]/.test(name)) throw new PathError('Nome não pode conter separadores de caminho');
-    return name;
+    const trimmed = name.trim();
+    if (RESERVED_NAMES.has(trimmed)) throw new PathError('Nome inválido');
+    if (INVALID_NAME_CHARS.test(trimmed)) {
+      throw new PathError('O nome não pode conter / \\ : * ? " < > | nem caracteres nulos');
+    }
+    if (trimmed.length > 255) throw new PathError('Nome muito longo (máx. 255 caracteres)');
+    return trimmed;
+  }
+
+  /**
+   * Aceita um nome vindo do navegador e devolve algo gravável, em vez de
+   * recusar o upload inteiro. Nomes vindos de outros sistemas
+   * frequentemente têm caracteres que o filesystem local não aceita.
+   */
+  function sanitizeName(name, fallback = 'arquivo') {
+    // Alguns navegadores mandam o caminho relativo inteiro no nome do
+    // arquivo (upload de pasta), e um cliente malicioso pode mandar
+    // "../../etc/passwd" de propósito. Aqui achatamos isso num nome único
+    // e seguro: descarta os segmentos de navegação e junta o resto.
+    const segments = String(name || '')
+      .split(/[/\\]/)
+      .filter((seg) => seg && seg !== '.' && seg !== '..');
+
+    const cleaned = segments.join('_')
+      .replace(/[\0:*?"<>|]/g, '_')
+      .replace(/^\.+/, '')  // nada de arquivo oculto por acidente
+      .trim()
+      .slice(0, 255);
+
+    return cleaned || fallback;
+  }
+
+  /** Acrescenta " (2)", " (3)"... até achar um nome livre na pasta. */
+  function uniqueName(dir, name) {
+    let candidate = name;
+    if (!fs.existsSync(path.join(dir, candidate))) return candidate;
+
+    const ext = path.extname(name);
+    const stem = ext ? name.slice(0, -ext.length) : name;
+    for (let n = 2; n < 1000; n += 1) {
+      candidate = `${stem} (${n})${ext}`;
+      if (!fs.existsSync(path.join(dir, candidate))) return candidate;
+    }
+    return `${stem}-${Date.now()}${ext}`;
   }
 
   function statEntry(absolutePath, name) {
@@ -83,17 +155,34 @@ function createFileManager(rootDir) {
     try {
       return fs.statSync(target);
     } catch (err) {
-      if (err.code === 'ENOENT') {
-        const notFound = new PathError('Arquivo ou pasta não encontrado');
-        notFound.status = 404;
-        throw notFound;
-      }
+      if (err.code === 'ENOENT') throw new PathError('Arquivo ou pasta não encontrado', 404);
+      if (err.code === 'EACCES') throw new PathError('Sem permissão para acessar esse caminho', 403);
+      throw err;
+    }
+  }
+
+  /**
+   * Escrita atômica: grava num temporário no MESMO diretório e renomeia por
+   * cima. rename() é atômico dentro do mesmo filesystem, então o arquivo
+   * nunca é visto truncado — nem se o processo morrer no meio (Etapa 5).
+   */
+  function atomicWrite(target, data) {
+    const dir = path.dirname(target);
+    fs.mkdirSync(dir, { recursive: true });
+    const tmp = path.join(dir, `.${path.basename(target)}.${process.pid}.tmp`);
+    try {
+      fs.writeFileSync(tmp, data);
+      fs.renameSync(tmp, target);
+    } catch (err) {
+      try { fs.rmSync(tmp, { force: true }); } catch { /* nada a limpar */ }
       throw err;
     }
   }
 
   function list(relativePath = '') {
     const dir = resolveSafePath(relativePath);
+    // A raiz é criada sob demanda; uma subpasta inexistente continua 404.
+    if (dir === root() && !fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     const st = statOrNotFound(dir);
     if (!st.isDirectory()) throw new PathError('Não é uma pasta');
 
@@ -112,13 +201,14 @@ function createFileManager(rootDir) {
   }
 
   function read(relativePath) {
-    const target = resolveSafePath(relativePath);
+    const target = resolveSafePath(relativePath, { mustExist: true });
     const st = statOrNotFound(target);
     if (st.isDirectory()) throw new PathError('É uma pasta, não um arquivo');
     if (st.size > config.EDITOR_MAX_BYTES) {
-      const err = new PathError(`Arquivo maior que ${(config.EDITOR_MAX_BYTES / 1024 / 1024).toFixed(0)}MB — abra fora do painel`);
-      err.status = 413;
-      throw err;
+      throw new PathError(
+        `Arquivo maior que ${(config.EDITOR_MAX_BYTES / 1024 / 1024).toFixed(0)}MB — baixe em vez de editar`,
+        413,
+      );
     }
     const buf = fs.readFileSync(target);
     // Cheap binary sniff: a null byte in the first 8KB almost always means
@@ -131,86 +221,106 @@ function createFileManager(rootDir) {
 
   function write(relativePath, content) {
     const target = resolveSafePath(relativePath);
-    if (fs.existsSync(target) && fs.statSync(target).isDirectory()) throw new PathError('É uma pasta, não um arquivo');
-    fs.writeFileSync(target, content ?? '', 'utf8');
+    if (fs.existsSync(target) && fs.statSync(target).isDirectory()) {
+      throw new PathError('É uma pasta, não um arquivo');
+    }
+    // Criar a árvore de diretórios faz parte de "salvar": pedir pro usuário
+    // criar cada pasta na mão antes de salvar um arquivo aninhado seria uma
+    // limitação artificial do painel, não do filesystem.
+    atomicWrite(target, content ?? '');
     return statEntry(target, path.basename(target));
   }
 
   function createFile(relativePath, name) {
-    validateName(name);
+    const safeName = validateName(name);
     const dir = resolveSafePath(relativePath);
-    const target = path.join(dir, name);
-    if (fs.existsSync(target)) throw new PathError('Já existe um item com esse nome');
-    fs.writeFileSync(target, '');
-    return statEntry(target, name);
+    fs.mkdirSync(dir, { recursive: true });
+    const target = path.join(dir, safeName);
+    if (fs.existsSync(target)) throw new PathError('Já existe um item com esse nome', 409);
+    atomicWrite(target, '');
+    return statEntry(target, safeName);
   }
 
   function createDir(relativePath, name) {
-    validateName(name);
+    const safeName = validateName(name);
     const dir = resolveSafePath(relativePath);
-    const target = path.join(dir, name);
-    if (fs.existsSync(target)) throw new PathError('Já existe um item com esse nome');
+    const target = path.join(dir, safeName);
+    if (fs.existsSync(target)) throw new PathError('Já existe um item com esse nome', 409);
     fs.mkdirSync(target, { recursive: true });
-    return statEntry(target, name);
+    return statEntry(target, safeName);
   }
 
   function rename(relativePath, newName) {
-    validateName(newName);
-    const target = resolveSafePath(relativePath);
-    const dest = path.join(path.dirname(target), newName);
-    if (fs.existsSync(dest)) throw new PathError('Já existe um item com esse nome');
+    const safeName = validateName(newName);
+    const target = resolveSafePath(relativePath, { mustExist: true });
+    if (target === root()) throw new PathError('Não é possível renomear a raiz');
+    const dest = path.join(path.dirname(target), safeName);
+    if (dest === target) return statEntry(target, safeName);
+    if (fs.existsSync(dest)) throw new PathError('Já existe um item com esse nome', 409);
     fs.renameSync(target, dest);
-    return statEntry(dest, newName);
+    return statEntry(dest, safeName);
   }
 
-  function move(relativeSource, relativeDestDir) {
-    const source = resolveSafePath(relativeSource);
-    const destDir = resolveSafePath(relativeDestDir);
-    if (!statOrNotFound(destDir).isDirectory()) throw new PathError('Destino não é uma pasta');
-    const dest = path.join(destDir, path.basename(source));
-    if (dest === source) return statEntry(source, path.basename(source));
-    if (fs.existsSync(dest)) throw new PathError('Já existe um item com esse nome na pasta de destino');
+  /** rename() entre filesystems diferentes falha com EXDEV — copia e apaga nesse caso. */
+  function relocate(source, dest) {
     try {
       fs.renameSync(source, dest);
     } catch (err) {
-      if (err.code === 'EXDEV') {
-        // Crossing a mount-point boundary — rename() can't do that atomically.
-        fs.cpSync(source, dest, { recursive: true });
-        fs.rmSync(source, { recursive: true, force: true });
-      } else {
-        throw err;
-      }
+      if (err.code !== 'EXDEV') throw err;
+      fs.cpSync(source, dest, { recursive: true });
+      fs.rmSync(source, { recursive: true, force: true });
     }
+  }
+
+  function move(relativeSource, relativeDestDir) {
+    const source = resolveSafePath(relativeSource, { mustExist: true });
+    if (source === root()) throw new PathError('Não é possível mover a raiz');
+    const destDir = resolveSafePath(relativeDestDir);
+    fs.mkdirSync(destDir, { recursive: true });
+    if (!statOrNotFound(destDir).isDirectory()) throw new PathError('Destino não é uma pasta');
+
+    // Mover uma pasta pra dentro dela mesma cria um loop infinito no
+    // filesystem — fs.renameSync devolveria EINVAL, mas a mensagem crua não
+    // explica nada pro usuário.
+    if (destDir === source || destDir.startsWith(source + path.sep)) {
+      throw new PathError('Não é possível mover uma pasta para dentro dela mesma');
+    }
+
+    const dest = path.join(destDir, path.basename(source));
+    if (dest === source) return statEntry(source, path.basename(source));
+    if (fs.existsSync(dest)) throw new PathError('Já existe um item com esse nome na pasta de destino', 409);
+    relocate(source, dest);
     return statEntry(dest, path.basename(dest));
   }
 
   function copy(relativeSource, relativeDestDir) {
-    const source = resolveSafePath(relativeSource);
+    const source = resolveSafePath(relativeSource, { mustExist: true });
     const destDir = resolveSafePath(relativeDestDir);
+    fs.mkdirSync(destDir, { recursive: true });
     if (!statOrNotFound(destDir).isDirectory()) throw new PathError('Destino não é uma pasta');
-
-    let destName = path.basename(source);
-    let dest = path.join(destDir, destName);
-    if (dest === source || fs.existsSync(dest)) {
-      const ext = path.extname(destName);
-      const base = ext ? destName.slice(0, -ext.length) : destName;
-      destName = `${base} (cópia)${ext}`;
-      dest = path.join(destDir, destName);
+    if (destDir === source || destDir.startsWith(source + path.sep)) {
+      throw new PathError('Não é possível copiar uma pasta para dentro dela mesma');
     }
+
+    const destName = uniqueName(destDir, path.basename(source));
+    const dest = path.join(destDir, destName);
     fs.cpSync(source, dest, { recursive: true });
     return statEntry(dest, destName);
   }
 
   function remove(relativePath) {
-    const target = resolveSafePath(relativePath);
+    const target = resolveSafePath(relativePath, { mustExist: true });
     if (target === root()) throw new PathError('Não é possível excluir a raiz');
     fs.rmSync(target, { recursive: true, force: true });
+    return { path: toRelative(target) };
   }
 
   /** Recursive filename search, bounded so a huge directory can't hang the request. */
   function search(relativePath, query, limit = 200) {
     const startDir = resolveSafePath(relativePath);
-    const q = query.toLowerCase();
+    const q = String(query || '').toLowerCase();
+    if (q.length < 2) throw new PathError('Digite ao menos 2 caracteres');
+
     const results = [];
     const stack = [startDir];
     let scanned = 0;
@@ -218,25 +328,45 @@ function createFileManager(rootDir) {
     while (stack.length && results.length < limit && scanned < 20000) {
       const dir = stack.pop();
       let names;
-      try { names = fs.readdirSync(dir); } catch { continue; }
-      for (const name of names) {
+      try { names = fs.readdirSync(dir, { withFileTypes: true }); } catch { continue; }
+      for (const dirent of names) {
         scanned += 1;
-        const full = path.join(dir, name);
-        let st;
-        try { st = fs.statSync(full); } catch { continue; }
-        if (name.toLowerCase().includes(q)) {
-          results.push({ ...statEntry(full, name), path: toRelative(full) });
+        const full = path.join(dir, dirent.name);
+        if (dirent.name.toLowerCase().includes(q)) {
+          try {
+            results.push({ ...statEntry(full, dirent.name), path: toRelative(full) });
+          } catch { continue; }
           if (results.length >= limit) break;
         }
-        if (st.isDirectory()) stack.push(full);
+        // Symlink de diretório não entra na varredura: evita loop infinito
+        // e evita listar coisa de fora da raiz.
+        if (dirent.isDirectory()) stack.push(full);
       }
     }
     return results;
   }
 
   return {
-    resolveSafePath, toRelative, validateName, statOrNotFound,
-    list, read, write, createFile, createDir, rename, move, copy, remove, search,
+    root,
+    ensureRoot,
+    resolveSafePath,
+    toRelative,
+    validateName,
+    sanitizeName,
+    uniqueName,
+    statOrNotFound,
+    statEntry,
+    atomicWrite,
+    list,
+    read,
+    write,
+    createFile,
+    createDir,
+    rename,
+    move,
+    copy,
+    remove,
+    search,
   };
 }
 

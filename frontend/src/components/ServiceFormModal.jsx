@@ -47,6 +47,7 @@ export default function ServiceFormModal({ open, onClose, onSubmit, initial }) {
   const [networksText, setNetworksText] = useState('');
   const [hosts, setHosts] = useState([]);
   const [saving, setSaving] = useState(false);
+  const [submitError, setSubmitError] = useState('');
   const [cloudflaredOk, setCloudflaredOk] = useState(null);
   const [cloudflaredMessage, setCloudflaredMessage] = useState('');
 
@@ -62,6 +63,7 @@ export default function ServiceFormModal({ open, onClose, onSubmit, initial }) {
       setForm(base);
       setEnvText(initial?.environment || '{}');
       setEnvError('');
+      setSubmitError('');
       setVolumeRows(parseVolumesArr(initial?.volumes));
       setNetworksText(parseNetworksText(initial?.docker_networks));
       api.cloudflaredStatus().then((s) => { setCloudflaredOk(s.ok); setCloudflaredMessage(s.message || ''); }).catch(() => {});
@@ -85,6 +87,7 @@ export default function ServiceFormModal({ open, onClose, onSubmit, initial }) {
       return;
     }
     setSaving(true);
+    setSubmitError('');
     try {
       const payload = { ...form, environment: envText };
       if (isDocker) {
@@ -96,6 +99,10 @@ export default function ServiceFormModal({ open, onClose, onSubmit, initial }) {
       }
       await onSubmit(payload);
       onClose();
+    } catch (err) {
+      // Sem este catch, um erro de validação do servidor (400) só rejeitava
+      // a promise: o modal ficava aberto, sem salvar e sem dizer por quê.
+      setSubmitError(err.message || 'Não foi possível salvar');
     } finally {
       setSaving(false);
     }
@@ -117,6 +124,11 @@ export default function ServiceFormModal({ open, onClose, onSubmit, initial }) {
       }
     >
       <form onSubmit={handleSubmit} className="space-y-4">
+        {submitError && (
+          <div className="bg-error-soft border border-error/30 rounded-lg px-3 py-2 text-sm text-error">
+            {submitError}
+          </div>
+        )}
         {!initial && (
           <div>
             <Label htmlFor="runtime_type">Tipo de execução</Label>

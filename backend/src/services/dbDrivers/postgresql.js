@@ -6,8 +6,7 @@
  */
 const fs = require('fs');
 const path = require('path');
-const { execSync } = require('child_process');
-const { findBinary } = require('./common');
+const { findBinary, runBinary } = require('./common');
 
 module.exports = {
   type: 'postgresql',
@@ -52,12 +51,17 @@ module.exports = {
     fs.writeFileSync(pwFile, `${dbPassword}\n`, { mode: 0o600 });
 
     try {
-      execSync(
-        `${check.init} -D "${dataDirectory}" -U "${dbUsername}" --auth=scram-sha-256 --pwfile="${pwFile}"`,
-        { encoding: 'utf8', timeout: 60000 }
-      );
+      // Argumentos em array, sem shell: o caminho do diretório vem do nome
+      // da instância, e como string de shell isso permitia injeção de
+      // comando (ver runBinary em common.js).
+      runBinary(check.init, [
+        '-D', dataDirectory,
+        '-U', dbUsername,
+        '--auth=scram-sha-256',
+        `--pwfile=${pwFile}`,
+      ], { timeout: 60000 });
     } catch (err) {
-      throw new Error(`initdb failed: ${err.stderr || err.message}`);
+      throw new Error(`initdb falhou: ${err.stderr || err.message}`);
     } finally {
       fs.rmSync(pwFile, { force: true });
     }

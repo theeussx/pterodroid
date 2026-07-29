@@ -42,11 +42,15 @@ Descubra o que o Pterodroid pode fazer por você:
 
 - 🗄️ **Bancos de Dados Locais Simplificados:** Provisionamento e gerenciamento automatizado de instâncias **PostgreSQL** e **MySQL/MariaDB**, permitindo que você configure ambientes de desenvolvimento completos no seu dispositivo.
 
-- 📁 **Gerenciador de Arquivos Completo:** Navegue, edite, crie, exclua, mova, copie, faça upload e download de arquivos diretamente pelo painel. Inclui busca de arquivos, editor de texto integrado (com limite de 2MB por arquivo) e um log de auditoria de atividades de arquivo. O acesso é restrito ao diretório `FILES_ROOT` (padrão: `~/`).
+- 📁 **Gerenciador de Arquivos Completo:** Navegue, edite, crie, exclua, mova, copie, renomeie, busque, faça upload e download de arquivos diretamente pelo painel — tanto na visão global quanto na aba **Arquivos** de cada serviço, que oferecem exatamente as mesmas operações. Inclui editor de texto integrado (até 2MB por arquivo), escrita atômica, criação automática de pastas, resolução de conflito de nomes no upload e um log de auditoria.
+
+- 🗂️ **Workspace por serviço:** cada serviço ganha um diretório exclusivo em `<DATA_ROOT>/workspaces/<nome-do-serviço>`, criado automaticamente. Você nunca precisa acessar o sistema de arquivos manualmente para gerenciar um serviço — tudo é feito pelo painel.
 
 - 🌐 **Acesso Remoto e Domínios Personalizados:** Exponha seus serviços e o próprio painel à internet de forma segura, utilizando túneis Cloudflare, com a opção de configurar domínios personalizados.
 
 - 📈 **Monitoramento de Recursos em Tempo Real Aprimorado:** Acompanhe o desempenho do seu sistema com gráficos dinâmicos de uso de CPU, RAM, espaço em disco, **tráfego de rede (download/upload)**, **temperatura** e uma lista dos **processos ativos** (top 20 por CPU), fornecendo insights valiosos sobre a saúde dos seus serviços.
+
+- 💻 **Terminal no painel:** rode comandos direto no workspace do serviço (`npm install`, `git pull`, `ls`, `node -v`) sem sair do navegador — com histórico (↑/↓), `cd` que persiste entre comandos, saída ao vivo e Ctrl+C. Funciona tanto para processos locais quanto para containers (via `docker exec`). Programas de tela cheia (vim, htop) não são suportados: o terminal é orientado a comando, escolha deliberada para não depender de módulos nativos que não compilam no Termux.
 
 - 📝 **Visualização de Logs ao Vivo:** Acesse os logs de console (stdout/stderr) dos seus serviços em tempo real, facilitando a depuração e o acompanhamento de atividades via conexão WebSockets.
 
@@ -134,19 +138,34 @@ Para rodar o Pterodroid em um ambiente Docker, siga estas instruções:
    cd pterodroid
    ```
 
-3. **Crie os arquivos de configuração Docker:**Crie um `Dockerfile`, `docker-compose.yml` e `.dockerignore` na raiz do projeto com o conteúdo fornecido anteriormente.
+3. **(Opcional) Ajuste a configuração:**O `Dockerfile`, o `docker-compose.yml` e o `.dockerignore` já vêm prontos no repositório. Para gerenciar os containers do host, informe o GID do grupo `docker` e defina um segredo:
+
+   ```bash
+   cp .env.example .env
+   echo "DOCKER_GID=$(getent group docker | cut -d: -f3)" >> .env
+   echo "JWT_SECRET=$(openssl rand -hex 32)" >> .env
+   ```
 
 4. **Inicie o Pterodroid:**Construa a imagem e inicie o container com Docker Compose:
 
    ```bash
-   docker-compose up -d --build
+   docker compose up -d --build
+   ```
+
+   Verifique se subiu de forma saudável (o healthcheck faz parte da imagem):
+
+   ```bash
+   docker compose ps      # deve mostrar "healthy"
+   docker compose logs -f
    ```
 
 5. **Acesse o Painel:**Após a inicialização, o painel estará disponível em `http://localhost:3001`.
 
-   > [!IMPORTANT]O Pterodroid interage com o daemon Docker do host. Certifique-se de que o usuário Docker no container tenha permissão para acessar o socket `/var/run/docker.sock` do host. Isso é configurado no `docker-compose.yml`.
+   > [!IMPORTANT]O Pterodroid interage com o daemon Docker do host através de `/var/run/docker.sock`. O container roda como usuário **sem privilégios** e usa `group_add` para acessar o socket — por isso o `DOCKER_GID` acima. Se o painel não conseguir falar com o Docker, confira esse valor.
 
-   > [!WARNING]Para produção, é **altamente recomendável** definir uma `JWT_SECRET` forte. Você pode fazer isso adicionando `JWT_SECRET=sua_chave_secreta_aqui` no arquivo `docker-compose.yml` ou em um arquivo `.env`.
+   > [!IMPORTANT]**Todos os dados ficam em `./data`** (banco, workspaces dos serviços e configuração do cloudflared). Fazer backup é copiar essa pasta; para começar do zero, apague-a.
+
+   > [!WARNING]Para produção, defina uma `JWT_SECRET` forte. Sem ela, o painel gera uma automaticamente em `./data/.jwt-secret` — funciona, mas você não controla o valor.
 
 ### Instalação em Ambiente Android (Termux )
 
@@ -207,6 +226,19 @@ Para garantir que o Pterodroid e seus serviços continuem funcionando em segundo
 2. **Ative o Wake Lock:** Execute `termux-wake-lock` em uma sessão do Termux antes de iniciar o painel. Isso impede que o sistema Android suspenda o Termux para economizar bateria.
 
 3. **Otimização de Bateria:** Desative as otimizações de bateria para o aplicativo Termux nas configurações do seu Android. Isso evita que o sistema encerre o processo do Termux de forma agressiva.
+
+---
+
+## 🧪 Testes
+
+O backend traz uma bateria de testes que **não precisa de Docker instalado** e nunca toca no seu painel real (tudo roda em diretórios temporários e numa porta separada):
+
+```bash
+cd backend
+npm test
+```
+
+Cobre: resolução de caminhos e proteção contra path traversal, operações de arquivo, parser de comandos, cliente da Docker Engine, montagem do container (incluindo a tradução de bind mount para o host) e o ciclo de vida completo de um serviço via HTTP.
 
 ---
 

@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const { execSync } = require('child_process');
+const { execSync, execFileSync } = require('child_process');
 
 // Debian/Ubuntu's postgresql package (including inside Ubuntu-proot) installs
 // versioned, off-PATH binaries at /usr/lib/postgresql/<version>/bin/ so
@@ -62,6 +62,23 @@ function escapeSqlLiteral(str) {
   return String(str).replace(/'/g, "''");
 }
 
+/**
+ * Executa um binário SEM passar por shell.
+ *
+ * Os drivers montavam a linha de comando como string e chamavam execSync,
+ * interpolando caminhos derivados do NOME da instância — que o usuário
+ * escolhe. Um nome como `x"; touch /tmp/arquivo; echo "` fazia o shell ver
+ * três comandos em vez de um (reproduzido em teste antes desta correção).
+ *
+ * Com execFileSync + array de argumentos não existe shell para interpretar
+ * nada: aspas, `;`, `$()` e afins são apenas caracteres do argumento. Esta
+ * é a correção de raiz; a validação do nome (ver routes/databases.js) é a
+ * segunda camada, não a principal.
+ */
+function runBinary(binary, args, { timeout = 60000 } = {}) {
+  return execFileSync(binary, args, { encoding: 'utf8', timeout });
+}
+
 function waitForFile(filePath, timeoutMs) {
   const fs = require('fs');
   return new Promise((resolve, reject) => {
@@ -77,4 +94,4 @@ function waitForFile(filePath, timeoutMs) {
   });
 }
 
-module.exports = { findBinary, escapeSqlLiteral, waitForFile };
+module.exports = { findBinary, escapeSqlLiteral, waitForFile, runBinary };

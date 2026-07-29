@@ -22,3 +22,6 @@ thumbs.db
 # Temporários
 *.tmp
 *.bak
+
+# Pacotes .zip gerados para download (artefatos, não código-fonte)
+dist-pacotes/

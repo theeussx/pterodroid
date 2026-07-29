@@ -12,6 +12,7 @@ export default function DatabaseFormModal({ open, onClose, onSubmit, initial }) 
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [result, setResult] = useState(null);
+  const [submitError, setSubmitError] = useState('');
 
   const isEdit = !!initial;
 
@@ -20,6 +21,7 @@ export default function DatabaseFormModal({ open, onClose, onSubmit, initial }) 
       api.dbEngines().then(setEngines).catch(() => {});
       setForm(initial ? { ...EMPTY_FORM, ...initial, tunnel_hostname: initial.tunnel_hostname || '' } : EMPTY_FORM);
       setResult(null);
+      setSubmitError('');
     }
   }, [open, initial]);
 
@@ -36,6 +38,7 @@ export default function DatabaseFormModal({ open, onClose, onSubmit, initial }) 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSaving(true);
+    setSubmitError('');
     try {
       const created = await onSubmit(form);
       if (created?.generatedPassword) {
@@ -43,6 +46,10 @@ export default function DatabaseFormModal({ open, onClose, onSubmit, initial }) 
       } else {
         onClose();
       }
+    } catch (err) {
+      // O nome e a porta passaram a ser validados no servidor; sem este
+      // catch, um nome inválido apenas fechava nada e não explicava nada.
+      setSubmitError(err.message || 'Não foi possível salvar');
     } finally {
       setSaving(false);
     }
@@ -72,6 +79,11 @@ export default function DatabaseFormModal({ open, onClose, onSubmit, initial }) 
       }
     >
       <form onSubmit={handleSubmit} className="space-y-4">
+        {submitError && (
+          <div className="bg-error-soft border border-error/30 rounded-lg px-3 py-2 text-sm text-error">
+            {submitError}
+          </div>
+        )}
         {isEdit && (
           <p className="text-xs text-ink-faint flex items-start gap-1.5 -mt-1">
             <Info size={13} className="shrink-0 mt-0.5" />

@@ -9,6 +9,8 @@ const { getDB } = require('../db');
 const config = require('../config');
 const { findAvailablePort } = require('./portFinder');
 const tunnelManager = require('./tunnelManager');
+const workspaces = require('./workspaceManager');
+const { parseCommand } = require('./commandParser');
 
 class ProcessManager extends EventEmitter {
   constructor() {
@@ -22,7 +24,7 @@ class ProcessManager extends EventEmitter {
   async startService(serviceId) {
     const db = getDB();
     const svc = db.prepare('SELECT * FROM services WHERE id = ?').get(serviceId);
-    if (!svc) throw new Error(`Service ${serviceId} not found`);
+    if (!svc) throw new Error(`Serviço ${serviceId} não encontrado`);
 
     if (this.procs.has(serviceId)) {
       await this._kill(serviceId, false);
@@ -31,19 +33,34 @@ class ProcessManager extends EventEmitter {
     // A user-initiated start is a fresh beginning — clear any restart
     // history left over from a previous crash-loop, so max_restarts has
     // a full budget again instead of picking up where an old loop left off.
-    db.prepare('UPDATE services SET restart_count = 0 WHERE id = ?').run(serviceId);
+    // desired_state='running' registra a INTENÇÃO: é isso que faz o serviço
+    // voltar sozinho no próximo boot do painel, mesmo após um desligamento
+    // gracioso (que grava status='stopped').
+    db.prepare("UPDATE services SET restart_count = 0, desired_state = 'running' WHERE id = ?").run(serviceId);
     svc.restart_count = 0;
 
     return this._spawn(svc);
   }
 
   async stopService(serviceId) {
-    if (!this.procs.has(serviceId)) return;
+    const db = getDB();
+    // Parar é sempre explícito: some da intenção de rodar, então o painel
+    // não vai ressuscitar este serviço no próximo boot.
+    db.prepare("UPDATE services SET desired_state = 'stopped' WHERE id = ?").run(serviceId);
+
+    if (!this.procs.has(serviceId)) {
+      // Já não há processo — mas o banco pode ter ficado marcado como
+      // 'running' (ex.: painel morto à força). Reconcilia o estado em vez
+      // de devolver sucesso deixando a UI mostrando "rodando" pra sempre.
+      db.prepare("UPDATE services SET status='stopped', pid=NULL WHERE id=? AND status='running'").run(serviceId);
+      return;
+    }
     await this._kill(serviceId, true);
   }
 
+  /** restart NÃO deve limpar a intenção de rodar — só reinicia o processo. */
   async restartService(serviceId) {
-    await this.stopService(serviceId);
+    await this._kill(serviceId, false);
     return this.startService(serviceId);
   }
 
@@ -74,22 +91,41 @@ class ProcessManager extends EventEmitter {
   /** Called once at panel boot — resume services that were running before. */
   async restoreAll() {
     const db = getDB();
-    const running = db.prepare("SELECT * FROM services WHERE status = 'running'").all();
+    // Retoma pelo que o usuário PEDIU (desired_state), não pelo último
+    // status observado: o desligamento gracioso grava status='stopped' em
+    // todo mundo, então filtrar por status fazia o auto-resume nunca
+    // acontecer justamente no caso mais comum.
+    //
+    // O filtro por runtime_type também importa: sem ele um serviço Docker
+    // era "restaurado" aqui como processo local, e o painel tentava
+    // executar o nome da imagem como se fosse um binário (P12).
+    const running = db.prepare(`
+      SELECT * FROM services
+      WHERE COALESCE(runtime_type, 'process') = 'process'
+        AND (desired_state = 'running' OR (desired_state IS NULL AND status = 'running'))
+    `).all();
+
     for (const svc of running) {
       try {
         await this._spawn(svc);
-        console.log(`↺  Restored service: ${svc.name}`);
+        console.log(`↺  Serviço restaurado: ${svc.name}`);
       } catch (e) {
-        console.error(`✗  Failed to restore ${svc.name}:`, e.message);
-        db.prepare("UPDATE services SET status='error' WHERE id=?").run(svc.id);
+        console.error(`✗  Falha ao restaurar ${svc.name}: ${e.message}`);
+        db.prepare("UPDATE services SET status='error', pid=NULL WHERE id=?").run(svc.id);
       }
     }
   }
 
-  /** Called on panel shutdown — stop everything cleanly. */
+  /**
+   * Chamado no desligamento do painel. Usa updateDB=false de propósito:
+   * o processo realmente morre, mas a INTENÇÃO de estar rodando é
+   * preservada, e é ela que faz o serviço voltar no próximo boot.
+   */
   async stopAll() {
     const ids = [...this.procs.keys()];
-    await Promise.all(ids.map((id) => this._kill(id, true)));
+    await Promise.all(ids.map((id) => this._kill(id, false)));
+    const db = getDB();
+    db.prepare("UPDATE services SET status = 'stopped', pid = NULL WHERE status = 'running'").run();
   }
 
   // ── Internal ──────────────────────────────────────────────────────────
@@ -97,10 +133,23 @@ class ProcessManager extends EventEmitter {
   async _spawn(svc) {
     const db = getDB();
 
-    const [cmd, ...args] = this._parseCommand(svc.command);
-    const cwd = svc.working_directory?.trim() || process.env.HOME || '/tmp';
+    const { cmd, args } = parseCommand(svc.command);
+    if (!cmd) {
+      const err = new Error('Comando de inicialização vazio');
+      db.prepare("UPDATE services SET status='error', pid=NULL WHERE id=?").run(svc.id);
+      this.emit('status', { serviceId: svc.id, status: 'error', error: err.message });
+      throw err;
+    }
 
-    // Dynamic port allocation if service has a port defined
+    // O workspace precisa existir antes do spawn: se o usuário apagou a
+    // pasta, recriar é muito melhor do que falhar com um ENOENT cru.
+    const cwd = workspaces.ensureDir(
+      workspaces.normalize(svc.working_directory) || workspaces.createForService(svc.name),
+    );
+    if (cwd !== svc.working_directory) {
+      db.prepare('UPDATE services SET working_directory=? WHERE id=?').run(cwd, svc.id);
+    }
+
     let env = { ...process.env };
     try { env = { ...env, ...JSON.parse(svc.environment || '{}') }; } catch { /* keep base env */ }
 
@@ -108,12 +157,12 @@ class ProcessManager extends EventEmitter {
       try {
         const activePort = await findAvailablePort(svc.port);
         if (activePort !== svc.port) {
-          console.log(`[SVC] Port ${svc.port} busy, using ${activePort} for ${svc.name}`);
+          console.log(`[SVC] Porta ${svc.port} ocupada, usando ${activePort} para ${svc.name}`);
           db.prepare('UPDATE services SET port=? WHERE id=?').run(activePort, svc.id);
         }
-        env.PORT = activePort.toString();
+        env.PORT = String(activePort);
       } catch (err) {
-        console.error(`[SVC] Failed to find available port for ${svc.name}:`, err.message);
+        console.error(`[SVC] Não foi possível achar porta livre para ${svc.name}: ${err.message}`);
       }
     }
 
@@ -121,7 +170,7 @@ class ProcessManager extends EventEmitter {
     try {
       child = spawn(cmd, args, { cwd, env, stdio: ['pipe', 'pipe', 'pipe'] });
     } catch (err) {
-      db.prepare("UPDATE services SET status='error' WHERE id=?").run(svc.id);
+      db.prepare("UPDATE services SET status='error', pid=NULL WHERE id=?").run(svc.id);
       this.emit('status', { serviceId: svc.id, status: 'error', error: err.message });
       throw err;
     }
@@ -133,6 +182,7 @@ class ProcessManager extends EventEmitter {
       restartCount: svc.restart_count || 0,
       watchdog: null,
       stopped: false, // true = intentionally stopped, suppress auto-restart
+      exited: false,
     };
     this.procs.set(svc.id, entry);
 
@@ -146,8 +196,12 @@ class ProcessManager extends EventEmitter {
       // Only persist error-level lines to SQLite — keeps the DB small and
       // avoids serializing the whole in-memory file on every stdout chunk.
       if (level === 'error') {
-        db.prepare('INSERT INTO logs(service_id, level, message) VALUES(?,?,?)')
-          .run(svc.id, level, message.slice(0, 2000));
+        try {
+          db.prepare('INSERT INTO logs(service_id, level, message) VALUES(?,?,?)')
+            .run(svc.id, level, message.slice(0, 2000));
+        } catch (err) {
+          console.error('[SVC] falha ao persistir log:', err.message);
+        }
       }
 
       this.emit('log', { serviceId: svc.id, ...log });
@@ -156,50 +210,69 @@ class ProcessManager extends EventEmitter {
     child.stdout.on('data', handleData('info'));
     child.stderr.on('data', handleData('error'));
 
-    child.on('exit', (code) => {
-      // "Failure" = died on its own with a non-zero/unknown code. A clean
-      // code-0 exit is treated as intentional even if nobody called stop()
-      // — e.g. a one-shot script that finished its work — and is not
-      // auto-restarted (spec: restart "em caso de falha", not on any exit).
-      const crashed = !entry.stopped && code !== 0;
-      const status = entry.stopped ? 'stopped' : (code === 0 ? 'stopped' : 'error');
+    /**
+     * Um único caminho de saída, usado tanto pelo evento 'exit' quanto pelo
+     * 'error'. Isso importa porque quando o binário não existe o Node emite
+     * SÓ 'error' e nunca 'exit' — a versão anterior tratava apenas 'exit',
+     * então a entrada ficava órfã no mapa e o serviço aparecia como
+     * "rodando" pra sempre (P13, confirmado em teste isolado).
+     */
+    const finalize = (code, spawnError) => {
+      if (entry.exited) return;
+      entry.exited = true;
+
+      const crashed = !entry.stopped && (spawnError != null || code !== 0);
+      const status = entry.stopped ? 'stopped' : (crashed ? 'error' : 'stopped');
 
       db.prepare('UPDATE services SET status=?, pid=NULL, last_stopped=CURRENT_TIMESTAMP WHERE id=?')
         .run(status, svc.id);
-      this.emit('status', { serviceId: svc.id, status });
+      this.emit('status', { serviceId: svc.id, status, error: spawnError?.message });
 
       if (crashed && svc.auto_restart) {
+        // Um serviço que ficou de pé bastante tempo antes de cair não está
+        // num crash-loop: zera o orçamento de tentativas, senão quedas
+        // esporádicas ao longo de semanas acabam esgotando max_restarts.
+        const ranLongEnough = Date.now() - entry.startedAt >= config.RESTART_STABLE_MS;
+        if (ranLongEnough && entry.restartCount > 0) {
+          entry.restartCount = 0;
+          db.prepare('UPDATE services SET restart_count=0 WHERE id=?').run(svc.id);
+        }
+
         const max = svc.max_restarts ?? config.RESTART_MAX;
         if (entry.restartCount < max) {
           const delay = (svc.restart_delay ?? config.RESTART_DELAY) * 1000;
-          entry.restartCount++;
+          entry.restartCount += 1;
           db.prepare('UPDATE services SET restart_count=? WHERE id=?').run(entry.restartCount, svc.id);
 
           entry.watchdog = setTimeout(() => {
+            // Só respawna se ESTA entrada ainda for a atual do serviço —
+            // se alguém já iniciou de novo pela UI, não duplica processo.
+            if (this.procs.get(svc.id) !== entry || entry.stopped) return;
             const fresh = db.prepare('SELECT * FROM services WHERE id=?').get(svc.id);
-            if (fresh && !entry.stopped) {
-              this._spawn(fresh).catch((err) => {
-                console.error(`✗  Auto-restart failed for ${svc.name}:`, err.message);
-              });
-            }
+            if (!fresh) return;
+            fresh.restart_count = entry.restartCount;
+            this._spawn(fresh).catch((err) => {
+              console.error(`✗  Auto-restart falhou para ${svc.name}: ${err.message}`);
+            });
           }, delay);
-          return; // this entry will be replaced by the respawn's own .set()
+          return; // a entrada será substituída pelo respawn
         }
+
         db.prepare("UPDATE services SET status='error' WHERE id=?").run(svc.id);
         this.emit('status', { serviceId: svc.id, status: 'error', reason: 'max_restarts_exceeded' });
       }
 
-      // No restart is pending for this entry. If _kill() is the one
-      // handling this exit it will clean up the map itself after this
-      // listener runs; otherwise (unattended crash / clean self-exit)
-      // nobody else will, so we do it here to avoid leaking dead entries.
-      if (!entry.stopped) this.procs.delete(svc.id);
-    });
+      // Nenhum restart pendente: limpa a entrada se ela ainda for a atual.
+      if (this.procs.get(svc.id) === entry) this.procs.delete(svc.id);
+    };
+
+    child.on('exit', (code) => finalize(code, null));
 
     child.on('error', (err) => {
-      const log = { level: 'error', message: `spawn error: ${err.message}`, ts: Date.now() };
+      const log = { level: 'error', message: `erro ao executar: ${err.message}`, ts: Date.now() };
       entry.logs.push(log);
       this.emit('log', { serviceId: svc.id, ...log });
+      finalize(null, err);
     });
 
     db.prepare('UPDATE services SET status=?, pid=?, restart_count=?, last_started=CURRENT_TIMESTAMP WHERE id=?')
@@ -211,8 +284,8 @@ class ProcessManager extends EventEmitter {
     // routes that hostname to this port (see namedTunnelManager.js), so
     // starting a Quick Tunnel too would be redundant.
     if (svc.port && !svc.tunnel_hostname) {
-      tunnelManager.startTunnel('service', svc.id, env.PORT || svc.port).catch(err => {
-        console.error(`[SVC] Failed to start tunnel for ${svc.name}:`, err.message);
+      tunnelManager.startTunnel('service', svc.id, env.PORT || svc.port).catch((err) => {
+        console.error(`[SVC] Falha ao iniciar túnel para ${svc.name}: ${err.message}`);
       });
     }
 
@@ -223,21 +296,25 @@ class ProcessManager extends EventEmitter {
     const entry = this.procs.get(serviceId);
     if (!entry) return;
 
-    // Stop tunnel
     tunnelManager.stopTunnel('service', serviceId).catch(() => {});
 
     entry.stopped = true;
-    if (entry.watchdog) clearTimeout(entry.watchdog);
+    if (entry.watchdog) {
+      clearTimeout(entry.watchdog);
+      entry.watchdog = null;
+    }
 
     const proc = entry.process;
     if (!proc.killed && proc.exitCode === null) {
-      proc.kill('SIGTERM');
+      try { proc.kill('SIGTERM'); } catch { /* já morreu */ }
       await new Promise((resolve) => {
-        const t = setTimeout(() => {
+        const timer = setTimeout(() => {
           try { proc.kill('SIGKILL'); } catch { /* already gone */ }
           resolve();
         }, config.SIGTERM_WAIT);
-        proc.once('exit', () => { clearTimeout(t); resolve(); });
+        proc.once('exit', () => { clearTimeout(timer); resolve(); });
+        // Se o processo nunca chegou a existir (erro de spawn), 'exit'
+        // jamais vem — o timeout acima é a rede de segurança.
       });
     }
 
@@ -249,29 +326,6 @@ class ProcessManager extends EventEmitter {
         .run('stopped', serviceId);
       this.emit('status', { serviceId, status: 'stopped' });
     }
-  }
-
-  /** Minimal shell-style word split — handles single/double-quoted segments. */
-  _parseCommand(cmd) {
-    const parts = [];
-    let cur = '';
-    let inQ = false;
-    let qChar = '';
-
-    for (const ch of cmd.trim()) {
-      if (inQ) {
-        if (ch === qChar) inQ = false;
-        else cur += ch;
-      } else if (ch === '"' || ch === "'") {
-        inQ = true; qChar = ch;
-      } else if (ch === ' ' || ch === '\t') {
-        if (cur) { parts.push(cur); cur = ''; }
-      } else {
-        cur += ch;
-      }
-    }
-    if (cur) parts.push(cur);
-    return parts;
   }
 }
 

@@ -1,13 +1,37 @@
-
+# Dependências (reinstaladas dentro da imagem para bater com a plataforma alvo)
 node_modules
-npm-debug.log
+**/node_modules
+npm-debug.log*
+
+# Build do frontend (gerado dentro da imagem)
+frontend/dist
+
+# Dados locais — nunca entram na imagem; são montados como volume
+data
+backend/data
+*.db
+*.log
+*.pid
+
+# Controle de versão e ferramentas
 .git
-.env
+.github
+.gitignore
+.vscode
+.idea
 .DS_Store
 
-# Exclude backend dev/test files
-backend/tests
+# Segredos e configuração local
+.env
+**/.env
+!.env.example
 
-# Exclude frontend dev files
-frontend/node_modules
-frontend/dist
+# Testes e documentação (não afetam o runtime)
+backend/tests
+docs
+*.md
+!README.md
+
+# Imagens de documentação
+arquitetura.png
+pterodroid.png

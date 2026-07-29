@@ -11,8 +11,8 @@ router.get('/snapshot', async (req, res) => {
 });
 
 // GET /api/monitor/processes — top OS processes by CPU
-router.get('/processes', (req, res) => {
-  return res.json(readProcessList());
+router.get('/processes', async (req, res) => {
+  return res.json(await readProcessList());
 });
 
 // GET /api/monitor/overview — whole-panel state in one call, for the dashboard

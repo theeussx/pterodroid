@@ -46,7 +46,7 @@ export default function Sidebar({ open, onClose }) {
     >
       <div className="flex items-center justify-between px-5 h-16 border-b border-line shrink-0">
         <button onClick={() => navigate('/')} className={`flex items-center gap-2.5 min-w-0 ${collapsed ? 'lg:mx-auto' : ''}`}>
-          <img src="public/images/logo.jpg" alt="Logo Pterodroid" 
+          <img src="/images/logo.jpg" alt="Logo Pterodroid" 
             className="w-7 h-7 object-contain shrink-0"
           />
           {!collapsed && <span className="font-display font-semibold text-ink tracking-tight lg:inline">Pterodroid</span>}

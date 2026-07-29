@@ -4,7 +4,7 @@ import { api } from '../../lib/api';
 import Button from '../Button';
 import { useToast } from '../../stores/ToastContext';
 
-export default function FileEditor({ path, onClose, onSaved, readFn = api.readFile, writeFn = api.writeFile }) {
+export default function FileEditor({ path, onClose, onSaved, readFn = api.files.read, writeFn = api.files.write }) {
   const [content, setContent] = useState('');
   const [original, setOriginal] = useState('');
   const [loading, setLoading] = useState(true);

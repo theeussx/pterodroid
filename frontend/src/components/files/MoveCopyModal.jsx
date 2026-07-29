@@ -6,7 +6,15 @@ import Breadcrumbs from './Breadcrumbs';
 import { api } from '../../lib/api';
 import { useToast } from '../../stores/ToastContext';
 
-export default function MoveCopyModal({ open, onClose, onConfirm, mode, itemCount }) {
+/**
+ * Seletor de pasta de destino.
+ *
+ * `listFn` vem de quem abriu o modal: usado dentro de um serviço, ele
+ * navega o workspace daquele serviço. Antes chamava a API global fixa, o
+ * que tornava o modal inútil (e enganoso) em qualquer escopo que não fosse
+ * o global.
+ */
+export default function MoveCopyModal({ open, onClose, onConfirm, mode, itemCount, listFn = api.files.list }) {
   const [path, setPath] = useState('');
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -21,11 +29,11 @@ export default function MoveCopyModal({ open, onClose, onConfirm, mode, itemCoun
   useEffect(() => {
     if (!open) return;
     setLoading(true);
-    api.listFiles(path)
-      .then((r) => setEntries(r.entries.filter((e) => e.type === 'dir')))
+    listFn(path)
+      .then((r) => setEntries((r.entries || []).filter((e) => e.type === 'dir')))
       .catch((e) => notify(e.message, 'error'))
       .finally(() => setLoading(false));
-  }, [open, path]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [open, path, listFn]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const confirm = async () => {
     setBusy(true);

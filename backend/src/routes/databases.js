@@ -5,11 +5,45 @@ const drivers = require('../services/dbDrivers');
 
 const VALID_TYPES = Object.keys(drivers); // ['postgresql', 'mysql']
 
+/**
+ * O nome da instância vira o nome de uma PASTA em disco (ver
+ * dbInstanceManager.dataDirFor), e esse caminho é entregue aos binários do
+ * banco. Restringir o formato aqui evita, de uma vez: travessia de caminho
+ * (`../`), nomes impossíveis de criar no filesystem, e caracteres que só
+ * fazem sentido para um shell.
+ *
+ * Isto é a SEGUNDA camada de defesa. A primeira é os drivers não usarem
+ * shell nenhum (ver runBinary em dbDrivers/common.js) — mesmo que algo
+ * escape daqui, não há shell para interpretar.
+ */
+const NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9 _.-]{0,48}$/;
+
+function validateName(name) {
+  const trimmed = String(name || '').trim();
+  if (!trimmed) return 'O nome é obrigatório';
+  if (trimmed === '.' || trimmed === '..') return 'Nome inválido';
+  if (!NAME_PATTERN.test(trimmed)) {
+    return 'O nome deve começar com letra ou número e conter apenas letras, números, espaço, ponto, hífen e underscore (até 49 caracteres)';
+  }
+  return null;
+}
+
+function validatePort(port) {
+  const num = parseInt(port, 10);
+  if (!Number.isInteger(num)) return 'É necessário informar uma porta numérica';
+  // Abaixo de 1024 exige privilégio de root, que o painel não tem (e os
+  // próprios bancos recusam rodar como root).
+  if (num < 1024 || num > 65535) return 'A porta deve estar entre 1024 e 65535';
+  return null;
+}
+
 function validate(body) {
   const { name, type, port } = body;
-  if (!name?.trim()) return 'Name is required';
-  if (!type || !VALID_TYPES.includes(type)) return `Type must be one of: ${VALID_TYPES.join(', ')}`;
-  if (!port || isNaN(parseInt(port, 10))) return 'A numeric port is required';
+  const nameError = validateName(name);
+  if (nameError) return nameError;
+  if (!type || !VALID_TYPES.includes(type)) return `O tipo deve ser um destes: ${VALID_TYPES.join(', ')}`;
+  const portError = validatePort(port);
+  if (portError) return portError;
   return null;
 }
 
@@ -65,6 +99,15 @@ router.post('/', (req, res) => {
   const { name, type, port, db_username = 'root', db_password = '', tunnel_hostname = null } = req.body;
   const portNum = parseInt(port, 10);
 
+  // O usuário do banco entra em comandos CREATE USER/ALTER USER e em
+  // argumentos dos binários; manter o formato restrito evita surpresa.
+  const username = String(db_username || 'root').trim() || 'root';
+  if (!/^[A-Za-z_][A-Za-z0-9_]{0,31}$/.test(username)) {
+    return res.status(400).json({
+      error: 'O usuário do banco deve começar com letra e conter apenas letras, números e underscore (até 32 caracteres)',
+    });
+  }
+
   const conflict = db.prepare('SELECT name FROM db_instances WHERE port = ?').get(portNum);
   if (conflict) {
     return res.status(409).json({
@@ -72,12 +115,14 @@ router.post('/', (req, res) => {
     });
   }
 
-  const password = db_password || Math.random().toString(36).slice(2, 12);
+  // Math.random() não é criptograficamente seguro e era usado para gerar a
+  // senha do banco — previsível o bastante para não servir como segredo.
+  const password = db_password || require('crypto').randomBytes(18).toString('base64url');
 
   const result = db.prepare(`
     INSERT INTO db_instances (name, type, port, db_username, db_password, tunnel_hostname)
     VALUES (?, ?, ?, ?, ?, ?)
-  `).run(name.trim(), type, portNum, db_username.trim() || 'root', password, tunnel_hostname?.trim() || null);
+  `).run(name.trim(), type, portNum, username, password, tunnel_hostname?.trim() || null);
 
   const created = db.prepare('SELECT * FROM db_instances WHERE id = ?').get(result.lastInsertRowid);
   const { db_password: _pw, ...safe } = created;
@@ -97,9 +142,15 @@ router.put('/:id', (req, res) => {
 
   const { name, port, db_username, tunnel_hostname } = req.body;
 
+  if (name !== undefined) {
+    const nameError = validateName(name);
+    if (nameError) return res.status(400).json({ error: nameError });
+  }
+
   if (port !== undefined) {
     const portNum = parseInt(port, 10);
-    if (isNaN(portNum)) return res.status(400).json({ error: 'Porta inválida' });
+    const portError = validatePort(port);
+    if (portError) return res.status(400).json({ error: portError });
     const conflict = db.prepare('SELECT name FROM db_instances WHERE port = ? AND id != ?').get(portNum, existing.id);
     if (conflict) {
       return res.status(409).json({

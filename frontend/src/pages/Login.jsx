@@ -31,7 +31,7 @@ export default function Login() {
   <div className="min-h-screen flex items-center justify-center px-4">
     <div className="w-full max-w-sm">
       <div className="flex flex-col items-center mb-8">
-        <img src="public/images/logo.jpg" alt="Pterodroid" 
+        <img src="/images/logo.jpg" alt="Pterodroid" 
           className="w-12 h-12 object-contain mb-4"
         />
         <h1 className="font-display font-semibold text-xl text-ink">Pterodroid</h1>

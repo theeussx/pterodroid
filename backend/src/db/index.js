@@ -136,6 +136,25 @@ async function initDB() {
   ensureColumn(db, 'services', 'cpu_limit', 'REAL');
   ensureColumn(db, 'services', 'memory_limit', 'INTEGER');
 
+  /**
+   * `desired_state` separa o que o usuário QUER ('running'/'stopped') do
+   * que está acontecendo agora (`status`).
+   *
+   * Sem essa separação o auto-resume anunciado no README nunca funcionava:
+   * o desligamento gracioso gravava status='stopped' em todos os serviços,
+   * e o restoreAll() do boot seguinte procurava justamente por
+   * status='running' — ou seja, não encontrava nada. Os serviços só
+   * voltavam sozinhos quando o painel morria de forma abrupta (sem chance
+   * de gravar 'stopped'), que é o oposto do comportamento esperado.
+   *
+   * Serviços já existentes herdam desired_state a partir do status atual.
+   */
+  ensureColumn(db, 'services', 'desired_state', "TEXT DEFAULT 'stopped'");
+  db.exec(`
+    UPDATE services SET desired_state = CASE WHEN status = 'running' THEN 'running' ELSE 'stopped' END
+    WHERE desired_state IS NULL OR desired_state = ''
+  `);
+
   ensureColumn(db, 'db_instances', 'port', 'INTEGER');
   ensureColumn(db, 'db_instances', 'public_url', 'TEXT');
   ensureColumn(db, 'db_instances', 'tunnel_hostname', 'TEXT');

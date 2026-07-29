@@ -3,7 +3,7 @@ import { UploadCloud } from 'lucide-react';
 import { api } from '../../lib/api';
 import { useToast } from '../../stores/ToastContext';
 
-export default function UploadZone({ path, onUploaded, children, uploadFn = api.uploadFiles }) {
+export default function UploadZone({ path, onUploaded, children, uploadFn = api.files.upload }) {
   const [dragging, setDragging] = useState(false);
   const [uploads, setUploads] = useState([]); // [{name, progress}]
   const dragCounter = useRef(0);
@@ -13,12 +13,28 @@ export default function UploadZone({ path, onUploaded, children, uploadFn = api.
   const doUpload = useCallback(async (fileList) => {
     const files = Array.from(fileList);
     if (files.length === 0) return;
-    setUploads(files.map((f) => ({ name: f.name, progress: 0 })));
+
+    // Um lote = uma requisição, então o progresso real é o do lote inteiro.
+    // Mostrar a mesma porcentagem repetida por arquivo (como antes) dava a
+    // impressão errada de que cada um estava sendo enviado sozinho.
+    const totalBytes = files.reduce((sum, f) => sum + f.size, 0);
+    setUploads([{
+      name: files.length === 1 ? files[0].name : `${files.length} arquivos`,
+      progress: 0,
+      totalBytes,
+    }]);
+
     try {
-      await uploadFn(path, files, (pct) => {
+      const result = await uploadFn(path, files, (pct) => {
         setUploads((prev) => prev.map((u) => ({ ...u, progress: pct })));
       });
-      notify(`${files.length} arquivo(s) enviado(s)`, 'success');
+      const renamed = (result?.files || []).filter((f) => f.renamed);
+      notify(
+        renamed.length
+          ? `${files.length} arquivo(s) enviado(s) — ${renamed.length} renomeado(s) para não sobrescrever`
+          : `${files.length} arquivo(s) enviado(s)`,
+        'success',
+      );
       onUploaded?.();
     } catch (e) {
       notify(e.message, 'error');

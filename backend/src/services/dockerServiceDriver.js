@@ -31,35 +31,18 @@ const EventEmitter = require('events');
 const { getDB } = require('../db');
 const hosts = require('./dockerHostManager');
 const tunnelManager = require('./tunnelManager');
+const workspaces = require('./workspaceManager');
+const { tokenize } = require('./commandParser');
 
 const POLL_INTERVAL_MS = 3000;
 
-/** Mesmo tokenizer (simplificado) que o processManager usa pro campo `command` —
- * aqui vira `Cmd` do container quando o serviço pede um override do
- * ENTRYPOINT/CMD padrão da imagem. Duplicado de propósito: são ~15 linhas,
- * e não vale a pena arriscar mexer no processManager (já testado, já
- * rodando em produção) só pra extrair isso num util compartilhado.
+/**
+ * O `command` do serviço vira o `Cmd` do container quando o usuário quer
+ * sobrescrever o ENTRYPOINT/CMD da imagem. Usa o mesmo tokenizador do
+ * processManager (commandParser.js) — antes eram duas cópias da mesma
+ * função, que precisavam ser corrigidas em dobro.
  */
-function splitCommand(cmd) {
-  const parts = [];
-  let cur = '';
-  let inQ = false;
-  let qChar = '';
-  for (const ch of (cmd || '').trim()) {
-    if (inQ) {
-      if (ch === qChar) inQ = false;
-      else cur += ch;
-    } else if (ch === '"' || ch === "'") {
-      inQ = true; qChar = ch;
-    } else if (ch === ' ' || ch === '\t') {
-      if (cur) { parts.push(cur); cur = ''; }
-    } else {
-      cur += ch;
-    }
-  }
-  if (cur) parts.push(cur);
-  return parts;
-}
+const splitCommand = tokenize;
 
 function slugify(name) {
   return (name || 'svc').toLowerCase().replace(/[^a-z0-9_.-]+/g, '-').slice(0, 40) || 'svc';
@@ -92,16 +75,41 @@ function buildContainerSpec(svc) {
     portBindings[key] = [{ HostPort: String(p.hostPort ?? p.containerPort) }];
   }
 
-  const binds = volumes.map((v) => `${v.source}:${v.target}${v.readOnly ? ':ro' : ''}`);
+  /**
+   * Bind mounts precisam do caminho como o DAEMON do Docker o enxerga.
+   * Quando o painel roda dentro de um container, o caminho que ELE vê
+   * (/data/workspaces/...) não existe no host — o Docker então cria uma
+   * pasta vazia e o container sobe sem os arquivos do projeto, sem erro
+   * nenhum (P18). toHostPath() traduz isso quando HOST_WORKSPACES_ROOT
+   * está configurado; fora de container é identidade.
+   *
+   * Um "source" sem barra é um volume nomeado do Docker, não um caminho —
+   * esse passa direto.
+   */
+  const binds = volumes
+    .filter((v) => v?.source && v?.target)
+    .map((v) => {
+      const source = v.source.includes('/') ? workspaces.toHostPath(v.source) : v.source;
+      return `${source}:${v.target}${v.readOnly ? ':ro' : ''}`;
+    });
 
   const spec = {
     Image: svc.image,
     Env: Object.entries(env).map(([k, v]) => `${k}=${v}`),
     ExposedPorts: exposedPorts,
+    Labels: {
+      'pterodroid.managed': 'true',
+      'pterodroid.service.id': String(svc.id),
+      'pterodroid.service.name': String(svc.name || ''),
+    },
     HostConfig: {
       PortBindings: portBindings,
       Binds: binds,
       NetworkMode: networks[0] || undefined,
+      // 'unless-stopped' faria o container voltar sozinho mesmo depois de
+      // uma parada pelo painel; 'on-failure' com teto respeita o
+      // auto_restart/max_restarts do serviço e evita o loop infinito de
+      // reinicialização que a Etapa 3 pede pra eliminar.
       RestartPolicy: svc.auto_restart
         ? { Name: 'on-failure', MaximumRetryCount: svc.max_restarts || 10 }
         : { Name: 'no' },
@@ -165,7 +173,7 @@ class DockerServiceDriver extends EventEmitter {
       }
     }
 
-    db.prepare("UPDATE services SET status='running', last_started=CURRENT_TIMESTAMP WHERE id=?").run(serviceId);
+    db.prepare("UPDATE services SET status='running', desired_state='running', last_started=CURRENT_TIMESTAMP WHERE id=?").run(serviceId);
     this.cache.delete(serviceId); // força um poll fresco na próxima leitura, em vez de mostrar o snapshot velho até o próximo tick
     this.emit('status', { serviceId, status: 'running' });
     this._ensurePolling();
@@ -197,8 +205,9 @@ class DockerServiceDriver extends EventEmitter {
     }
 
     this.cache.delete(serviceId);
-    db.prepare("UPDATE services SET status='stopped', pid=NULL, last_stopped=CURRENT_TIMESTAMP WHERE id=?").run(serviceId);
+    db.prepare("UPDATE services SET status='stopped', desired_state='stopped', pid=NULL, last_stopped=CURRENT_TIMESTAMP WHERE id=?").run(serviceId);
     this.emit('status', { serviceId, status: 'stopped' });
+    this._stopPollingIfIdle();
   }
 
   async restartService(serviceId) {
@@ -207,10 +216,28 @@ class DockerServiceDriver extends EventEmitter {
     if (!svc.container_id) return this.startService(serviceId);
 
     const engine = hosts.engineFor(svc.docker_host_id);
-    await engine.restartContainer(svc.container_id);
+
+    // O stream de logs antigo aponta pro processo que acabou de morrer —
+    // sem derrubá-lo aqui, a aba de logs ficava muda após um restart (P22).
+    this._stopLogStream(serviceId);
+
+    try {
+      await engine.restartContainer(svc.container_id);
+    } catch (err) {
+      // Container removido por fora: recria em vez de deixar o serviço
+      // travado num erro permanente (mesma política do startService).
+      if (err.statusCode === 404) {
+        db.prepare('UPDATE services SET container_id = NULL WHERE id = ?').run(serviceId);
+        return this.startService(serviceId);
+      }
+      throw err;
+    }
+
     this.cache.delete(serviceId);
     db.prepare("UPDATE services SET status='running', last_started=CURRENT_TIMESTAMP WHERE id=?").run(serviceId);
     this.emit('status', { serviceId, status: 'running' });
+    this._ensurePolling();
+    this._startLogStream(serviceId, svc.container_id, engine);
     return svc.container_id;
   }
 
@@ -254,7 +281,13 @@ class DockerServiceDriver extends EventEmitter {
   /** Chamado uma vez no boot do painel — containers com RestartPolicy própria não precisam ser "respawnados", só confirma que estão de pé. */
   async restoreAll() {
     const db = getDB();
-    const running = db.prepare("SELECT * FROM services WHERE runtime_type = 'docker' AND status = 'running'").all();
+    // Mesma lógica do processManager: retoma pela intenção do usuário, não
+    // pelo último status observado antes do desligamento.
+    const running = db.prepare(`
+      SELECT * FROM services
+      WHERE runtime_type = 'docker'
+        AND (desired_state = 'running' OR (desired_state IS NULL AND status = 'running'))
+    `).all();
     for (const svc of running) {
       if (!svc.container_id) continue;
       try {
@@ -288,6 +321,19 @@ class DockerServiceDriver extends EventEmitter {
 
   async _createContainer(svc, engine) {
     const db = getDB();
+
+    // Etapa 3: "caso o workspace não exista, ele deverá ser criado
+    // automaticamente". Sem isso, um bind mount apontando pra uma pasta
+    // apagada faz o Docker criar um diretório vazio (às vezes como root),
+    // e o container sobe sem os arquivos do projeto.
+    if (svc.working_directory) {
+      try {
+        workspaces.ensureDir(workspaces.normalize(svc.working_directory) || svc.working_directory);
+      } catch (err) {
+        console.error(`[DOCKER] Não foi possível preparar o workspace de ${svc.name}: ${err.message}`);
+      }
+    }
+
     const { spec, extraNetworks } = buildContainerSpec(svc);
     const created = await engine.createContainer(spec, { name: `pterodroid_${svc.id}_${slugify(svc.name)}` });
 
@@ -306,6 +352,25 @@ class DockerServiceDriver extends EventEmitter {
   _ensurePolling() {
     if (this.pollTimer) return;
     this.pollTimer = setInterval(() => this._pollAll().catch(() => {}), POLL_INTERVAL_MS);
+    // unref: o poll sozinho nunca deve impedir o processo de encerrar.
+    this.pollTimer.unref?.();
+  }
+
+  /**
+   * Para o poll quando não há mais nenhum container pra observar. Num
+   * aparelho Android, um timer de 3s que roda pra sempre sem ter o que
+   * fazer custa bateria à toa (P21).
+   */
+  _stopPollingIfIdle() {
+    if (!this.pollTimer) return;
+    const { n } = getDB().prepare(`
+      SELECT COUNT(*) AS n FROM services
+      WHERE runtime_type = 'docker' AND container_id IS NOT NULL AND status = 'running'
+    `).get() || { n: 0 };
+    if (n === 0) {
+      clearInterval(this.pollTimer);
+      this.pollTimer = null;
+    }
   }
 
   /**
@@ -356,7 +421,10 @@ class DockerServiceDriver extends EventEmitter {
     const rows = db.prepare(
       "SELECT id, docker_host_id, container_id FROM services WHERE runtime_type = 'docker' AND container_id IS NOT NULL"
     ).all();
-    if (!rows.length) return;
+    if (!rows.length) {
+      this._stopPollingIfIdle();
+      return;
+    }
     await Promise.all(rows.map((row) => this._pollOne(row).catch(() => {})));
   }
 
@@ -386,8 +454,13 @@ class DockerServiceDriver extends EventEmitter {
     // Só emite/persiste em cima de MUDANÇA de status — do contrário cada
     // tick de poll (a cada 3s, pra cada serviço docker) viraria um evento
     // idêntico no socket.io e uma escrita no SQLite à toa.
+    //
+    // `db` estava faltando neste escopo: como o _pollAll engole os erros do
+    // _pollOne (.catch(() => {})), todo poll de mudança de status lançava um
+    // ReferenceError em silêncio e o status do container NUNCA era gravado.
+    // Encontrado pelo tests/docker-driver-test.js.
     if (!prev || prev.status !== snapshot.status) {
-      db.prepare('UPDATE services SET status=?, pid=? WHERE id=?')
+      getDB().prepare('UPDATE services SET status=?, pid=? WHERE id=?')
         .run(status === 'running' ? 'running' : 'stopped', snapshot.pid, id);
       this.emit('status', { serviceId: id, status: snapshot.status, pid: snapshot.pid });
     }

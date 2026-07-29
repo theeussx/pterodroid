@@ -4,14 +4,21 @@
 # (with your real services configured) is already up.
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
-export DB_PATH="/tmp/pterodroid-smoketest-$$.db"
+# Ambiente 100% isolado: banco, workspaces e arquivos vão para uma pasta
+# temporária, então rodar isto NUNCA toca no painel real de quem executa.
+export DATA_ROOT="/tmp/pterodroid-smoketest-$$"
+export DB_PATH="$DATA_ROOT/panel.db"
+export WORKSPACES_ROOT="$DATA_ROOT/workspaces"
+export FILES_ROOT="$DATA_ROOT/workspaces"
+export JWT_SECRET="smoketest"
 export PORT=3099
 BASE="http://localhost:$PORT"
-rm -f "$DB_PATH"
+rm -rf "$DATA_ROOT"
+mkdir -p "$WORKSPACES_ROOT"
 
 node src/server.js > /tmp/smoketest-server.log 2>&1 &
 SERVER_PID=$!
-sleep 2
+sleep 4
 
 pass() { echo "  PASS: $1"; }
 fail() { echo "  FAIL: $1"; }
@@ -103,5 +110,5 @@ echo "$DEL" | grep -q '"ok":true' && pass "service deleted" || fail "delete fail
 
 kill $SERVER_PID 2>/dev/null || true
 wait $SERVER_PID 2>/dev/null || true
-rm -f "$DB_PATH"
+rm -rf "$DATA_ROOT"
 echo "== ALL DONE (throwaway db + port $PORT, your real panel was untouched) =="

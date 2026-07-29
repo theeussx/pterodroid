@@ -11,8 +11,8 @@
  */
 const fs = require('fs');
 const path = require('path');
-const { spawn, execSync } = require('child_process');
-const { findBinary, escapeSqlLiteral, waitForFile } = require('./common');
+const { spawn } = require('child_process');
+const { findBinary, escapeSqlLiteral, waitForFile, runBinary } = require('./common');
 
 module.exports = {
   type: 'mysql',
@@ -49,9 +49,10 @@ module.exports = {
 
     // Phase 1 — create system tables.
     try {
-      execSync(`${check.init} --datadir="${dataDirectory}"`, { encoding: 'utf8', timeout: 90000 });
+      // Sem shell: `dataDirectory` deriva do nome escolhido pelo usuário.
+      runBinary(check.init, [`--datadir=${dataDirectory}`], { timeout: 90000 });
     } catch (err) {
-      throw new Error(`${check.init} failed: ${err.stderr || err.message}`);
+      throw new Error(`${check.init} falhou: ${err.stderr || err.message}`);
     }
 
     // Phase 2 — bootstrap: start with grant tables disabled, set real
@@ -104,11 +105,12 @@ module.exports = {
         userClause +
         'FLUSH PRIVILEGES;';
 
-      execSync(`${check.client} --socket="${socket}" -u root -e "${sql}"`, {
-        encoding: 'utf8', timeout: 15000,
-      });
+      // O SQL vai como UM argumento (-e), não embutido numa linha de shell:
+      // além do caminho do socket, a própria senha entrava aqui e um
+      // caractere como `"` ou `$` quebrava/escapava o comando.
+      runBinary(check.client, [`--socket=${socket}`, '-u', 'root', '-e', sql], { timeout: 15000 });
     } catch (err) {
-      throw new Error(`MariaDB credential bootstrap failed: ${err.stderr || err.message}`);
+      throw new Error(`Falha ao configurar as credenciais do MariaDB: ${err.stderr || err.message}`);
     } finally {
       if (boot && !boot.killed) {
         boot.kill('SIGTERM');

@@ -5,7 +5,48 @@
  */
 const fs = require('fs');
 const path = require('path');
-const { execSync } = require('child_process');
+const { execFile } = require('child_process');
+const config = require('../config');
+
+/**
+ * Executa um comando externo SEM bloquear o event loop.
+ *
+ * `df` e `ps` eram chamados com execSync a cada snapshot — ou seja, a cada
+ * 2 segundos o painel inteiro (API, WebSocket, logs de todos os serviços)
+ * congelava esperando um processo externo terminar. Num aparelho Android
+ * com o disco ocupado, `df` pode demorar centenas de milissegundos (P30).
+ */
+function run(command, args, timeout = 3000) {
+  return new Promise((resolve) => {
+    execFile(command, args, { encoding: 'utf8', timeout, windowsHide: true }, (err, stdout) => {
+      resolve(err ? null : stdout);
+    });
+  });
+}
+
+/**
+ * Cache com TTL para leituras caras. O snapshot vai pro socket a cada 2s,
+ * mas espaço em disco e lista de processos não mudam a esse ritmo — e são
+ * justamente os dois que exigem processo externo.
+ */
+function cached(ttlMs, loader) {
+  let value = null;
+  let expiresAt = 0;
+  let inflight = null;
+  return async () => {
+    const now = Date.now();
+    if (value !== null && now < expiresAt) return value;
+    if (inflight) return inflight; // várias chamadas simultâneas = uma execução só
+    inflight = loader()
+      .then((result) => {
+        value = result;
+        expiresAt = Date.now() + ttlMs;
+        return result;
+      })
+      .finally(() => { inflight = null; });
+    return inflight;
+  };
+}
 
 function readMeminfo() {
   try {
@@ -54,21 +95,31 @@ function readUptime() {
   }
 }
 
-function readDisk() {
-  try {
-    const out = execSync('df -k /data 2>/dev/null || df -k / 2>/dev/null', {
-      encoding: 'utf8', timeout: 3000,
-    });
-    const lines = out.trim().split('\n');
-    const parts = lines[lines.length - 1].split(/\s+/);
-    const total = (parseInt(parts[1], 10) || 0) * 1024;
-    const used = (parseInt(parts[2], 10) || 0) * 1024;
-    const free = (parseInt(parts[3], 10) || 0) * 1024;
-    return { total, used, free, percent: total ? (used / total) * 100 : 0 };
-  } catch {
-    return { total: 0, used: 0, free: 0, percent: 0 };
-  }
-}
+const EMPTY_DISK = { total: 0, used: 0, free: 0, percent: 0 };
+
+/**
+ * Espaço em disco do volume onde os dados do painel ficam — é o número que
+ * importa pro usuário ("ainda cabe mais um serviço?"), e não o da raiz do
+ * sistema, que num container é outro filesystem.
+ */
+const readDisk = cached(15000, async () => {
+  const target = config.DATA_ROOT;
+  const out = (await run('df', ['-kP', target])) || (await run('df', ['-k', target])) || (await run('df', ['-k', '/']));
+  if (!out) return EMPTY_DISK;
+
+  const lines = out.trim().split('\n');
+  if (lines.length < 2) return EMPTY_DISK;
+  // Nomes de dispositivo longos fazem o df quebrar a linha; pegar a última
+  // linha e ler os campos a partir do fim evita esse problema.
+  const parts = lines[lines.length - 1].trim().split(/\s+/);
+  const numbers = parts.filter((p) => /^\d+$/.test(p)).map(Number);
+  if (numbers.length < 3) return EMPTY_DISK;
+
+  const [totalKb, usedKb, freeKb] = numbers;
+  const total = totalKb * 1024;
+  const used = usedKb * 1024;
+  return { total, used, free: freeKb * 1024, percent: total ? (used / total) * 100 : 0 };
+});
 
 let _prevNet = null;
 function readNetwork() {
@@ -131,35 +182,53 @@ function readTemperature() {
   }
 }
 
-function readProcessList() {
-  try {
-    const out = execSync('ps aux 2>/dev/null || ps -eo pid,comm,%cpu,%mem 2>/dev/null', {
-      encoding: 'utf8', timeout: 3000,
-    });
-    const lines = out.trim().split('\n');
-    const header = lines[0].toLowerCase();
-    const isBusyboxStyle = !header.includes('command');
-    return lines
-      .slice(1, 21)
+/**
+ * Top 20 processos por CPU. O formato do `ps` varia bastante entre o
+ * coreutils do Ubuntu-proot e o busybox/toybox do Termux, então tentamos
+ * o formato explícito primeiro (que é estável) e caímos pro `ps aux`.
+ */
+const readProcessList = cached(5000, async () => {
+  const explicit = await run('ps', ['-eo', 'pid,pcpu,pmem,comm']);
+  if (explicit) {
+    return explicit.trim().split('\n').slice(1)
       .map((line) => {
-        const parts = line.trim().split(/\s+/);
-        if (isBusyboxStyle) {
-          return { pid: parseInt(parts[0], 10) || 0, cpu: parseFloat(parts[2]) || 0, mem: parseFloat(parts[3]) || 0, name: parts.slice(10).join(' ') || parts[1] || '?' };
-        }
-        return { pid: parseInt(parts[1], 10) || 0, cpu: parseFloat(parts[2]) || 0, mem: parseFloat(parts[3]) || 0, name: parts.slice(10).join(' ') || '?' };
+        const [pid, cpu, mem, ...name] = line.trim().split(/\s+/);
+        return {
+          pid: parseInt(pid, 10) || 0,
+          cpu: parseFloat(cpu) || 0,
+          mem: parseFloat(mem) || 0,
+          name: name.join(' ') || '?',
+        };
       })
       .filter((p) => p.pid > 0)
-      .sort((a, b) => b.cpu - a.cpu);
-  } catch {
-    return [];
+      .sort((a, b) => b.cpu - a.cpu)
+      .slice(0, 20);
   }
-}
+
+  const aux = await run('ps', ['aux']);
+  if (!aux) return [];
+  return aux.trim().split('\n').slice(1)
+    .map((line) => {
+      const parts = line.trim().split(/\s+/);
+      return {
+        pid: parseInt(parts[1], 10) || 0,
+        cpu: parseFloat(parts[2]) || 0,
+        mem: parseFloat(parts[3]) || 0,
+        name: parts.slice(10).join(' ') || '?',
+      };
+    })
+    .filter((p) => p.pid > 0)
+    .sort((a, b) => b.cpu - a.cpu)
+    .slice(0, 20);
+});
 
 async function getSnapshot() {
+  // Leituras de /proc são síncronas mas triviais (arquivos virtuais, sem
+  // I/O de disco); só o disco precisa de processo externo, e vem do cache.
   return {
     cpu: readCpu(),
     mem: readMeminfo(),
-    disk: readDisk(),
+    disk: await readDisk(),
     net: readNetwork(),
     temp: readTemperature(),
     uptime: readUptime(),

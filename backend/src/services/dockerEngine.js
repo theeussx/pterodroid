@@ -201,7 +201,7 @@ class DockerEngine extends EventEmitter {
   }
 
   // ── Archive (base do File Manager por container) ──────────────────────
-  /** Baixa um arquivo ou pasta do container como tar cru — quem chamar faz o parse (ver miniTar.js). */
+  /** Baixa um arquivo ou pasta do container como tar cru — quem chamar faz o parse. */
   async getArchive(id, pathInContainer) {
     const res = await this.client.requestStream('GET', `/containers/${id}/archive`, {
       query: { path: pathInContainer },
@@ -211,7 +211,7 @@ class DockerEngine extends EventEmitter {
     return Buffer.concat(chunks);
   }
 
-  /** Extrai um tar (ver miniTar.js) dentro do container, na pasta de destino indicada. */
+  /** Extrai um tar dentro do container, na pasta de destino indicada. */
   async putArchive(id, destDirPath, tarBuffer) {
     return this.client.request('PUT', `/containers/${id}/archive`, {
       query: { path: destDirPath },

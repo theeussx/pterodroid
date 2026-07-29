@@ -4,15 +4,17 @@ import Button from './Button';
 import StatusDot from './StatusDot';
 import LogViewer from './LogViewer';
 import ServiceFileBrowser from './files/ServiceFileBrowser';
+import ServiceTerminal from './ServiceTerminal';
 import { api } from '../lib/api';
 import { useLiveLogs } from '../lib/hooks';
 import { useToast } from '../stores/ToastContext';
-import { Play, Square, RotateCw, Container, LayoutGrid, ScrollText, FolderOpen } from 'lucide-react';
+import { Play, Square, RotateCw, Container, LayoutGrid, ScrollText, FolderOpen, TerminalSquare } from 'lucide-react';
 
 const TABS = [
   { id: 'overview', label: 'Visão Geral', icon: LayoutGrid },
   { id: 'logs', label: 'Logs', icon: ScrollText },
   { id: 'files', label: 'Arquivos', icon: FolderOpen },
+  { id: 'terminal', label: 'Terminal', icon: TerminalSquare },
 ];
 
 export default function ServiceDetailModal({ open, onClose, serviceId, onChanged }) {
@@ -23,11 +25,28 @@ export default function ServiceDetailModal({ open, onClose, serviceId, onChanged
   const { lines, seedOnce } = useLiveLogs('service', serviceId);
 
   useEffect(() => {
-    if (!open || !serviceId) return;
+    if (!open || !serviceId) {
+      setService(null);
+      return undefined;
+    }
+    // Limpar antes de buscar evita mostrar por um instante os dados do
+    // serviço aberto anteriormente — com botões de start/stop que agiriam
+    // sobre o serviço certo, mas exibindo o estado do errado (P33).
+    setService(null);
     setTab('overview');
+
+    let cancelled = false;
     api.getService(serviceId)
-      .then((data) => { setService(data); seedOnce(data.recentLogs || []); })
-      .catch((e) => notify(e.message, 'error'));
+      .then((data) => {
+        if (cancelled) return;
+        setService(data);
+        seedOnce(data.recentLogs || []);
+      })
+      .catch((e) => { if (!cancelled) notify(e.message, 'error'); });
+
+    // Fechar o modal (ou trocar de serviço) antes da resposta chegar não
+    // pode deixar a resposta antiga sobrescrever o estado novo.
+    return () => { cancelled = true; };
   }, [open, serviceId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const act = async (fn, label) => {
@@ -196,10 +215,21 @@ export default function ServiceDetailModal({ open, onClose, serviceId, onChanged
             <LogViewer lines={lines} onSendInput={!isDocker && service.status === 'running' ? sendInput : undefined} />
             {isDocker && (
               <p className="text-xs text-ink-faint mt-2">
-                Entrada interativa em container ainda não está disponível aqui — use o terminal web (em breve) pra sessões via docker exec.
+                Para enviar comandos a um container, use a aba <strong>Terminal</strong> (roda via docker exec).
               </p>
             )}
           </div>
+        )}
+
+        {tab === 'terminal' && (
+          filesReady
+            ? <ServiceTerminal serviceId={serviceId} serviceName={service.name} />
+            : (
+              <div className="text-center py-10">
+                <TerminalSquare size={24} className="mx-auto text-ink-faint mb-2" />
+                <p className="text-sm text-ink-dim">Inicie o serviço pelo menos uma vez para criar o container antes de abrir o terminal.</p>
+              </div>
+            )
         )}
 
         {tab === 'files' && (

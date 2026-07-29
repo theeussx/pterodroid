@@ -31,15 +31,10 @@ router.put('/', (req, res) => {
   return res.json(Object.fromEntries(rows.map((r) => [r.key, r.value])));
 });
 
-// POST /api/settings/complete-setup — marks first-run wizard as done
-router.post('/complete-setup', (req, res) => {
-  const db = getDB();
-  db.prepare(`
-    INSERT INTO settings (key, value) VALUES ('setup_done', 'true')
-    ON CONFLICT(key) DO UPDATE SET value = 'true'
-  `).run();
-  return res.json({ ok: true });
-});
+// Não existe mais um POST /complete-setup: marcar a configuração como
+// concluída sem trocar a senha padrão era justamente o que permitia
+// silenciar o aviso de segurança sem resolver o problema. Quem grava
+// setup_done agora é a própria troca de senha (ver routes/auth.js).
 
 // GET /api/settings/cloudflared — is cloudflared installed and usable?
 // Shared by the remote-access panel and any service/database form that

@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { Plus, Play, Square, RotateCw, Trash2, Pencil, Terminal, Container } from 'lucide-react';
 import { api } from '../lib/api';
 import { useServiceStatusEvents } from '../lib/hooks';
@@ -17,8 +17,10 @@ export default function Services() {
   const [editing, setEditing] = useState(null);
   const [detailId, setDetailId] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleteFiles, setDeleteFiles] = useState(false);
   const [busyId, setBusyId] = useState(null);
   const { notify } = useToast();
+  const reloadTimer = useRef(null);
 
   const load = useCallback(async () => {
     try {
@@ -32,7 +34,18 @@ export default function Services() {
   }, [notify]);
 
   useEffect(() => { load(); }, [load]);
-  useServiceStatusEvents(useCallback(() => load(), [load]));
+
+  /**
+   * Um serviço que reinicia dispara vários eventos de status em sequência
+   * (stopped → running → ...). Recarregar a lista inteira em cada um deles
+   * gerava uma rajada de requisições idênticas; agrupar em 250ms mantém a
+   * tela igualmente reativa com uma chamada só.
+   */
+  useEffect(() => () => clearTimeout(reloadTimer.current), []);
+  useServiceStatusEvents(useCallback(() => {
+    clearTimeout(reloadTimer.current);
+    reloadTimer.current = setTimeout(load, 250);
+  }, [load]));
 
   const handleSubmit = async (payload) => {
     if (editing) {
@@ -58,11 +71,16 @@ export default function Services() {
     }
   };
 
+  const openDelete = (service) => {
+    setDeleteTarget(service);
+    setDeleteFiles(false); // sempre reinicia desmarcado: apagar arquivos é opt-in consciente
+  };
+
   const handleDelete = async () => {
     setBusyId(deleteTarget.id);
     try {
-      await api.deleteService(deleteTarget.id);
-      notify('Serviço removido', 'success');
+      const result = await api.deleteService(deleteTarget.id, deleteFiles);
+      notify(result?.filesRemoved ? 'Serviço e arquivos removidos' : 'Serviço removido', 'success');
       setDeleteTarget(null);
       load();
     } catch (e) {
@@ -137,7 +155,7 @@ export default function Services() {
                 <button onClick={() => { setEditing(s); setFormOpen(true); }} className="p-1.5 text-ink-faint hover:text-ink transition-colors" title="Editar">
                   <Pencil size={14} />
                 </button>
-                <button disabled={busyId === s.id} onClick={() => setDeleteTarget(s)} className="p-1.5 text-ink-faint hover:text-error transition-colors disabled:opacity-40" title="Remover">
+                <button disabled={busyId === s.id} onClick={() => openDelete(s)} className="p-1.5 text-ink-faint hover:text-error transition-colors disabled:opacity-40" title="Remover">
                   <Trash2 size={14} />
                 </button>
               </div>
@@ -160,10 +178,28 @@ export default function Services() {
         onClose={() => setDeleteTarget(null)}
         onConfirm={handleDelete}
         title="Remover serviço"
-        message={`Tem certeza que deseja remover "${deleteTarget?.name}"? O processo será parado e o histórico de logs apagado.`}
+        message={`Tem certeza que deseja remover "${deleteTarget?.name}"? O ${deleteTarget?.runtime_type === 'docker' ? 'container' : 'processo'} será parado e o histórico de logs apagado.`}
         confirmLabel="Remover"
         loading={busyId === deleteTarget?.id}
-      />
+      >
+        <label className="flex items-start gap-2.5 mt-3 p-3 rounded-lg bg-raised border border-line cursor-pointer">
+          <input
+            type="checkbox"
+            checked={deleteFiles}
+            onChange={(e) => setDeleteFiles(e.target.checked)}
+            className="mt-0.5 accent-error"
+          />
+          <span className="text-xs text-ink-dim">
+            Apagar também os arquivos do serviço
+            {deleteTarget?.working_directory && (
+              <span className="block font-mono text-[10px] text-ink-faint truncate mt-0.5">
+                {deleteTarget.working_directory}
+              </span>
+            )}
+            <span className="block text-error/80 mt-1">Essa ação não pode ser desfeita.</span>
+          </span>
+        </label>
+      </ConfirmDialog>
     </div>
   );
 }

@@ -80,7 +80,6 @@ export const api = {
   // settings
   getSettings: () => request('/settings'),
   updateSettings: (payload) => request('/settings', { method: 'PUT', body: payload }),
-  completeSetup: () => request('/settings/complete-setup', { method: 'POST' }),
   cloudflaredStatus: () => request('/settings/cloudflared'),
   remoteAccessStatus: () => request('/settings/remote-access'),
   startRemoteAccess: () => request('/settings/remote-access/start', { method: 'POST' }),
@@ -94,116 +93,101 @@ export const api = {
   startTokenTunnel: (token) => request('/settings/domains/token', { method: 'POST', body: { token } }),
   stopDomains: () => request('/settings/domains/stop', { method: 'POST' }),
 
-  // gerenciador de arquivos
-  listFiles: (path = '') => request(`/files/list?path=${encodeURIComponent(path)}`),
-  readFile: (path) => request(`/files/read?path=${encodeURIComponent(path)}`),
-  writeFile: (path, content) => request('/files/write', { method: 'PUT', body: { path, content } }),
-  mkdir: (path, name) => request('/files/mkdir', { method: 'POST', body: { path, name } }),
-  touchFile: (path, name) => request('/files/touch', { method: 'POST', body: { path, name } }),
-  renameFile: (path, name) => request('/files/rename', { method: 'POST', body: { path, name } }),
-  moveFile: (source, destDir) => request('/files/move', { method: 'POST', body: { source, destDir } }),
-  copyFile: (source, destDir) => request('/files/copy', { method: 'POST', body: { source, destDir } }),
-  deleteFiles: (paths) => request('/files', { method: 'DELETE', body: { paths } }),
-  searchFiles: (path, q) => request(`/files/search?path=${encodeURIComponent(path)}&q=${encodeURIComponent(q)}`),
+  // ── Gerenciador de arquivos ──────────────────────────────────────────
+  // O backend expõe exatamente as mesmas rotas para o escopo global e para
+  // o escopo de um serviço (mesma fábrica de rotas), então aqui só muda o
+  // prefixo. Um único `fileApi(prefix)` serve os dois — é o que impede as
+  // duas telas de voltarem a divergir em funcionalidade.
+  files: fileApi(''),
+  serviceFiles: (id) => fileApi(`/services/${id}`),
   filesAudit: (limit = 50) => request(`/files/audit?limit=${limit}`),
 
-  // arquivos por serviço (mesmo formato das globais acima, só que escopadas por serviço)
-  listServiceFiles: (id, path = '/') => request(`/services/${id}/files/list?path=${encodeURIComponent(path)}`),
-  readServiceFile: (id, path) => request(`/services/${id}/files/read?path=${encodeURIComponent(path)}`),
-  writeServiceFile: (id, path, content) => request(`/services/${id}/files/write`, { method: 'PUT', body: { path, content } }),
-  mkdirService: (id, path, name) => request(`/services/${id}/files/mkdir`, { method: 'POST', body: { path, name } }),
-  touchServiceFile: (id, path, name) => request(`/services/${id}/files/touch`, { method: 'POST', body: { path, name } }),
-  renameServiceFile: (id, path, name) => request(`/services/${id}/files/rename`, { method: 'POST', body: { path, name } }),
-  moveServiceFile: (id, source, destDir) => request(`/services/${id}/files/move`, { method: 'POST', body: { source, destDir } }),
-  deleteServiceFiles: (id, paths) => request(`/services/${id}/files`, { method: 'DELETE', body: { paths } }),
-
-  uploadServiceFiles: async (id, dirPath, fileList, onProgress) => {
-    const formData = new FormData();
-    for (const f of fileList) formData.append('files', f);
-    const token = getToken();
-    return new Promise((resolve, reject) => {
-      const xhr = new XMLHttpRequest();
-      xhr.open('POST', `/api/services/${id}/files/upload?path=${encodeURIComponent(dirPath)}`);
-      if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
-      xhr.upload.onprogress = (e) => {
-        if (e.lengthComputable && onProgress) onProgress(Math.round((e.loaded / e.total) * 100));
-      };
-      xhr.onload = () => {
-        try {
-          const data = JSON.parse(xhr.responseText);
-          if (xhr.status >= 200 && xhr.status < 300) resolve(data);
-          else reject(new Error(data?.error || 'Upload falhou'));
-        } catch {
-          reject(new Error('Upload falhou'));
-        }
-      };
-      xhr.onerror = () => reject(new Error('Upload falhou (rede)'));
-      xhr.send(formData);
-    });
-  },
-
-  downloadServiceFile: async (id, filePath, filename) => {
-    const token = getToken();
-    const res = await fetch(`/api/services/${id}/files/download?path=${encodeURIComponent(filePath)}`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    });
-    if (!res.ok) {
-      const data = await res.json().catch(() => null);
-      throw new Error(data?.error || 'Download falhou');
-    }
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-  },
-
-  uploadFiles: async (dirPath, fileList, onProgress) => {
-    const formData = new FormData();
-    for (const f of fileList) formData.append('files', f);
-    const token = getToken();
-    return new Promise((resolve, reject) => {
-      const xhr = new XMLHttpRequest();
-      xhr.open('POST', `/api/files/upload?path=${encodeURIComponent(dirPath)}`);
-      if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
-      xhr.upload.onprogress = (e) => {
-        if (e.lengthComputable && onProgress) onProgress(Math.round((e.loaded / e.total) * 100));
-      };
-      xhr.onload = () => {
-        try {
-          const data = JSON.parse(xhr.responseText);
-          if (xhr.status >= 200 && xhr.status < 300) resolve(data);
-          else reject(new Error(data?.error || 'Upload falhou'));
-        } catch {
-          reject(new Error('Upload falhou'));
-        }
-      };
-      xhr.onerror = () => reject(new Error('Upload falhou (rede)'));
-      xhr.send(formData);
-    });
-  },
-
-  downloadFile: async (path, filename) => {
-    const token = getToken();
-    const res = await fetch(`/api/files/download?path=${encodeURIComponent(path)}`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    });
-    if (!res.ok) {
-      const data = await res.json().catch(() => null);
-      throw new Error(data?.error || 'Download falhou');
-    }
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
+  // ── Terminal do serviço ──────────────────────────────────────────────
+  // Só o controle da sessão passa por aqui; a SAÍDA chega por socket
+  // (evento `terminal:data`), para o comando ir imprimindo enquanto roda.
+  terminal: {
+    list: (id) => request(`/services/${id}/terminal`),
+    open: (id) => request(`/services/${id}/terminal`, { method: 'POST' }),
+    state: (id, sessionId) => request(`/services/${id}/terminal/${sessionId}`),
+    exec: (id, sessionId, command) =>
+      request(`/services/${id}/terminal/${sessionId}/exec`, { method: 'POST', body: { command } }),
+    interrupt: (id, sessionId) =>
+      request(`/services/${id}/terminal/${sessionId}/interrupt`, { method: 'POST' }),
+    close: (id, sessionId) => request(`/services/${id}/terminal/${sessionId}`, { method: 'DELETE' }),
   },
 };
+
+/**
+ * Conjunto completo de operações de arquivo para um prefixo de rota.
+ * Os nomes são os mesmos nos dois escopos, então o FileBrowser recebe isto
+ * como "adapter" e não precisa saber em qual escopo está.
+ */
+function fileApi(prefix) {
+  const base = `${prefix}/files`;
+  return {
+    list: (path = '') => request(`${base}/list?path=${encodeURIComponent(path)}`),
+    read: (path) => request(`${base}/read?path=${encodeURIComponent(path)}`),
+    write: (path, content) => request(`${base}/write`, { method: 'PUT', body: { path, content } }),
+    mkdir: (path, name) => request(`${base}/mkdir`, { method: 'POST', body: { path, name } }),
+    touch: (path, name) => request(`${base}/touch`, { method: 'POST', body: { path, name } }),
+    rename: (path, name) => request(`${base}/rename`, { method: 'POST', body: { path, name } }),
+    move: (source, destDir) => request(`${base}/move`, { method: 'POST', body: { source, destDir } }),
+    copy: (source, destDir) => request(`${base}/copy`, { method: 'POST', body: { source, destDir } }),
+    remove: (paths) => request(base, { method: 'DELETE', body: { paths: [].concat(paths) } }),
+    search: (path, q) => request(`${base}/search?path=${encodeURIComponent(path)}&q=${encodeURIComponent(q)}`),
+    upload: (dirPath, fileList, onProgress) =>
+      uploadTo(`/api${base}/upload?path=${encodeURIComponent(dirPath)}`, fileList, onProgress),
+    download: (filePath, filename) =>
+      downloadFrom(`/api${base}/download?path=${encodeURIComponent(filePath)}`, filename),
+  };
+}
+
+/** Upload com progresso — XHR porque fetch() ainda não reporta progresso de envio. */
+function uploadTo(url, fileList, onProgress) {
+  const formData = new FormData();
+  for (const f of fileList) formData.append('files', f);
+  const token = getToken();
+
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', url);
+    if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable && onProgress) onProgress(Math.round((e.loaded / e.total) * 100));
+    };
+    xhr.onload = () => {
+      let data = null;
+      try { data = JSON.parse(xhr.responseText); } catch { /* resposta não-JSON */ }
+      if (xhr.status >= 200 && xhr.status < 300) {
+        // Upload parcial ainda é sucesso HTTP; o chamador precisa saber
+        // que alguns arquivos falharam.
+        if (data?.errors?.length) reject(new Error(data.errors[0].error || 'Alguns arquivos falharam'));
+        else resolve(data);
+      } else {
+        reject(new Error(data?.error || `Upload falhou (${xhr.status})`));
+      }
+    };
+    xhr.onerror = () => reject(new Error('Upload falhou — verifique a conexão'));
+    xhr.ontimeout = () => reject(new Error('Upload demorou demais'));
+    xhr.send(formData);
+  });
+}
+
+async function downloadFrom(url, filename) {
+  const token = getToken();
+  const res = await fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+  if (!res.ok) {
+    const data = await res.json().catch(() => null);
+    throw new Error(data?.error || `Download falhou (${res.status})`);
+  }
+  const blob = await res.blob();
+  const objectUrl = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = objectUrl;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  // Revogar imediatamente cancela o download em alguns navegadores móveis.
+  setTimeout(() => URL.revokeObjectURL(objectUrl), 10000);
+}

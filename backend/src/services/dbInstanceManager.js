@@ -14,6 +14,7 @@ const path = require('path');
 const { getDB } = require('../db');
 const config = require('../config');
 const drivers = require('./dbDrivers');
+const workspaces = require('./workspaceManager');
 const { isPortAvailable } = require('./portFinder');
 
 class DBInstanceManager extends EventEmitter {
@@ -33,8 +34,21 @@ class DBInstanceManager extends EventEmitter {
     return this.driverFor(type).checkAvailable();
   }
 
+  /**
+   * Diretório de dados da instância.
+   *
+   * Depois do primeiro provisionamento, `data_directory` fica gravado no
+   * banco e é ele que manda — então renomear a instância não faz o painel
+   * perder os dados já criados.
+   *
+   * Para uma instância nova, o nome vira o nome da pasta. Passa por
+   * slugify porque o usuário pode usar espaço, ponto ou acento no nome, e
+   * nada disso deveria virar nome de diretório entregue a um binário.
+   */
   dataDirFor(inst) {
-    return inst.data_directory?.trim() || path.join(config.DATABASES_ROOT, inst.type, inst.name);
+    const saved = inst.data_directory?.trim();
+    if (saved) return saved;
+    return path.join(config.DATABASES_ROOT, inst.type, workspaces.slugify(inst.name, 'instancia'));
   }
 
   // ── Public API ────────────────────────────────────────────────────────

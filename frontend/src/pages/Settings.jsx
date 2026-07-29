@@ -71,14 +71,18 @@ export default function Settings() {
 
   const savePassword = async (e) => {
     e.preventDefault();
+    if (pwForm.next.length < 8) {
+      notify('A nova senha precisa ter ao menos 8 caracteres', 'error');
+      return;
+    }
     if (pwForm.next !== pwForm.confirm) {
       notify('As senhas não coincidem', 'error');
       return;
     }
     setSavingPw(true);
     try {
+      // A rota de troca de senha já marca a configuração como concluída.
       await api.changePassword(pwForm.current, pwForm.next);
-      await api.completeSetup().catch(() => {});
       markSetupDone();
       notify('Senha alterada com sucesso', 'success');
       setPwForm({ current: '', next: '', confirm: '' });
@@ -195,11 +199,11 @@ export default function Settings() {
           </div>
           <div>
             <Label htmlFor="next">Nova senha</Label>
-            <Input id="next" type="password" value={pwForm.next} onChange={(e) => setPwForm((f) => ({ ...f, next: e.target.value }))} minLength={6} required />
+            <Input id="next" type="password" value={pwForm.next} onChange={(e) => setPwForm((f) => ({ ...f, next: e.target.value }))} minLength={8} required />
           </div>
           <div>
             <Label htmlFor="confirm">Confirmar nova senha</Label>
-            <Input id="confirm" type="password" value={pwForm.confirm} onChange={(e) => setPwForm((f) => ({ ...f, confirm: e.target.value }))} minLength={6} required />
+            <Input id="confirm" type="password" value={pwForm.confirm} onChange={(e) => setPwForm((f) => ({ ...f, confirm: e.target.value }))} minLength={8} required />
           </div>
           <Button type="submit" variant="primary" loading={savingPw}>Alterar senha</Button>
         </form>

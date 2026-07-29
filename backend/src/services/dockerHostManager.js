@@ -3,6 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const { getDB } = require('../db');
+const config = require('../config');
 const { DockerEngine, parseDockerHost } = require('./dockerEngine');
 
 // Uma instância DockerEngine por host cadastrado, reaproveitada entre
@@ -11,11 +12,18 @@ const { DockerEngine, parseDockerHost } = require('./dockerEngine');
 const clients = new Map();
 
 function rowToClient(row) {
-  if (clients.has(row.id)) return clients.get(row.id);
+  const cached = clients.get(row.id);
+  // A conexão do host pode ter sido editada — reaproveitar um client
+  // apontando pro endereço antigo faria o painel falar com a máquina
+  // errada em silêncio.
+  if (cached && cached.connection === row.connection) return cached.engine;
+
   const conn = parseDockerHost(row.connection);
   const tls = row.tls_ca ? { ca: row.tls_ca, cert: row.tls_cert, key: row.tls_key } : null;
-  const engine = new DockerEngine({ ...conn, tls });
-  clients.set(row.id, engine);
+  // apiVersion vinha do default do client e ignorava a configuração —
+  // DOCKER_API_VERSION existia no config.js sem nenhum efeito (P19).
+  const engine = new DockerEngine({ ...conn, tls, apiVersion: config.DOCKER_API_VERSION });
+  clients.set(row.id, { connection: row.connection, engine });
   return engine;
 }
 
