@@ -319,6 +319,68 @@ class DockerServiceDriver extends EventEmitter {
     return svc;
   }
 
+  /**
+   * Garante que a imagem exista no host antes de criar o container.
+   *
+   * O painel não fazia isso: se a imagem não estivesse baixada, o
+   * /containers/create devolvia 404 "No such image" e o serviço
+   * simplesmente não subia — e, como o container nunca era criado, a aba
+   * Terminal também não abria (ela exige container_id). Para quem usa o
+   * painel justamente para NÃO mexer no terminal do host, era um beco sem
+   * saída.
+   *
+   * O download é reportado como log do serviço, então a pessoa vê o
+   * progresso em vez de encarar uma tela parada — imagem grande em conexão
+   * móvel leva minutos.
+   */
+  async _ensureImage(svc, engine) {
+    const image = String(svc.image || '').trim();
+    if (!image) throw new Error('Nenhuma imagem Docker definida para este serviço');
+
+    try {
+      await engine.inspectImage(image);
+      return; // já está no host
+    } catch (err) {
+      if (err.statusCode !== 404) throw err;
+    }
+
+    const emit = (message) => this.emit('log', {
+      serviceId: svc.id, level: 'info', message, ts: Date.now(),
+    });
+
+    emit(`Baixando a imagem ${image}... (pode demorar na primeira vez)\n`);
+    console.log(`[DOCKER] baixando imagem ${image} para "${svc.name}"`);
+
+    let lastReport = 0;
+    try {
+      await engine.pullImage(image, (progress) => {
+        // O Docker manda muitos eventos por segundo; sem esse limite o log
+        // do serviço vira uma enxurrada inútil.
+        const now = Date.now();
+        if (now - lastReport < 1500) return;
+        lastReport = now;
+        const status = progress?.status;
+        if (status && !/^(Downloading|Extracting|Waiting)$/.test(status)) emit(`  ${status}\n`);
+      });
+    } catch (err) {
+      throw new Error(
+        `Não foi possível baixar a imagem "${image}": ${err.message}. `
+        + 'Confira o nome da imagem e se o host Docker tem acesso à internet.',
+      );
+    }
+
+    // O pull do Docker responde 200 mesmo quando o nome não existe — o erro
+    // vem no corpo do stream. Confirmar por inspect evita seguir em frente
+    // e falhar depois com uma mensagem pior.
+    try {
+      await engine.inspectImage(image);
+    } catch {
+      throw new Error(`A imagem "${image}" não foi encontrada no registro. Confira o nome e a tag.`);
+    }
+
+    emit(`Imagem ${image} pronta.\n`);
+  }
+
   async _createContainer(svc, engine) {
     const db = getDB();
 
@@ -334,8 +396,30 @@ class DockerServiceDriver extends EventEmitter {
       }
     }
 
+    await this._ensureImage(svc, engine);
+
     const { spec, extraNetworks } = buildContainerSpec(svc);
-    const created = await engine.createContainer(spec, { name: `pterodroid_${svc.id}_${slugify(svc.name)}` });
+
+    let created;
+    try {
+      created = await engine.createContainer(spec, { name: `pterodroid_${svc.id}_${slugify(svc.name)}` });
+    } catch (err) {
+      // 409 = já existe um container com esse nome, normalmente sobra de um
+      // serviço removido enquanto o host estava fora do ar. Reaproveita em
+      // vez de travar o serviço para sempre.
+      if (err.statusCode === 409) {
+        const name = `pterodroid_${svc.id}_${slugify(svc.name)}`;
+        const existing = await engine.inspectContainer(name).catch(() => null);
+        if (existing?.Id) {
+          console.log(`[DOCKER] reaproveitando container existente ${name}`);
+          created = { Id: existing.Id };
+        } else {
+          throw err;
+        }
+      } else {
+        throw err;
+      }
+    }
 
     for (const net of extraNetworks) {
       await engine.connectNetwork(net, created.Id).catch((err) => {

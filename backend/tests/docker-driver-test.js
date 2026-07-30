@@ -45,7 +45,20 @@ function startMockEngine() {
         res.end(payload === undefined ? '' : JSON.stringify(payload));
       };
 
-      if (req.url.includes('/containers/create')) return send(201, { Id: 'container-abc123', Warnings: [] });
+      if (req.url.includes('/images/create')) {
+        calls.pulled = true;
+        res.writeHead(200);
+        return res.end('{"status":"Pulling from library/node"}\n{"status":"Download complete"}\n');
+      }
+      if (/\/images\/.+\/json/.test(req.url)) {
+        // Antes do pull a imagem não existe — é o cenário que quebrava o
+        // painel: o create devolvia 404 e o serviço nunca subia.
+        return calls.pulled ? send(200, { Id: 'sha256:img' }) : send(404, { message: 'No such image' });
+      }
+      if (req.url.includes('/containers/create')) {
+        if (!calls.pulled) return send(404, { message: 'No such image: node:20-alpine' });
+        return send(201, { Id: 'container-abc123', Warnings: [] });
+      }
       if (/\/containers\/[^/]+\/start/.test(req.url)) return send(204);
       if (/\/containers\/[^/]+\/stop/.test(req.url)) return send(204);
       if (/\/containers\/[^/]+\/restart/.test(req.url)) return send(204);
@@ -114,7 +127,16 @@ async function main() {
 
   console.log('\nCriação do container:');
   await driver.startService(serviceId);
-  const create = calls.find((c) => c.url.includes('/containers/create'));
+
+  // Regressão: o driver não baixava a imagem. Num host onde ela ainda não
+  // existia, o create devolvia 404 e o serviço nunca subia — e, sem
+  // container, a aba Terminal também não abria.
+  const pull = calls.find((c) => c.url.includes('/images/create'));
+  ok('baixa a imagem quando ela não está no host', !!pull, 'nenhum POST /images/create');
+  ok('envia a tag separada do nome (senão baixaria todas as tags)',
+    !!pull && /fromImage=node&tag=20-alpine/.test(pull.url), pull?.url);
+
+  const create = calls.find((c) => c.url.includes('/containers/create') && c.body);
   ok('POST /containers/create enviado', !!create);
   ok('imagem correta', create.body.Image === 'node:20-alpine');
   ok('env repassado', create.body.Env.includes('TOKEN=abc'));

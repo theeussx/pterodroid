@@ -222,11 +222,52 @@ class DockerEngine extends EventEmitter {
 
   // ── Imagens ─────────────────────────────────────────────────────────
   async listImages() { return this.client.request('GET', '/images/json'); }
-  async pullImage(fromImage, onProgress) {
-    const res = await this.client.requestStream('POST', '/images/create', { query: { fromImage } });
+  async inspectImage(nameOrId) { return this.client.request('GET', `/images/${encodeURIComponent(nameOrId)}/json`); }
+
+  /**
+   * Baixa uma imagem.
+   *
+   * A tag vai num parâmetro SEPARADO de propósito: se `fromImage` incluir
+   * `:tag`, o Docker ignora a tag e baixa **todas** as tags do repositório
+   * — o que em `node` seriam dezenas de gigabytes. Separar aqui evita esse
+   * pé na jaula. Referência com digest (`imagem@sha256:...`) e registro com
+   * porta (`meuhost:5000/app:1.0`) também são tratados.
+   */
+  async pullImage(reference, onProgress) {
+    const ref = String(reference || '').trim();
+    if (!ref) throw new DockerEngineError('Nenhuma imagem informada');
+
+    let fromImage = ref;
+    let tag;
+
+    if (ref.includes('@')) {
+      // digest: o Docker espera o digest inteiro no parâmetro `tag`
+      const [repo, digest] = ref.split('@');
+      fromImage = repo;
+      tag = digest;
+    } else {
+      // Só é tag se o `:` vier DEPOIS da última `/` — senão é a porta do
+      // registro (ex.: "localhost:5000/app").
+      const lastSlash = ref.lastIndexOf('/');
+      const lastColon = ref.lastIndexOf(':');
+      if (lastColon > lastSlash) {
+        fromImage = ref.slice(0, lastColon);
+        tag = ref.slice(lastColon + 1);
+      } else {
+        tag = 'latest';
+      }
+    }
+
+    const res = await this.client.requestStream('POST', '/images/create', { query: { fromImage, tag } });
     return new Promise((resolve, reject) => {
-      parseNDJSON(res, (obj) => onProgress && onProgress(obj), () => {});
-      res.on('end', resolve);
+      let failure = null;
+      parseNDJSON(res, (obj) => {
+        // O Docker responde 200 e reporta a falha DENTRO do stream; sem
+        // olhar isto, um nome de imagem errado parecia sucesso.
+        if (obj?.error) failure = obj.error;
+        if (onProgress) onProgress(obj);
+      }, () => {});
+      res.on('end', () => (failure ? reject(new DockerEngineError(String(failure))) : resolve()));
       res.on('error', reject);
     });
   }
