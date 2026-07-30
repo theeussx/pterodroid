@@ -51,7 +51,7 @@ const handle = (fn) => async (req, res) => {
 router.get('/', handle((req) => ({ sessions: terminals.listFor(loadService(req).id) })));
 
 // POST /api/services/:id/terminal — abre uma sessão
-router.post('/', handle((req) => {
+router.post('/', handle(async (req) => {
   const service = loadService(req);
 
   if (service.runtime_type === 'docker') {
@@ -62,6 +62,34 @@ router.post('/', handle((req) => {
       );
     }
     const engine = hosts.engineFor(service.docker_host_id);
+
+    // `docker exec` só funciona em container RODANDO. Sem esta checagem a
+    // sessão abria normalmente e só quebrava quando a pessoa digitava o
+    // primeiro comando — com um erro cru do Docker, que não explica que o
+    // problema é o serviço estar parado.
+    let info;
+    try {
+      info = await engine.inspectContainer(service.container_id);
+    } catch (err) {
+      if (err.statusCode === 404) {
+        throw Object.assign(
+          new Error('O container deste serviço não existe mais no host. Inicie o serviço para recriá-lo.'),
+          { status: 409 },
+        );
+      }
+      throw Object.assign(
+        new Error(`Não foi possível falar com o host Docker: ${err.message}`),
+        { status: 502 },
+      );
+    }
+
+    if (!info.State?.Running) {
+      throw Object.assign(
+        new Error('O container está parado — inicie o serviço para abrir o terminal.'),
+        { status: 409 },
+      );
+    }
+
     const session = terminals.create({
       serviceId: service.id,
       serviceName: service.name,
