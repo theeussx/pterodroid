@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import {
   FolderPlus, FilePlus, Upload, Search, X, Trash2, Copy, Move,
   Download, RefreshCw, ListChecks, Pencil, CheckSquare, AlertCircle,
+  FileArchive, PackageOpen,
 } from 'lucide-react';
 import Card from '../Card';
 import Button from '../Button';
@@ -49,7 +50,10 @@ export default function FileBrowser({
   const [renameValue, setRenameValue] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState(null);
+  const [extractTarget, setExtractTarget] = useState(null); // entrada .zip aguardando confirmação
   const { notify } = useToast();
+
+  const isArchive = (entry) => entry.type === 'file' && /\.zip$/i.test(entry.name);
 
   const report = ({ ok, error: message }, successMessage) => {
     if (ok) { if (successMessage) notify(successMessage, 'success'); }
@@ -60,8 +64,42 @@ export default function FileBrowser({
   const openEntry = (entry) => {
     const full = joinCurrent(entry.name);
     if (entry.type === 'dir') { setPath(full); setSearchResults(null); setSearchQuery(''); return; }
+    // Clicar num .zip oferece extrair — que é o que se quer na maioria das
+    // vezes. Baixar continua disponível pela seleção.
+    if (isArchive(entry)) { setExtractTarget(entry); return; }
     if (isEditable(entry.ext)) { setEditingPath(full); return; }
     adapter.download(full, entry.name).catch((e) => notify(e.message, 'error'));
+  };
+
+  const handleCompress = async () => {
+    const targets = selectedPaths();
+    const result = await run(() => adapter.compress(targets));
+    if (!result.ok) return notify(result.error, 'error');
+    notify(`Compactado em ${result.result.name}`, 'success');
+    clearSelection();
+  };
+
+  const handleExtract = async (overwrite = false) => {
+    if (!extractTarget) return;
+    const full = joinCurrent(extractTarget.name);
+    const result = await run(() => adapter.extract(full, undefined, overwrite));
+    if (!result.ok) { notify(result.error, 'error'); setExtractTarget(null); return; }
+
+    const { extracted, skipped = [], destDir } = result.result;
+    if (extracted === 0 && skipped.some((s) => /já existe/i.test(s.reason))) {
+      // Nada extraído só porque já existia: oferece sobrescrever em vez de
+      // deixar o usuário achar que falhou sem motivo.
+      notify('Os arquivos já existem nessa pasta. Clique em extrair de novo para substituir.', 'info');
+      setExtractTarget({ ...extractTarget, _askOverwrite: true });
+      return;
+    }
+    notify(
+      skipped.length
+        ? `${extracted} arquivo(s) extraído(s) em ${destDir} — ${skipped.length} ignorado(s) por segurança`
+        : `${extracted} arquivo(s) extraído(s) em ${destDir}`,
+      skipped.length ? 'info' : 'success',
+    );
+    setExtractTarget(null);
   };
 
   const handleCreate = async (kind, name) => {
@@ -112,12 +150,14 @@ export default function FileBrowser({
   };
 
   const handleDownloadSelected = async () => {
-    const files = entries.filter((e) => selected.has(e.name) && e.type === 'file');
-    if (files.length === 0) return notify('Selecione ao menos um arquivo (pastas não podem ser baixadas)', 'error');
+    // Pastas agora também podem ser baixadas: o backend as devolve como .zip.
+    const files = entries.filter((e) => selected.has(e.name));
+    if (files.length === 0) return notify('Selecione ao menos um item', 'error');
     for (const entry of files) {
       // Sequencial de propósito: disparar N downloads de uma vez faz o
       // navegador bloquear os seguintes como pop-up.
-      await adapter.download(joinCurrent(entry.name), entry.name).catch((e) => notify(e.message, 'error'));
+      const nome = entry.type === 'dir' ? `${entry.name}.zip` : entry.name;
+      await adapter.download(joinCurrent(entry.name), nome).catch((e) => notify(e.message, 'error'));
     }
   };
 
@@ -231,6 +271,9 @@ export default function FileBrowser({
                   <button onClick={handleDownloadSelected} className="p-1.5 text-ink-dim hover:text-ink" title="Baixar">
                     <Download size={15} />
                   </button>
+                  <button onClick={handleCompress} className="p-1.5 text-ink-dim hover:text-ink" title="Compactar em .zip">
+                    <FileArchive size={15} />
+                  </button>
                   <button onClick={() => setMoveMode('copy')} className="p-1.5 text-ink-dim hover:text-ink" title="Copiar">
                     <Copy size={15} />
                   </button>
@@ -336,6 +379,25 @@ export default function FileBrowser({
           <Input autoFocus value={renameValue} onChange={(e) => setRenameValue(e.target.value)} />
         </form>
       </Modal>
+
+      <ConfirmDialog
+        open={!!extractTarget}
+        onClose={() => setExtractTarget(null)}
+        onConfirm={() => handleExtract(!!extractTarget?._askOverwrite)}
+        title="Extrair arquivo"
+        message={extractTarget?._askOverwrite
+          ? `Substituir os arquivos já existentes ao extrair "${extractTarget?.name}"?`
+          : `Extrair "${extractTarget?.name}" numa pasta com o mesmo nome?`}
+        confirmLabel={extractTarget?._askOverwrite ? 'Substituir' : 'Extrair'}
+        danger={!!extractTarget?._askOverwrite}
+        loading={busy}
+      >
+        <p className="text-xs text-ink-faint mt-2 flex items-start gap-1.5">
+          <PackageOpen size={13} className="shrink-0 mt-0.5" />
+          Entradas que tentem escapar da pasta de destino, e links simbólicos,
+          são ignorados automaticamente.
+        </p>
+      </ConfirmDialog>
 
       <ConfirmDialog
         open={deleteConfirm}

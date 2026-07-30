@@ -139,6 +139,12 @@ function fileApi(prefix) {
       uploadTo(`/api${base}/upload?path=${encodeURIComponent(dirPath)}`, fileList, onProgress),
     download: (filePath, filename) =>
       downloadFrom(`/api${base}/download?path=${encodeURIComponent(filePath)}`, filename),
+    // Compactar / descompactar. A saída do compress é um arquivo novo na
+    // mesma pasta; o extract devolve o que foi (e o que não foi) extraído.
+    compress: (paths, name) => request(`${base}/compress`, { method: 'POST', body: { paths, name } }),
+    peekArchive: (filePath) => request(`${base}/archive/peek?path=${encodeURIComponent(filePath)}`),
+    extract: (filePath, destDir, overwrite = false) =>
+      request(`${base}/extract`, { method: 'POST', body: { path: filePath, destDir, overwrite } }),
   };
 }
 

@@ -19,6 +19,7 @@ const path = require('path');
 const crypto = require('crypto');
 const multer = require('multer');
 const config = require('../config');
+const archives = require('../services/archiveManager');
 
 const UPLOAD_TMP_DIR = '.pterodroid-tmp';
 
@@ -136,17 +137,95 @@ function createFileRoutes({ resolveContext, onAudit, label = 'files' }) {
 
   // ── Download ────────────────────────────────────────────────────────
   router.get('/download', handle((req, res, fm) => {
-    const target = fm.resolveSafePath(req.query.path || '', { mustExist: true });
+    const requested = req.query.path || '';
+    const target = fm.resolveSafePath(requested, { mustExist: true });
     const st = fm.statOrNotFound(target);
+
+    // Pasta agora vira um .zip na hora, em vez de ser recusada: baixar
+    // arquivo por arquivo era a única saída antes.
     if (st.isDirectory()) {
-      const err = new Error('Não é possível baixar uma pasta — baixe os arquivos individualmente');
-      err.status = 400;
-      throw err;
+      const zip = archives.createZip(fm, [requested]);
+      const fileName = `${path.basename(target) || 'arquivos'}.zip`;
+      audit(req, 'download', requested, `pasta compactada (${zip.length} bytes)`);
+      res.setHeader('Content-Type', 'application/zip');
+      res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(fileName)}"`);
+      res.setHeader('Content-Length', String(zip.length));
+      res.end(zip);
+      return undefined;
     }
-    audit(req, 'download', req.query.path);
+
+    audit(req, 'download', requested);
     return new Promise((resolve, reject) => {
       res.download(target, path.basename(target), (err) => (err && !res.headersSent ? reject(err) : resolve()));
     });
+  }));
+
+  // ── Compactar / descompactar ────────────────────────────────────────
+
+  // POST /compress  { paths: [...], name?: "pacote.zip" }
+  router.post('/compress', handle((req, res, fm) => {
+    const body = req.body || {};
+    const targets = Array.isArray(body.paths) ? body.paths : [body.path].filter(Boolean);
+    if (targets.length === 0) {
+      throw Object.assign(new Error('Selecione ao menos um item para compactar'), { status: 400 });
+    }
+
+    // O .zip é criado NA MESMA pasta dos itens selecionados, que é o que a
+    // pessoa espera ao clicar em "compactar" num gerenciador de arquivos.
+    const firstDir = path.posix.dirname(String(targets[0]).replace(/^\/+/, '')) || '';
+    const destDir = firstDir === '.' ? '' : firstDir;
+
+    const requested = body.name
+      ? fm.sanitizeName(String(body.name))
+      : `${path.posix.basename(String(targets[0])) || 'arquivos'}.zip`;
+    const withExt = /\.zip$/i.test(requested) ? requested : `${requested}.zip`;
+
+    const absDestDir = fm.resolveSafePath(destDir);
+    const finalName = fm.uniqueName(absDestDir, withExt);
+
+    const zip = archives.createZip(fm, targets);
+    // Escrita atômica, igual ao resto do painel.
+    fm.atomicWrite(path.join(absDestDir, finalName), zip);
+
+    audit(req, 'compress', path.posix.join(destDir, finalName), `${targets.length} item(ns), ${zip.length} bytes`);
+    return { ok: true, name: finalName, path: path.posix.join(destDir, finalName), size: zip.length };
+  }));
+
+  // GET /archive/peek?path=  — lista o conteúdo sem extrair
+  router.get('/archive/peek', handle((req, res, fm) => {
+    const target = fm.resolveSafePath(req.query.path || '', { mustExist: true });
+    if (!archives.isSupportedArchive(target)) {
+      throw Object.assign(new Error('Formato não suportado — no momento o painel abre apenas .zip'), { status: 400 });
+    }
+    return archives.inspectZip(fs.readFileSync(target));
+  }));
+
+  // POST /extract  { path, destDir?, overwrite? }
+  router.post('/extract', handle((req, res, fm) => {
+    const body = req.body || {};
+    const source = body.path;
+    if (!source) throw Object.assign(new Error('Informe o arquivo a extrair'), { status: 400 });
+
+    const absSource = fm.resolveSafePath(source, { mustExist: true });
+    if (!archives.isSupportedArchive(absSource)) {
+      throw Object.assign(new Error('Formato não suportado — no momento o painel abre apenas .zip'), { status: 400 });
+    }
+
+    // Sem destino informado, extrai numa pasta com o nome do arquivo (sem
+    // a extensão) — evita espalhar dezenas de arquivos soltos na pasta atual.
+    let destDir = body.destDir;
+    if (destDir === undefined || destDir === null) {
+      const parent = path.posix.dirname(String(source).replace(/^\/+/, ''));
+      const stem = path.posix.basename(String(source)).replace(/\.zip$/i, '');
+      destDir = parent === '.' ? stem : path.posix.join(parent, stem);
+    }
+
+    const result = archives.extractZip(fm, fs.readFileSync(absSource), destDir, {
+      overwrite: body.overwrite === true,
+    });
+
+    audit(req, 'extract', source, `→ ${destDir || '/'} (${result.extracted} arquivo(s))`);
+    return { ok: result.skipped.length === 0, destDir, ...result };
   }));
 
   // ── Upload ──────────────────────────────────────────────────────────

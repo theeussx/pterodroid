@@ -26,6 +26,7 @@ run "Unidade — cliente da Docker Engine (API simulada)"  node tests/docker-eng
 run "Integração — driver Docker (engine simulada)"       node tests/docker-driver-test.js
 run "Integração — segurança da autenticação"             node tests/auth-security-test.js
 run "Integração — segurança das instâncias de banco"    node tests/database-security-test.js
+run "Segurança — compactar/descompactar (Zip Slip)"      node tests/archive-test.js
 run "Integração — terminal do serviço"                   node tests/terminal-test.js
 run "Integração — API HTTP completa"                     bash tests/smoke-test.sh
 
