@@ -12,6 +12,7 @@ const dbm = require('../services/dbInstanceManager');
 const tm = require('../services/tunnelManager');
 const ntm = require('../services/namedTunnelManager');
 const terminals = require('../services/terminalManager');
+const lazyIo = require('./lazyIo');
 
 const SNAPSHOT_INTERVAL_MS = 2000;
 
@@ -19,6 +20,7 @@ function setupSockets(httpServer) {
   const io = new Server(httpServer, {
     cors: { origin: '*' }, // LAN-only personal panel; tighten if ever exposed publicly
   });
+  lazyIo.setIo(io);
 
   // ── Auth ────────────────────────────────────────────────────────────
   io.use((socket, next) => {

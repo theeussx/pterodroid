@@ -1,17 +1,16 @@
 'use strict';
 /**
  * serviceWorkspace — decide QUAL pasta um serviço usa e o que precisa
- * existir dentro dela antes do primeiro start.
+ * existir dentro dela ANTES do setup/start.
  *
- * Fica propositalmente fino: toda a resolução de caminho é delegada ao
- * workspaceManager (fonte única de verdade, Etapa 2). Aqui mora só a
- * política específica de serviço: montar o bind padrão de container e
- * semear um projeto Node inicial quando faz sentido.
+ * Responsabilidade: preparar a ESTRUTURA de diretórios e o comando
+ * inicial (heurístico). O bootstrap pesado (git clone, npm install,
+ * build TypeScript) roda pelo setupManager.js, invocado por rota/trigger
+ * explícito ou depois da criação, com estado observável.
  */
 const fs = require('fs');
 const path = require('path');
 const workspaces = require('./workspaceManager');
-const terminals = require('./terminalManager');
 
 function parseJSONArray(raw) {
   try {
@@ -23,19 +22,17 @@ function parseJSONArray(raw) {
 }
 
 /**
- * Comando padrão de um container quando o usuário não informou nenhum.
+ * Comando de container quando o usuário não informou nenhum. Agora fica
+ * de: detecta dist/index.js (TS compilado) → index.js → server.js → erro.
  *
- * Mudança importante em relação à versão anterior: NÃO roda mais
- * `npm install` no start do container. Aquilo transformava uma falha de
- * rede momentânea em exit code != 0, que a RestartPolicy do Docker
- * traduzia num loop de reinicialização — exatamente o que a Etapa 3 pede
- * pra eliminar. Dependências se instalam uma vez, na criação do
- * workspace, não a cada boot do container.
+ * NOTA: esta heurística é substituída em tempo de setup por
+ * setupManager.resolveStartupCommand, que considera package.json, scripts
+ * e o resultado real do build. O valor daqui é apenas um fallback seguro
+ * para quando o container for iniciado sem setup ter rodado.
  */
 function inferDockerCommand(image, command) {
   const trimmed = (command || '').trim();
   if (trimmed) {
-    // `bash` não existe em imagens alpine/slim; `sh` existe em praticamente todas.
     return trimmed.replace(/^bash\s+-lc\b/, 'sh -lc').replace(/^bash\s+-c\b/, 'sh -c');
   }
 
@@ -47,13 +44,11 @@ function inferDockerCommand(image, command) {
 }
 
 /**
- * Semeia um projeto Node mínimo e utilizável: package.json, index.js que
- * sobe um servidor HTTP e um README. Só cria o que ainda não existe, então
- * é seguro chamar sobre uma pasta que o usuário já povoou.
+ * Semeia um projeto Node mínimo e utilizável.
  *
- * Sem `npm install` aqui: era `execFileSync` no meio do request HTTP, o
- * que travava o event loop inteiro do painel por minutos num aparelho
- * Android (P15). O starter não tem dependências, então não precisa.
+ * Não roda `npm install` aqui: o starter não tem dependências e não
+ * precisa travar o request HTTP. Instalação de dependências reais é
+ * tarefa do setupManager.
  */
 function bootstrapNodeProject(rootDir, name) {
   if (!rootDir) return false;
@@ -70,7 +65,7 @@ function bootstrapNodeProject(rootDir, name) {
       scripts: {
         start: 'node index.js',
         build: 'tsc',
-        'start:prod': 'node dist/index.js'
+        'start:prod': 'node dist/index.js',
       },
     };
     fs.writeFileSync(packagePath, `${JSON.stringify(packageJson, null, 2)}\n`);
@@ -95,7 +90,6 @@ function bootstrapNodeProject(rootDir, name) {
     ].join('\n'));
   }
 
-  // Seed a minimal TypeScript source and tsconfig so users can opt into TS.
   const tsConfigPath = path.join(rootDir, 'tsconfig.json');
   if (!fs.existsSync(tsConfigPath)) {
     fs.writeFileSync(tsConfigPath, JSON.stringify({
@@ -106,9 +100,9 @@ function bootstrapNodeProject(rootDir, name) {
         esModuleInterop: true,
         forceConsistentCasingInFileNames: true,
         strict: true,
-        skipLibCheck: true
+        skipLibCheck: true,
       },
-      include: ["src/**/*.ts"]
+      include: ['src/**/*.ts'],
     }, null, 2) + '\n');
   }
 
@@ -118,18 +112,18 @@ function bootstrapNodeProject(rootDir, name) {
   if (!fs.existsSync(tsIndexPath)) {
     fs.writeFileSync(tsIndexPath, [
       "import http from 'http';",
-      "",
-      "const port = Number(process.env.PORT || 3000);",
-      "",
-      "const server = http.createServer((req, res) => {",
+      '',
+      'const port = Number(process.env.PORT || 3000);',
+      '',
+      'const server = http.createServer((req, res) => {',
       "  res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });",
       "  res.end('Pterodroid: seu serviço TypeScript está no ar\\n');",
       "});",
-      "",
-      "server.listen(port, () => {",
+      '',
+      'server.listen(port, () => {',
       "  console.log('Servidor TS ouvindo na porta ' + port);",
       "});",
-      "",
+      '',
     ].join('\n'));
   }
 
@@ -141,7 +135,7 @@ function bootstrapNodeProject(rootDir, name) {
       'Projeto criado automaticamente pelo Pterodroid.',
       '',
       'Edite os arquivos por esta pasta ou pela aba **Arquivos** do painel.',
-      'Se adicionar dependências, rode `npm install` pelo terminal do serviço.',
+      'Use o botão **Executar Setup** para clonar repositórios, instalar dependências e iniciar.',
       '',
     ].join('\n'));
   }
@@ -150,21 +144,26 @@ function bootstrapNodeProject(rootDir, name) {
 }
 
 /**
- * Resolve tudo que depende do workspace na criação de um serviço.
- * Devolve o diretório final, se ele foi criado pelo painel (e portanto
- * pode ser removido junto com o serviço), os volumes e o comando.
+ * Resolve o workspace e o comando inicial heurístico.
+ *
+ * IMPORTANTE: esta função NÃO faz mais clone/install em background "fogo e
+ * esquecimento". Isso era a fonte principal de bugs — rodava sem
+ * observabilidade, engolia erros (`|| true`) e não conversava com o estado
+ * do serviço. O bootstrap pesado agora é responsabilidade do
+ * setupManager, que é acionado sob demanda (POST /setup) e devolve
+ * progresso em tempo real.
  */
 function resolveServiceWorkspace({ name, runtime_type, working_directory, volumes, image, command,
   git_repo, git_branch, git_username, git_token,
-  main_file, node_packages, unnode_packages, node_args, auto_update = 0, allow_file_uploads = 0 }) {
+  main_file, node_packages, unnode_packages, node_args, auto_update = 0, allow_file_uploads = 0,
+  startup_command }) {
   const isDocker = runtime_type === 'docker';
+  const hasGit = !!(git_repo && String(git_repo).trim());
 
   let finalWorkingDir = workspaces.normalize(working_directory);
   let scaffolded = 0;
 
   if (!finalWorkingDir) {
-    // Sem diretório informado: o painel cria um exclusivo pro serviço e
-    // passa a ser dono dele (pode apagar depois, se o usuário pedir).
     finalWorkingDir = workspaces.createForService(name);
     scaffolded = 1;
   } else {
@@ -175,8 +174,6 @@ function resolveServiceWorkspace({ name, runtime_type, working_directory, volume
   let nextCommand = (command || '').trim();
 
   if (isDocker) {
-    // O workspace do serviço é sempre montado em /app — é isso que faz
-    // "editar arquivo no painel" refletir dentro do container.
     const arr = parseJSONArray(volumes);
     const source = workspaces.toHostPath(finalWorkingDir);
     const hasAppMount = arr.some((v) => v?.target === '/app');
@@ -185,100 +182,52 @@ function resolveServiceWorkspace({ name, runtime_type, working_directory, volume
 
     if (!nextCommand) nextCommand = inferDockerCommand(image, nextCommand);
 
+    // Só semeia o starter node se NÃO há repositório (com repo o clone
+    // trará os arquivos do usuário; semear antes só atrapalha).
     const imageName = String(image || '').toLowerCase();
-    if (imageName.includes('node') || imageName.includes('npm')) {
+    if ((imageName.includes('node') || imageName.includes('npm')) && !hasGit) {
       bootstrapNodeProject(finalWorkingDir, name);
     }
+  } else if (!hasGit) {
+    // Processo local sem repo: garante um starter mínimo.
+    bootstrapNodeProject(finalWorkingDir, name);
   }
 
-  // If user provided a main file, prefer it for the default command.
-  if (main_file && main_file.trim()) {
+  const args = (node_args || '').trim();
+  const shellQuote = (inner) => `sh -c '${inner}'`;
+  const joinArgs = (...parts) => parts.filter(Boolean).join(' ');
+
+  // startup_command tem prioridade absoluta, se fornecido.
+  const sc = (startup_command || '').trim();
+  if (sc) {
+    const inner = isDocker
+      ? joinArgs('cd /app &&', sc, args)
+      : joinArgs(sc, args);
+    nextCommand = shellQuote(inner);
+  } else if (main_file && main_file.trim()) {
     const mf = main_file.trim();
     const mfRel = mf.replace(/^\/+/, '');
     const looksLikeFullCommand = /\s/.test(mfRel);
-    if (isDocker) {
-      if (looksLikeFullCommand) {
-        nextCommand = `sh -c 'cd /app && ${mfRel} ${node_args || ''}'`;
-      } else if (mf.endsWith('.js')) {
-        nextCommand = `sh -c 'cd /app && node "${mfRel}" ${node_args || ''}'`;
-      } else if (mf.endsWith('.ts')) {
-        nextCommand = `sh -c 'cd /app && ts-node --esm "${mfRel}" ${node_args || ''}'`;
-      } else {
-        nextCommand = `sh -c 'cd /app && node "${mfRel}" ${node_args || ''}'`;
-      }
+    let inner;
+    if (looksLikeFullCommand) {
+      inner = isDocker
+        ? joinArgs('cd /app &&', mfRel, args)
+        : joinArgs(mfRel, args);
+    } else if (mf.endsWith('.js')) {
+      inner = isDocker
+        ? joinArgs('cd /app && node', `"${mfRel}"`, args)
+        : joinArgs('node', `"${mfRel}"`, args);
+    } else if (mf.endsWith('.ts')) {
+      inner = isDocker
+        ? joinArgs('cd /app && ts-node --esm', `"${mfRel}"`, args)
+        : joinArgs('ts-node --esm', `"${mfRel}"`, args);
     } else {
-      // For process runtime we spawn the command with cwd already set to the
-      // service workspace on the host, so don't cd into /app — just run the
-      // file path relative to that cwd.
-      if (looksLikeFullCommand) {
-        nextCommand = `sh -c '${mfRel} ${node_args || ''}'`;
-      } else if (mf.endsWith('.js')) {
-        nextCommand = `sh -c 'node "${mfRel}" ${node_args || ''}'`;
-      } else if (mf.endsWith('.ts')) {
-        nextCommand = `sh -c 'ts-node --esm "${mfRel}" ${node_args || ''}'`;
-      } else {
-        nextCommand = `sh -c 'node "${mfRel}" ${node_args || ''}'`;
-      }
+      inner = isDocker
+        ? joinArgs('cd /app && node', `"${mfRel}"`, args)
+        : joinArgs('node', `"${mfRel}"`, args);
     }
+    nextCommand = shellQuote(inner);
   }
-
-  // Background tasks: git clone/pull and npm installs/uninstalls. Use terminal sessions so we don't block the HTTP handler.
-  (async () => {
-    try {
-      // Ensure workspace dir exists
-      workspaces.ensureDir(finalWorkingDir);
-
-      // Git clone or pull
-      if (git_repo && git_repo.trim()) {
-        const repo = git_repo.trim();
-        const gitDir = path.join(finalWorkingDir, '.git');
-        // Build clone url with credentials if provided
-        let cloneUrl = repo;
-        if (git_username && git_token) {
-          try {
-            const u = new URL(repo);
-            u.username = encodeURIComponent(String(git_username));
-            u.password = encodeURIComponent(String(git_token));
-            cloneUrl = u.toString();
-          } catch {
-            // ignore, use raw repo
-          }
-        }
-
-        const session = terminals.create({ serviceId: null, serviceName: name, cwd: finalWorkingDir });
-        if (fs.existsSync(gitDir)) {
-          if (auto_update) {
-            session.run('git pull --rebase || true');
-          }
-        } else {
-          // Clone into current dir
-          session.run(`git clone ${cloneUrl} . || true`);
-        }
-        if (git_branch && git_branch.trim()) {
-          session.run(`git checkout ${git_branch.trim()} || true`);
-        }
-      }
-
-      // Node package installs/uninstalls
-      if (node_packages && node_packages.trim()) {
-        const session = terminals.create({ serviceId: null, serviceName: name, cwd: finalWorkingDir });
-        session.run(`/usr/local/bin/npm install ${node_packages}`);
-      }
-      if (unnode_packages && unnode_packages.trim()) {
-        const session = terminals.create({ serviceId: null, serviceName: name, cwd: finalWorkingDir });
-        session.run(`/usr/local/bin/npm uninstall ${unnode_packages}`);
-      }
-
-      // If package.json exists and there is no explicit node_packages, run a plain install to restore deps
-      const pkg = path.join(finalWorkingDir, 'package.json');
-      if (fs.existsSync(pkg) && (!node_packages || !node_packages.trim())) {
-        const session = terminals.create({ serviceId: null, serviceName: name, cwd: finalWorkingDir });
-        session.run('/usr/local/bin/npm install');
-      }
-    } catch (e) {
-      console.error('[serviceWorkspace] background setup failed:', e.message);
-    }
-  })();
 
   return { finalWorkingDir, scaffolded, volumes: nextVolumes, command: nextCommand };
 }
@@ -287,6 +236,5 @@ module.exports = {
   resolveServiceWorkspace,
   inferDockerCommand,
   bootstrapNodeProject,
-  // Reexportado pra não quebrar quem já importava daqui.
   normalizeWorkingDirectory: workspaces.normalize,
 };
