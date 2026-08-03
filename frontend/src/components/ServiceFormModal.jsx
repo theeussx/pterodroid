@@ -21,6 +21,7 @@ const EMPTY = {
   runtime_type: 'process', docker_host_id: '', image: '', cpu_limit: '', memory_limit: '',
   // initial config
   git_repo: '', git_branch: '', auto_update: false, git_username: '', git_token: '',
+  startup_command: '',
   node_packages: '', unnode_packages: '', main_file: '', node_args: '', allow_file_uploads: false,
 };
 
@@ -249,7 +250,7 @@ export default function ServiceFormModal({ open, onClose, onSubmit, initial }) {
           <>
             <div>
               <Label htmlFor="image">Imagem Docker</Label>
-              <MonoInput id="image" value={form.image} onChange={set('image')} placeholder="redis:7-alpine" required disabled={locked} />
+              <MonoInput id="image" value={form.image} onChange={set('image')} placeholder="node:20-alpine, redis:7-alpine" required disabled={locked} />
               {locked && <p className="text-xs text-ink-faint mt-1">Container já criado — pra trocar a imagem, remova e crie o serviço de novo.</p>}
             </div>
             <div>
@@ -260,44 +261,69 @@ export default function ServiceFormModal({ open, onClose, onSubmit, initial }) {
               </p>
             </div>
           </>
-        ) : (
+        ) : null}
+
+        {/* Configuração inicial — serve tanto para processo local quanto para container /app */}
+        <div className="border border-line-soft rounded-lg p-3 space-y-3 bg-raised/50">
           <div>
-            <Label htmlFor="command">Comando de inicialização</Label>
-            <MonoInput id="command" value={form.command} onChange={set('command')} placeholder="node index.js" required />
-              <div>
-                <Label htmlFor="git_repo">Repositório Git (opcional)</Label>
-                <Input id="git_repo" value={form.git_repo} onChange={set('git_repo')} placeholder="https://github.com/usuario/repo.git" />
-                <div className="grid sm:grid-cols-3 gap-2 mt-2">
-                  <Input id="git_branch" value={form.git_branch} onChange={set('git_branch')} placeholder="branch (ex: main)" />
-                  <Input id="git_username" value={form.git_username} onChange={set('git_username')} placeholder="git user (opcional)" />
-                  <Input id="git_token" value={form.git_token} onChange={set('git_token')} placeholder="git token (opcional)" />
-                </div>
-                <div className="mt-2">
-                  <Toggle checked={form.auto_update} onChange={(v) => setForm((f) => ({ ...f, auto_update: v }))} label="Auto Update (git pull na inicialização)" />
-                </div>
-              </div>
-              <div>
-                <Label htmlFor="main_file">Arquivo Principal</Label>
-                <MonoInput id="main_file" value={form.main_file} onChange={set('main_file')} placeholder="index.js ou src/index.ts" />
-                <p className="text-xs text-ink-faint mt-1">Pode ser .js ou .ts — o painel tentará usar `node` ou `ts-node` conforme extensão.</p>
-              </div>
-              <div>
-                <Label htmlFor="node_packages">Adicionar Pacotes NodeJS (separar por espaço)</Label>
-                <MonoInput id="node_packages" value={form.node_packages} onChange={set('node_packages')} placeholder="discord.js express" />
-              </div>
-              <div>
-                <Label htmlFor="unnode_packages">Remover Pacotes NodeJS (separar por espaço)</Label>
-                <MonoInput id="unnode_packages" value={form.unnode_packages} onChange={set('unnode_packages')} placeholder="discord.js" />
-              </div>
-              <div>
-                <Label htmlFor="node_args">Argumentos adicionais</Label>
-                <MonoInput id="node_args" value={form.node_args} onChange={set('node_args')} placeholder="--inspect" />
-              </div>
-              <div>
-                <Toggle checked={form.allow_file_uploads} onChange={(v) => setForm((f) => ({ ...f, allow_file_uploads: v }))} label="Permitir arquivos enviados pelo usuário" />
-              </div>
+            <h3 className="text-sm font-semibold text-ink">Configuração inicial</h3>
+            <p className="text-xs text-ink-faint">
+              Preencha o repositório Git e/ou pacotes para o painel clonar, instalar dependências e iniciar o serviço automaticamente.
+            </p>
           </div>
-        )}
+
+          <div>
+            <Label htmlFor="startup_command">Comando de Inicialização (Startup Command)</Label>
+            <MonoInput
+              id="startup_command"
+              value={form.startup_command}
+              onChange={set('startup_command')}
+              placeholder="ex: npm start | npm run dev | node index.js | bun run start | python main.py"
+            />
+            <p className="text-xs text-ink-faint mt-1">
+              Tem prioridade sobre qualquer inferência automática. Se deixar vazio, o painel tenta descobrir (package.json start, dist/index.js, index.js…).
+            </p>
+          </div>
+
+          <div>
+            <Label htmlFor="git_repo">Repositório Git (opcional)</Label>
+            <Input id="git_repo" value={form.git_repo} onChange={set('git_repo')} placeholder="https://github.com/usuario/repo.git" />
+            <div className="grid sm:grid-cols-3 gap-2 mt-2">
+              <Input id="git_branch" value={form.git_branch} onChange={set('git_branch')} placeholder="branch (ex: main)" />
+              <Input id="git_username" value={form.git_username} onChange={set('git_username')} placeholder="git user (opcional)" autoComplete="off" />
+              <Input id="git_token" type="password" value={form.git_token} onChange={set('git_token')} placeholder="git token (opcional)" autoComplete="new-password" />
+            </div>
+            <div className="mt-2">
+              <Toggle checked={form.auto_update} onChange={(v) => setForm((f) => ({ ...f, auto_update: v }))} label="Auto Update (git pull ao rodar setup)" />
+            </div>
+          </div>
+
+          <div className="grid sm:grid-cols-2 gap-3">
+            <div>
+              <Label htmlFor="main_file">Arquivo principal (fallback)</Label>
+              <MonoInput id="main_file" value={form.main_file} onChange={set('main_file')} placeholder="index.js ou src/index.ts" />
+              <p className="text-xs text-ink-faint mt-1">Usado só se não houver startup_command nem script "start" no package.json.</p>
+            </div>
+            <div>
+              <Label htmlFor="node_args">Argumentos adicionais</Label>
+              <MonoInput id="node_args" value={form.node_args} onChange={set('node_args')} placeholder="--inspect" />
+            </div>
+          </div>
+
+          <div className="grid sm:grid-cols-2 gap-3">
+            <div>
+              <Label htmlFor="node_packages">Adicionar Pacotes (separar por espaço)</Label>
+              <MonoInput id="node_packages" value={form.node_packages} onChange={set('node_packages')} placeholder="discord.js express" />
+              <p className="text-xs text-ink-faint mt-1">npm/pnpm/yarn/bun é detectado automaticamente pelo lockfile.</p>
+            </div>
+            <div>
+              <Label htmlFor="unnode_packages">Remover Pacotes (separar por espaço)</Label>
+              <MonoInput id="unnode_packages" value={form.unnode_packages} onChange={set('unnode_packages')} placeholder="discord.js" />
+            </div>
+          </div>
+
+          <Toggle checked={form.allow_file_uploads} onChange={(v) => setForm((f) => ({ ...f, allow_file_uploads: v }))} label="Permitir arquivos enviados pelo usuário" />
+        </div>
 
         <div className="grid sm:grid-cols-2 gap-4">
           {!isDocker && (

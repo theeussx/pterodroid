@@ -178,6 +178,30 @@ async function initDB() {
     WHERE desired_state IS NULL OR desired_state = ''
   `);
 
+  // ── Setup bootstrap (Etapa 2+) ─────────────────────────────────────
+  // Comando de inicialização explícito (sobrepõe inferência por main_file).
+  ensureColumn(db, 'services', 'startup_command', 'TEXT');
+  // Estado do último setup executado (para UI mostrar progresso/erro).
+  ensureColumn(db, 'services', 'setup_status', "TEXT DEFAULT 'idle'");
+  ensureColumn(db, 'services', 'setup_step', "TEXT DEFAULT 'idle'");
+  ensureColumn(db, 'services', 'setup_progress', 'INTEGER DEFAULT 0');
+  ensureColumn(db, 'services', 'setup_error', 'TEXT DEFAULT \'\'');
+  ensureColumn(db, 'services', 'setup_started_at', 'DATETIME');
+  ensureColumn(db, 'services', 'setup_finished_at', 'DATETIME');
+
+  // Logs de setup por serviço (clone/install/build) — ficam persistidos
+  // pra poder reabrir o serviço depois e ver o que aconteceu.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS setup_logs (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      service_id INTEGER NOT NULL,
+      stream     TEXT DEFAULT 'info',
+      message    TEXT NOT NULL,
+      timestamp  DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_setup_logs_service ON setup_logs(service_id, id);
+  `);
+
   ensureColumn(db, 'db_instances', 'port', 'INTEGER');
   ensureColumn(db, 'db_instances', 'public_url', 'TEXT');
   ensureColumn(db, 'db_instances', 'tunnel_hostname', 'TEXT');
