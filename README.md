@@ -52,6 +52,10 @@ Descubra o que o Pterodroid pode fazer por você:
 
 - 💻 **Terminal no painel:** rode comandos direto no workspace do serviço (`npm install`, `git pull`, `ls`, `node -v`) sem sair do navegador — com histórico (↑/↓), `cd` que persiste entre comandos, saída ao vivo e Ctrl+C. Funciona tanto para processos locais quanto para containers (via `docker exec`). Programas de tela cheia (vim, htop) não são suportados: o terminal é orientado a comando, escolha deliberada para não depender de módulos nativos que não compilam no Termux.
 
+- ⚙️ **Configuração inicial persistente por serviço:** defina Git, branch, arquivo principal, pacotes, argumentos de execução, auto-update e uploads diretamente no painel; tudo permanece editável após a criação do serviço.
+
+- 🧠 **Suporte a Node/TypeScript e setup automático:** o painel pode semear um projeto inicial com `tsconfig.json` e `src/index.ts`, inferir o comando de início a partir do `main_file` e disparar `git clone`/`npm install` em background quando necessário.
+
 - 📝 **Visualização de Logs ao Vivo:** Acesse os logs de console (stdout/stderr) dos seus serviços em tempo real, facilitando a depuração e o acompanhamento de atividades via conexão WebSockets.
 
 - 🔒 **Segurança Robusta:** Autenticação de usuário baseada em JWT (JSON Web Tokens) com validade de 7 dias e armazenamento seguro de senhas utilizando o algoritmo `bcryptjs`.
@@ -228,6 +232,17 @@ Para garantir que o Pterodroid e seus serviços continuem funcionando em segundo
 3. **Otimização de Bateria:** Desative as otimizações de bateria para o aplicativo Termux nas configurações do seu Android. Isso evita que o sistema encerre o processo do Termux de forma agressiva.
 
 ---
+
+## ⚙️ Configuração inicial de serviços
+
+O painel agora oferece uma aba de configuração inicial para cada serviço, acessível no modal de detalhes após a criação. Ela é opcional e pode ser usada para:
+
+- apontar um repositório Git e branch;
+- informar um arquivo principal (`main_file`) como `src/index.ts`, `dist/index.js` ou mesmo um comando completo como `node .`;
+- instalar dependências via `npm install` automaticamente em background;
+- definir argumentos de execução, auto-update e permissões de upload.
+
+Para projetos Node/TypeScript, o painel cria um starter mínimo com `package.json`, `tsconfig.json` e `src/index.ts` quando o workspace ainda não existe, facilitando o primeiro boot sem precisar montar tudo manualmente.
 
 ## 🧪 Testes
 

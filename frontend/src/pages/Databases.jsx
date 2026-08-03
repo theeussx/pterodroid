@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Plus, Play, Square, RotateCw, Trash2, Database as DatabaseIcon } from 'lucide-react';
+import { Plus, Play, Square, RotateCw, Trash2, Pencil, Database as DatabaseIcon } from 'lucide-react';
 import { api } from '../lib/api';
 import { useDbStatusEvents } from '../lib/hooks';
 import Card from '../components/Card';
@@ -14,6 +14,7 @@ export default function Databases() {
   const [instances, setInstances] = useState([]);
   const [loading, setLoading] = useState(true);
   const [formOpen, setFormOpen] = useState(false);
+  const [editing, setEditing] = useState(null);
   const [detailId, setDetailId] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [busyId, setBusyId] = useState(null);
@@ -32,7 +33,22 @@ export default function Databases() {
   useEffect(() => { load(); }, [load]);
   useDbStatusEvents(useCallback(() => load(), [load]));
 
-  const handleCreate = async (payload) => {
+  const openEdit = (inst) => {
+    if (inst.status === 'running') {
+      notify('Pare a instância antes de editar', 'error');
+      return;
+    }
+    setEditing(inst);
+    setFormOpen(true);
+  };
+
+  const handleSubmit = async (payload) => {
+    if (editing) {
+      const updated = await api.updateDatabase(editing.id, payload);
+      notify('Instância atualizada', 'success');
+      load();
+      return updated;
+    }
     const created = await api.createDatabase(payload);
     notify('Instância criada — inicie para provisionar', 'success');
     load();
@@ -70,7 +86,7 @@ export default function Databases() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <p className="text-sm text-ink-dim">{instances.length} instância(s)</p>
-        <Button variant="primary" onClick={() => setFormOpen(true)}>
+        <Button variant="primary" onClick={() => { setEditing(null); setFormOpen(true); }}>
           <Plus size={16} /> Nova instância
         </Button>
       </div>
@@ -79,7 +95,7 @@ export default function Databases() {
         <Card className="text-center py-12">
           <DatabaseIcon size={28} className="mx-auto text-ink-faint mb-3" />
           <p className="text-ink-dim text-sm mb-4">Nenhuma instância de banco cadastrada ainda.</p>
-          <Button variant="primary" onClick={() => setFormOpen(true)} className="mx-auto">
+          <Button variant="primary" onClick={() => { setEditing(null); setFormOpen(true); }} className="mx-auto">
             <Plus size={16} /> Criar primeira instância
           </Button>
         </Card>
@@ -113,6 +129,9 @@ export default function Databases() {
                 <button disabled={busyId === d.id} onClick={() => handleAction(d.id, api.restartDatabase, 'Reiniciada')} className="p-1.5 text-ink-faint hover:text-signal transition-colors disabled:opacity-40" title="Reiniciar">
                   <RotateCw size={14} />
                 </button>
+                <button onClick={() => openEdit(d)} className="p-1.5 text-ink-faint hover:text-ink transition-colors" title="Editar">
+                  <Pencil size={14} />
+                </button>
                 <button disabled={busyId === d.id} onClick={() => setDeleteTarget(d)} className="p-1.5 text-ink-faint hover:text-error transition-colors disabled:opacity-40" title="Remover">
                   <Trash2 size={14} />
                 </button>
@@ -122,13 +141,19 @@ export default function Databases() {
         ))}
       </div>
 
-      <DatabaseFormModal open={formOpen} onClose={() => setFormOpen(false)} onSubmit={handleCreate} />
+      <DatabaseFormModal
+        open={formOpen}
+        onClose={() => { setFormOpen(false); setEditing(null); }}
+        onSubmit={handleSubmit}
+        initial={editing}
+      />
 
       <DatabaseDetailModal
         open={detailId !== null}
         onClose={() => setDetailId(null)}
         instanceId={detailId}
         onChanged={load}
+        onEdit={(inst) => { setDetailId(null); openEdit(inst); }}
       />
 
       <ConfirmDialog

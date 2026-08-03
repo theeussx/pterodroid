@@ -112,9 +112,21 @@ async function initDB() {
       created_at    DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
+    CREATE TABLE IF NOT EXISTS backups (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      service_id  INTEGER NOT NULL,
+      name        TEXT    NOT NULL,
+      filename    TEXT    NOT NULL,
+      size_bytes  INTEGER DEFAULT 0,
+      status      TEXT    DEFAULT 'creating', -- creating | ready | restoring | failed
+      error       TEXT    DEFAULT '',
+      created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
     CREATE INDEX IF NOT EXISTS idx_logs_service ON logs(service_id, timestamp DESC);
     CREATE INDEX IF NOT EXISTS idx_logs_db      ON logs(db_instance_id, timestamp DESC);
     CREATE INDEX IF NOT EXISTS idx_audit_time    ON audit_log(timestamp DESC);
+    CREATE INDEX IF NOT EXISTS idx_backups_service ON backups(service_id, created_at DESC);
   `);
 
   // ── Migrations (safe on both a fresh DB and an existing one) ────────────
@@ -135,6 +147,17 @@ async function initDB() {
   ensureColumn(db, 'services', 'docker_ports', "TEXT DEFAULT '[]'");
   ensureColumn(db, 'services', 'cpu_limit', 'REAL');
   ensureColumn(db, 'services', 'memory_limit', 'INTEGER');
+  // Initial config per-service: git, main file, node packages, args, auto-update, uploads
+  ensureColumn(db, 'services', 'git_repo', 'TEXT');
+  ensureColumn(db, 'services', 'git_branch', 'TEXT');
+  ensureColumn(db, 'services', 'git_username', 'TEXT');
+  ensureColumn(db, 'services', 'git_token', 'TEXT');
+  ensureColumn(db, 'services', 'main_file', 'TEXT');
+  ensureColumn(db, 'services', 'node_packages', 'TEXT');
+  ensureColumn(db, 'services', 'unnode_packages', 'TEXT');
+  ensureColumn(db, 'services', 'node_args', 'TEXT');
+  ensureColumn(db, 'services', 'auto_update', 'INTEGER DEFAULT 0');
+  ensureColumn(db, 'services', 'allow_file_uploads', 'INTEGER DEFAULT 0');
 
   /**
    * `desired_state` separa o que o usuário QUER ('running'/'stopped') do

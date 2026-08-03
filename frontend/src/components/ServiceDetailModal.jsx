@@ -1,19 +1,24 @@
 import { useEffect, useState } from 'react';
 import Modal from './Modal';
 import Button from './Button';
+import { Label, Input } from './Field';
 import StatusDot from './StatusDot';
 import LogViewer from './LogViewer';
 import ServiceFileBrowser from './files/ServiceFileBrowser';
 import ServiceTerminal from './ServiceTerminal';
+import BackupsTab from './BackupsTab';
 import { api } from '../lib/api';
 import { useLiveLogs } from '../lib/hooks';
 import { useToast } from '../stores/ToastContext';
-import { Play, Square, RotateCw, Container, LayoutGrid, ScrollText, FolderOpen, TerminalSquare } from 'lucide-react';
+import { formatBytes } from './files/fileUtils';
+import { Play, Square, RotateCw, Container, LayoutGrid, ScrollText, FolderOpen, TerminalSquare, HardDrive, Archive, Settings } from 'lucide-react';
 
 const TABS = [
   { id: 'overview', label: 'Visão Geral', icon: LayoutGrid },
   { id: 'logs', label: 'Logs', icon: ScrollText },
   { id: 'files', label: 'Arquivos', icon: FolderOpen },
+  { id: 'backups', label: 'Backups', icon: Archive },
+  { id: 'config', label: 'Config Inicial', icon: Settings },
   { id: 'terminal', label: 'Terminal', icon: TerminalSquare },
 ];
 
@@ -21,6 +26,7 @@ export default function ServiceDetailModal({ open, onClose, serviceId, onChanged
   const [service, setService] = useState(null);
   const [busy, setBusy] = useState(false);
   const [tab, setTab] = useState('overview');
+  const [diskUsage, setDiskUsage] = useState(null);
   const { notify } = useToast();
   const { lines, seedOnce } = useLiveLogs('service', serviceId);
 
@@ -34,6 +40,7 @@ export default function ServiceDetailModal({ open, onClose, serviceId, onChanged
     // sobre o serviço certo, mas exibindo o estado do errado (P33).
     setService(null);
     setTab('overview');
+    setDiskUsage(null);
 
     let cancelled = false;
     api.getService(serviceId)
@@ -48,6 +55,18 @@ export default function ServiceDetailModal({ open, onClose, serviceId, onChanged
     // pode deixar a resposta antiga sobrescrever o estado novo.
     return () => { cancelled = true; };
   }, [open, serviceId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Uso de disco é buscado só quando a aba "Visão Geral" é vista — é uma
+  // varredura de disco no servidor, não precisa rodar pra quem só quer
+  // olhar os logs ou o terminal.
+  useEffect(() => {
+    if (!open || !serviceId || tab !== 'overview') return undefined;
+    let cancelled = false;
+    api.serviceDiskUsage(serviceId)
+      .then((data) => { if (!cancelled) setDiskUsage(data); })
+      .catch(() => { if (!cancelled) setDiskUsage(null); });
+    return () => { cancelled = true; };
+  }, [open, serviceId, tab]);
 
   const act = async (fn, label) => {
     setBusy(true);
@@ -72,6 +91,52 @@ export default function ServiceDetailModal({ open, onClose, serviceId, onChanged
     }
   };
 
+  // Config form state
+  const [cfg, setCfg] = useState({});
+  useEffect(() => {
+    if (service) {
+      setCfg({
+        git_repo: service.git_repo || '',
+        git_branch: service.git_branch || '',
+        git_username: service.git_username || '',
+        git_token: service.git_token || '',
+        main_file: service.main_file || '',
+        node_packages: service.node_packages || '',
+        unnode_packages: service.unnode_packages || '',
+        node_args: service.node_args || '',
+        auto_update: !!service.auto_update,
+        allow_file_uploads: !!service.allow_file_uploads,
+      });
+    }
+  }, [service]);
+
+  const saveConfig = async () => {
+    try {
+      setBusy(true);
+      const payload = {
+        git_repo: cfg.git_repo || null,
+        git_branch: cfg.git_branch || null,
+        git_username: cfg.git_username || null,
+        git_token: cfg.git_token || null,
+        main_file: cfg.main_file || null,
+        node_packages: cfg.node_packages || null,
+        unnode_packages: cfg.unnode_packages || null,
+        node_args: cfg.node_args || null,
+        auto_update: cfg.auto_update ? 1 : 0,
+        allow_file_uploads: cfg.allow_file_uploads ? 1 : 0,
+      };
+      await api.updateService(serviceId, payload);
+      const fresh = await api.getService(serviceId);
+      setService(fresh);
+      notify('Configuração salva', 'success');
+      onChanged?.();
+    } catch (e) {
+      notify(e.message, 'error');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   if (!service) {
     return (
       <Modal open={open} onClose={onClose} title="Carregando..." size="xl">
@@ -82,7 +147,11 @@ export default function ServiceDetailModal({ open, onClose, serviceId, onChanged
 
   const isDocker = service.runtime_type === 'docker';
   const runtime = service.runtime;
-  const filesReady = !isDocker || !!service.container_id;
+  // Terminal usa "docker exec", então precisa do container já criado.
+  // Arquivos, porém, opera direto na pasta do host (working_directory),
+  // que já existe desde a criação do serviço — não depende do container
+  // ter sido criado nem do serviço já ter rodado alguma vez.
+  const terminalReady = !isDocker || !!service.container_id;
 
   return (
     <Modal open={open} onClose={onClose} title={service.name} size="xl">
@@ -184,6 +253,12 @@ export default function ServiceDetailModal({ open, onClose, serviceId, onChanged
               <p className="text-ink-faint mb-1">Última inicialização</p>
               <p className="text-ink">{service.last_started ? new Date(service.last_started + 'Z').toLocaleString('pt-BR') : '—'}</p>
             </div>
+            <div className="bg-raised rounded-lg p-3">
+              <p className="text-ink-faint mb-1 flex items-center gap-1"><HardDrive size={11} /> Uso de disco</p>
+              <p className="text-ink font-mono">
+                {diskUsage ? `${formatBytes(diskUsage.bytes)}${diskUsage.truncated ? '+' : ''}` : '...'}
+              </p>
+            </div>
             {service.port && (
               <div className="bg-raised rounded-lg p-3">
                 <p className="text-ink-faint mb-1">Porta Local</p>
@@ -222,7 +297,7 @@ export default function ServiceDetailModal({ open, onClose, serviceId, onChanged
         )}
 
         {tab === 'terminal' && (
-          filesReady
+          terminalReady
             ? <ServiceTerminal serviceId={serviceId} serviceName={service.name} />
             : (
               <div className="text-center py-10">
@@ -232,15 +307,69 @@ export default function ServiceDetailModal({ open, onClose, serviceId, onChanged
             )
         )}
 
-        {tab === 'files' && (
-          filesReady
-            ? <ServiceFileBrowser serviceId={serviceId} />
-            : (
-              <div className="text-center py-10">
-                <FolderOpen size={24} className="mx-auto text-ink-faint mb-2" />
-                <p className="text-sm text-ink-dim">Inicie o serviço pelo menos uma vez pra criar o container antes de gerenciar os arquivos.</p>
+        {tab === 'files' && <ServiceFileBrowser serviceId={serviceId} />}
+
+        {tab === 'backups' && <BackupsTab serviceId={serviceId} />}
+        {tab === 'config' && (
+          <div className="space-y-3">
+            <div className="grid sm:grid-cols-2 gap-3">
+              <div>
+                <Label htmlFor="git_repo">Repositório Git</Label>
+                <Input id="git_repo" value={cfg.git_repo || ''} onChange={(e) => setCfg((c) => ({ ...c, git_repo: e.target.value }))} />
               </div>
-            )
+              <div>
+                <Label htmlFor="git_branch">Branch</Label>
+                <Input id="git_branch" value={cfg.git_branch || ''} onChange={(e) => setCfg((c) => ({ ...c, git_branch: e.target.value }))} />
+              </div>
+              <div>
+                <Label htmlFor="git_username">Git usuário</Label>
+                <Input id="git_username" value={cfg.git_username || ''} onChange={(e) => setCfg((c) => ({ ...c, git_username: e.target.value }))} />
+              </div>
+              <div>
+                <Label htmlFor="git_token">Git token (oculto)</Label>
+                <Input id="git_token" type="password" value={cfg.git_token || ''} onChange={(e) => setCfg((c) => ({ ...c, git_token: e.target.value }))} />
+              </div>
+              <div>
+                <Label htmlFor="main_file">Arquivo principal</Label>
+                <Input id="main_file" value={cfg.main_file || ''} onChange={(e) => setCfg((c) => ({ ...c, main_file: e.target.value }))} placeholder="dist/index.js ou src/index.ts" />
+              </div>
+              <div>
+                <Label htmlFor="node_args">Node args</Label>
+                <Input id="node_args" value={cfg.node_args || ''} onChange={(e) => setCfg((c) => ({ ...c, node_args: e.target.value }))} />
+              </div>
+            </div>
+
+            <div className="grid sm:grid-cols-2 gap-3">
+              <div>
+                <Label htmlFor="node_packages">Adicionar pacotes</Label>
+                <Input id="node_packages" value={cfg.node_packages || ''} onChange={(e) => setCfg((c) => ({ ...c, node_packages: e.target.value }))} placeholder="ex: discord.js express" />
+              </div>
+              <div>
+                <Label htmlFor="unnode_packages">Remover pacotes</Label>
+                <Input id="unnode_packages" value={cfg.unnode_packages || ''} onChange={(e) => setCfg((c) => ({ ...c, unnode_packages: e.target.value }))} placeholder="ex: discord.js" />
+              </div>
+            </div>
+
+            <div className="flex items-center gap-4">
+              <div>
+                <label className="flex items-center gap-2">
+                  <input type="checkbox" checked={!!cfg.auto_update} onChange={(e) => setCfg((c) => ({ ...c, auto_update: e.target.checked }))} />
+                  <span className="text-sm">Auto Update (git pull na inicialização)</span>
+                </label>
+              </div>
+              <div>
+                <label className="flex items-center gap-2">
+                  <input type="checkbox" checked={!!cfg.allow_file_uploads} onChange={(e) => setCfg((c) => ({ ...c, allow_file_uploads: e.target.checked }))} />
+                  <span className="text-sm">Permitir uploads de usuário</span>
+                </label>
+              </div>
+            </div>
+
+            <div className="flex gap-2">
+              <Button variant="ghost" onClick={() => { setCfg({}); setService((s) => ({ ...s })); }}>Cancelar</Button>
+              <Button variant="primary" onClick={saveConfig} loading={busy}>Salvar Configuração</Button>
+            </div>
+          </div>
         )}
       </div>
     </Modal>

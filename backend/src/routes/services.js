@@ -5,6 +5,7 @@ const { dockerDriver } = driver;
 const workspaces = require('../services/workspaceManager');
 const { resolveServiceWorkspace } = require('../services/serviceWorkspace');
 const { forgetService } = require('./serviceFiles');
+const backups = require('../services/backupManager');
 const terminals = require('../services/terminalManager');
 
 const VALID_TYPES = ['node', 'python', 'shell', 'bot', 'api', 'web', 'other'];
@@ -121,13 +122,20 @@ router.post('/', (req, res) => {
     runtime_type = 'process',
     docker_host_id = null, image = null, volumes = '[]', docker_networks = '[]', docker_ports = '[]',
     cpu_limit = null, memory_limit = null,
+    git_repo = null, git_branch = null, git_username = null, git_token = null,
+    main_file = null, node_packages = null, unnode_packages = null, node_args = null,
+    auto_update = 0, allow_file_uploads = 0,
   } = req.body;
 
   const isDocker = runtime_type === 'docker';
 
   let workspace;
   try {
-    workspace = resolveServiceWorkspace({ name, runtime_type, working_directory, volumes, image, command });
+    workspace = resolveServiceWorkspace({
+      name, runtime_type, working_directory, volumes, image, command,
+      git_repo, git_branch, git_username, git_token,
+      main_file, node_packages, unnode_packages, node_args, auto_update, allow_file_uploads,
+    });
   } catch (e) {
     console.error('[services] falha ao preparar o workspace:', e);
     return res.status(500).json({ error: `Não foi possível preparar a pasta do serviço: ${e.message}` });
@@ -138,8 +146,10 @@ router.post('/', (req, res) => {
       (name, description, type, command, working_directory, environment,
        auto_restart, restart_delay, max_restarts, port, scaffolded_directory, tunnel_hostname,
        runtime_type, docker_host_id, image, volumes, docker_networks, docker_ports,
-       cpu_limit, memory_limit)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       cpu_limit, memory_limit,
+       git_repo, git_branch, git_username, git_token,
+       main_file, node_packages, unnode_packages, node_args, auto_update, allow_file_uploads)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     name.trim(), String(description ?? '').trim(), type, workspace.command.trim(),
     workspace.finalWorkingDir, sanitizeEnv(environment),
@@ -148,6 +158,9 @@ router.post('/', (req, res) => {
     runtime_type, isDocker ? docker_host_id : null, isDocker ? image?.trim() : null,
     sanitizeJSONArray(workspace.volumes), sanitizeJSONArray(docker_networks), sanitizeJSONArray(docker_ports),
     isDocker ? (cpu_limit || null) : null, isDocker ? (memory_limit || null) : null,
+    git_repo?.trim() || null, git_branch?.trim() || null, git_username?.trim() || null, git_token?.trim() || null,
+    main_file?.trim() || null, node_packages?.trim() || null, unnode_packages?.trim() || null, node_args?.trim() || null,
+    auto_update ? 1 : 0, allow_file_uploads ? 1 : 0,
   );
 
   const created = db.prepare('SELECT * FROM services WHERE id = ?').get(result.lastInsertRowid);
@@ -172,6 +185,7 @@ router.put('/:id', (req, res) => {
     name, description, type, command, working_directory,
     environment, auto_restart, restart_delay, max_restarts, port, tunnel_hostname,
     docker_host_id, image, volumes, docker_networks, docker_ports, cpu_limit, memory_limit,
+    git_repo, git_branch, git_username, git_token, main_file, node_packages, unnode_packages, node_args, auto_update, allow_file_uploads,
   } = req.body;
 
   // Container já existe → imagem/host/volumes/redes/portas/limites viram
@@ -208,19 +222,63 @@ router.put('/:id', (req, res) => {
 
   let nextPort = existing.port;
   if (port !== undefined) nextPort = port === '' || port === null ? null : (parseInt(port, 10) || null);
+  // Recompute workspace and command if the initial-config fields changed
+  // so edits to `main_file`, `git_repo`, `node_packages` etc. take effect
+  // without requiring the user to provide an explicit `command`.
+  const needsRecompute = (
+    (git_repo !== undefined && String(git_repo ?? '').trim() !== String(existing.git_repo ?? '').trim()) ||
+    (git_branch !== undefined && String(git_branch ?? '').trim() !== String(existing.git_branch ?? '').trim()) ||
+    (main_file !== undefined && String(main_file ?? '').trim() !== String(existing.main_file ?? '').trim()) ||
+    (node_packages !== undefined && String(node_packages ?? '').trim() !== String(existing.node_packages ?? '').trim()) ||
+    (unnode_packages !== undefined && String(unnode_packages ?? '').trim() !== String(existing.unnode_packages ?? '').trim()) ||
+    (node_args !== undefined && String(node_args ?? '').trim() !== String(existing.node_args ?? '').trim())
+  );
+
+  let recomputed = null;
+  if (needsRecompute) {
+    try {
+      recomputed = resolveServiceWorkspace({
+        name: pickText(name, existing.name),
+        runtime_type: existing.runtime_type,
+        working_directory: nextWorkingDir,
+        volumes: volumes !== undefined ? volumes : existing.volumes,
+        image: image !== undefined ? image : existing.image,
+        command: command !== undefined ? command : existing.command,
+        git_repo: git_repo !== undefined ? git_repo : existing.git_repo,
+        git_branch: git_branch !== undefined ? git_branch : existing.git_branch,
+        git_username: git_username !== undefined ? git_username : existing.git_username,
+        git_token: git_token !== undefined ? git_token : existing.git_token,
+        main_file: main_file !== undefined ? main_file : existing.main_file,
+        node_packages: node_packages !== undefined ? node_packages : existing.node_packages,
+        unnode_packages: unnode_packages !== undefined ? unnode_packages : existing.unnode_packages,
+        node_args: node_args !== undefined ? node_args : existing.node_args,
+        auto_update: auto_update !== undefined ? auto_update : existing.auto_update,
+        allow_file_uploads: allow_file_uploads !== undefined ? allow_file_uploads : existing.allow_file_uploads,
+      });
+    } catch (e) {
+      console.error('[services] falha ao recomputar workspace:', e.message);
+      // don't block the update; just proceed without recompute
+      recomputed = null;
+    }
+  }
 
   db.prepare(`
     UPDATE services SET
       name=?, description=?, type=?, command=?, working_directory=?,
       environment=?, auto_restart=?, restart_delay=?, max_restarts=?, port=?, tunnel_hostname=?,
       docker_host_id=?, image=?, volumes=?, docker_networks=?, docker_ports=?, cpu_limit=?, memory_limit=?,
+      git_repo=?, git_branch=?, git_username=?, git_token=?,
+      main_file=?, node_packages=?, unnode_packages=?, node_args=?, auto_update=?, allow_file_uploads=?,
       updated_at=CURRENT_TIMESTAMP
     WHERE id=?
   `).run(
     pickText(name, existing.name),
     pickText(description, existing.description),
     type ?? existing.type,
-    pickText(command, existing.command ?? ''),
+    // If the user provided an explicit `command` use it; otherwise if we
+    // recomputed the workspace above use its recommended command, falling
+    // back to the existing stored command.
+    (command !== undefined ? pickText(command, existing.command ?? '') : (recomputed ? recomputed.command.trim() : pickText(command, existing.command ?? ''))),
     nextWorkingDir,
     environment !== undefined ? sanitizeEnv(environment) : existing.environment,
     auto_restart !== undefined ? (auto_restart ? 1 : 0) : existing.auto_restart,
@@ -235,6 +293,16 @@ router.put('/:id', (req, res) => {
     docker_ports !== undefined ? sanitizeJSONArray(docker_ports) : existing.docker_ports,
     cpu_limit !== undefined ? cpu_limit : existing.cpu_limit,
     memory_limit !== undefined ? memory_limit : existing.memory_limit,
+    git_repo !== undefined ? (git_repo?.trim() || null) : existing.git_repo,
+    git_branch !== undefined ? (git_branch?.trim() || null) : existing.git_branch,
+    git_username !== undefined ? (git_username?.trim() || null) : existing.git_username,
+    git_token !== undefined ? (git_token?.trim() || null) : existing.git_token,
+    main_file !== undefined ? (main_file?.trim() || null) : existing.main_file,
+    node_packages !== undefined ? (node_packages?.trim() || null) : existing.node_packages,
+    unnode_packages !== undefined ? (unnode_packages?.trim() || null) : existing.unnode_packages,
+    node_args !== undefined ? (node_args?.trim() || null) : existing.node_args,
+    auto_update !== undefined ? (auto_update ? 1 : 0) : existing.auto_update,
+    allow_file_uploads !== undefined ? (allow_file_uploads ? 1 : 0) : existing.allow_file_uploads,
     existing.id,
   );
 
@@ -285,6 +353,7 @@ router.delete('/:id', async (req, res) => {
   db.prepare('DELETE FROM services WHERE id = ?').run(svc.id);
   db.prepare('DELETE FROM logs WHERE service_id = ?').run(svc.id);
   forgetService(svc.id);
+  backups.forgetService(svc.id);
   terminals.closeForService(svc.id);
 
   console.log(`[services] removido "${svc.name}"${filesRemoved ? ' (workspace apagado)' : ''}`);
@@ -337,6 +406,32 @@ router.get('/:id/logs', (req, res) => {
     .prepare('SELECT * FROM logs WHERE service_id = ? ORDER BY timestamp DESC LIMIT ?')
     .all(id, limit);
   return res.json(logs.reverse());
+});
+
+// GET /api/services/:id/disk-usage — tamanho aproximado do workspace.
+// Fica de fora do GET /:id (que é chamado com frequência) de propósito:
+// a varredura é síncrona, então uma cache curta evita reler o disco toda
+// vez que a aba "Visão Geral" é reaberta.
+const diskUsageCache = new Map(); // id -> { at, data }
+const DISK_USAGE_TTL_MS = 20_000;
+
+router.get('/:id/disk-usage', (req, res) => {
+  const id = parseId(req, res);
+  if (id === null) return undefined;
+
+  const cached = diskUsageCache.get(id);
+  if (cached && Date.now() - cached.at < DISK_USAGE_TTL_MS) {
+    return res.json(cached.data);
+  }
+
+  const db = getDB();
+  const svc = db.prepare('SELECT working_directory FROM services WHERE id = ?').get(id);
+  if (!svc) return res.status(404).json({ error: 'Serviço não encontrado' });
+  if (!svc.working_directory) return res.json({ bytes: 0, files: 0, truncated: false });
+
+  const data = workspaces.usage(svc.working_directory);
+  diskUsageCache.set(id, { at: Date.now(), data });
+  return res.json(data);
 });
 
 module.exports = router;

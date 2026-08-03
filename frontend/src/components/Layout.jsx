@@ -9,6 +9,7 @@ const PAGE_TITLES = {
   '/services': 'Serviços',
   '/docker': 'Docker',
   '/databases': 'Bancos de Dados',
+  '/files': 'Arquivos',
   '/logs': 'Logs',
   '/monitoring': 'Monitoramento',
   '/settings': 'Configurações',

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Play, Square, RotateCw } from 'lucide-react';
+import { Play, Square, RotateCw, Pencil, Copy, Check } from 'lucide-react';
 import Modal from './Modal';
 import Button from './Button';
 import StatusDot from './StatusDot';
@@ -8,7 +8,26 @@ import { api } from '../lib/api';
 import { useLiveLogs } from '../lib/hooks';
 import { useToast } from '../stores/ToastContext';
 
-export default function DatabaseDetailModal({ open, onClose, instanceId, onChanged }) {
+function CopyField({ label, value }) {
+  const [copied, setCopied] = useState(false);
+  const copy = () => {
+    navigator.clipboard?.writeText(value).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  };
+  return (
+    <div className="bg-raised rounded-lg p-3 text-xs">
+      <p className="text-ink-faint mb-1">{label}</p>
+      <button onClick={copy} className="flex items-center gap-1.5 text-ink font-mono hover:text-signal transition-colors" title="Copiar">
+        <span className="truncate">{value}</span>
+        {copied ? <Check size={12} className="shrink-0 text-running" /> : <Copy size={12} className="shrink-0 opacity-60" />}
+      </button>
+    </div>
+  );
+}
+
+export default function DatabaseDetailModal({ open, onClose, instanceId, onChanged, onEdit }) {
   const [inst, setInst] = useState(null);
   const [busy, setBusy] = useState(false);
   const { notify } = useToast();
@@ -64,6 +83,9 @@ export default function DatabaseDetailModal({ open, onClose, instanceId, onChang
             <Button size="sm" variant="secondary" onClick={() => act(api.restartDatabase, 'Instância reiniciada')} loading={busy}>
               <RotateCw size={14} /> Reiniciar
             </Button>
+            <Button size="sm" variant="ghost" onClick={() => onEdit?.(inst)}>
+              <Pencil size={14} /> Editar
+            </Button>
           </div>
         </div>
 
@@ -72,14 +94,8 @@ export default function DatabaseDetailModal({ open, onClose, instanceId, onChang
             <p className="text-ink-faint mb-1">Motor</p>
             <p className="text-ink font-mono">{inst.type}</p>
           </div>
-          <div className="bg-raised rounded-lg p-3">
-            <p className="text-ink-faint mb-1">Porta</p>
-            <p className="text-ink font-mono">{inst.port}</p>
-          </div>
-          <div className="bg-raised rounded-lg p-3">
-            <p className="text-ink-faint mb-1">Usuário</p>
-            <p className="text-ink font-mono">{inst.db_username}</p>
-          </div>
+          <CopyField label="Host : Porta" value={`127.0.0.1:${inst.port}`} />
+          <CopyField label="Usuário" value={inst.db_username} />
           <div className="bg-raised rounded-lg p-3">
             <p className="text-ink-faint mb-1">Provisionado</p>
             <p className="text-ink">{inst.provisioned ? 'Sim' : 'Ainda não'}</p>

@@ -54,10 +54,18 @@ const FILES_ROOT = toAbsolute(process.env.FILES_ROOT, WORKSPACES_ROOT);
  */
 const HOST_WORKSPACES_ROOT = (process.env.HOST_WORKSPACES_ROOT || '').trim() || null;
 
+/**
+ * BACKUPS_ROOT — onde os .zip de backup de cada serviço ficam guardados.
+ * Fica FORA de WORKSPACES_ROOT de propósito: um backup nunca pode acabar
+ * incluído dentro de si mesmo, nem ser varrido/apagado junto quando se
+ * limpa a pasta de um serviço.
+ */
+const BACKUPS_ROOT = toAbsolute(process.env.BACKUPS_ROOT, path.join(DATA_ROOT, 'backups'));
+
 // Diretórios que o painel precisa que existam pra funcionar. Criar aqui
 // (e não sob demanda em cada módulo) evita o clássico "ENOENT na primeira
 // vez que alguém abre a tela de arquivos num install limpo".
-for (const dir of [DATA_ROOT, WORKSPACES_ROOT, FILES_ROOT]) {
+for (const dir of [DATA_ROOT, WORKSPACES_ROOT, FILES_ROOT, BACKUPS_ROOT]) {
   try {
     fs.mkdirSync(dir, { recursive: true });
   } catch (err) {
@@ -91,6 +99,8 @@ module.exports = {
   DATA_ROOT,
   DB_PATH: process.env.DB_PATH || path.join(DATA_ROOT, 'panel.db'),
   DATABASES_ROOT: path.join(DATA_ROOT, 'databases'),
+  BACKUPS_ROOT,
+  MAX_BACKUPS_PER_SERVICE: parseInt(process.env.MAX_BACKUPS_PER_SERVICE || '10', 10),
   WORKSPACES_ROOT,
   HOST_WORKSPACES_ROOT,
   // Alias histórico — vários módulos/instalações ainda falam "projects".

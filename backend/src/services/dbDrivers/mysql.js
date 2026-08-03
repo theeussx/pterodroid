@@ -125,6 +125,13 @@ module.exports = {
   buildStartCommand({ dataDirectory, port }) {
     const check = this.checkAvailable();
     if (!check.ok) throw new Error(check.message);
+    // Sem --log-error de propósito: isso faria o mariadbd escrever seus logs
+    // direto num arquivo em vez de stderr, e a aba "Logs" do painel (que lê
+    // do pipe do processo, não do disco) ficaria muda para esta instância.
+    // O pipe já é consumido continuamente pelo dbInstanceManager (stdio:
+    // ['ignore','pipe','pipe'] + handlers de 'data'), então não há risco de
+    // back-pressure travando o processo — o motivo original para o
+    // redirecionamento não se aplica a este código.
     return {
       cmd: check.server,
       args: [
@@ -132,9 +139,6 @@ module.exports = {
         '--socket', path.join(dataDirectory, 'mysql.sock'),
         '--pid-file', path.join(dataDirectory, 'mysqld.pid'),
         '--port', String(port),
-        // CORREÇÃO PARA O TERMUX: Redireciona os logs informativos/erros para um arquivo físico.
-        // Isso evita entupimento do pipe stderr do Node.js, prevenindo o "Normal shutdown" precoce.
-        '--log-error=' + path.join(dataDirectory, 'mariadb.log'),
       ],
     };
   },

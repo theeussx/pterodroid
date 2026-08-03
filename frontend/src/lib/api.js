@@ -50,6 +50,7 @@ export const api = {
   restartService: (id) => request(`/services/${id}/restart`, { method: 'POST' }),
   sendServiceInput: (id, text) => request(`/services/${id}/input`, { method: 'POST', body: { text } }),
   serviceLogs: (id, limit = 200) => request(`/services/${id}/logs?limit=${limit}`),
+  serviceDiskUsage: (id) => request(`/services/${id}/disk-usage`),
 
   // docker
   listDockerHosts: () => request('/docker/hosts'),
@@ -66,6 +67,7 @@ export const api = {
   dbEngines: () => request('/databases/engines'),
   getDatabase: (id) => request(`/databases/${id}`),
   createDatabase: (payload) => request('/databases', { method: 'POST', body: payload }),
+  updateDatabase: (id, payload) => request(`/databases/${id}`, { method: 'PUT', body: payload }),
   deleteDatabase: (id) => request(`/databases/${id}`, { method: 'DELETE' }),
   startDatabase: (id) => request(`/databases/${id}/start`, { method: 'POST' }),
   stopDatabase: (id) => request(`/databases/${id}/stop`, { method: 'POST' }),
@@ -114,6 +116,16 @@ export const api = {
     interrupt: (id, sessionId) =>
       request(`/services/${id}/terminal/${sessionId}/interrupt`, { method: 'POST' }),
     close: (id, sessionId) => request(`/services/${id}/terminal/${sessionId}`, { method: 'DELETE' }),
+  },
+
+  // ── Backups por serviço ───────────────────────────────────────────────
+  backups: {
+    list: (serviceId) => request(`/services/${serviceId}/backups`),
+    create: (serviceId, name) => request(`/services/${serviceId}/backups`, { method: 'POST', body: { name } }),
+    restore: (serviceId, backupId) => request(`/services/${serviceId}/backups/${backupId}/restore`, { method: 'POST' }),
+    remove: (serviceId, backupId) => request(`/services/${serviceId}/backups/${backupId}`, { method: 'DELETE' }),
+    download: (serviceId, backupId, filename) =>
+      downloadFrom(`/api/services/${serviceId}/backups/${backupId}/download`, filename),
   },
 };
 

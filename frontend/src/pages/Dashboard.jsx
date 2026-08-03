@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { Server, Database, Cpu, HardDrive, MemoryStick, Clock, ArrowRight } from 'lucide-react';
+import { Server, Database, Cpu, Clock, ArrowRight } from 'lucide-react';
 import { api } from '../lib/api';
 import { useSystemSnapshot, useServiceStatusEvents, useDbStatusEvents } from '../lib/hooks';
 import Card from '../components/Card';

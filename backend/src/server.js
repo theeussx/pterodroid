@@ -23,6 +23,7 @@ const settingsRoutes = require('./routes/settings');
 const fileRoutes = require('./routes/files');
 const serviceFileRoutes = require('./routes/serviceFiles');
 const terminalRoutes = require('./routes/terminal');
+const backupRoutes = require('./routes/backups');
 const dockerRoutes = require('./routes/docker');
 const { authMiddleware } = require('./middleware/auth');
 
@@ -85,6 +86,7 @@ async function main() {
   app.use('/api/auth', authRoutes);
   app.use('/api/services/:id/files', authMiddleware, serviceFileRoutes);
   app.use('/api/services/:id/terminal', authMiddleware, terminalRoutes);
+  app.use('/api/services/:id/backups', authMiddleware, backupRoutes);
   app.use('/api/services', authMiddleware, serviceRoutes);
   app.use('/api/databases', authMiddleware, databaseRoutes);
   app.use('/api/monitor', authMiddleware, monitorRoutes);

@@ -19,6 +19,9 @@ const EMPTY = {
   name: '', description: '', type: 'node', command: '', working_directory: '',
   environment: '{}', auto_restart: true, restart_delay: 3, max_restarts: 10, port: '', tunnel_hostname: '',
   runtime_type: 'process', docker_host_id: '', image: '', cpu_limit: '', memory_limit: '',
+  // initial config
+  git_repo: '', git_branch: '', auto_update: false, git_username: '', git_token: '',
+  node_packages: '', unnode_packages: '', main_file: '', node_args: '', allow_file_uploads: false,
 };
 
 function parseVolumesArr(json) {
@@ -39,9 +42,36 @@ function parseNetworksText(json) {
   }
 }
 
+// Converte o JSON salvo de variáveis de ambiente em linhas editáveis de
+// chave/valor. Se o conteúdo não for um objeto JSON válido (ex.: serviço
+// antigo editado manualmente), devolve null pra quem chamar decidir cair
+// no modo avançado em vez de descartar o conteúdo do usuário.
+function parseEnvRows(json) {
+  try {
+    const obj = JSON.parse(json || '{}');
+    if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return null;
+    const rows = Object.entries(obj).map(([key, value]) => ({ key, value: String(value) }));
+    return rows;
+  } catch {
+    return null;
+  }
+}
+
+function envRowsToJSON(rows) {
+  const obj = {};
+  for (const row of rows) {
+    const key = row.key.trim();
+    if (!key) continue;
+    obj[key] = row.value;
+  }
+  return JSON.stringify(obj);
+}
+
 export default function ServiceFormModal({ open, onClose, onSubmit, initial }) {
   const [form, setForm] = useState(EMPTY);
-  const [envText, setEnvText] = useState('{}');
+  const [envRows, setEnvRows] = useState([]);
+  const [envAdvanced, setEnvAdvanced] = useState(false);
+  const [envRawText, setEnvRawText] = useState('{}');
   const [envError, setEnvError] = useState('');
   const [volumeRows, setVolumeRows] = useState([]);
   const [networksText, setNetworksText] = useState('');
@@ -61,7 +91,18 @@ export default function ServiceFormModal({ open, onClose, onSubmit, initial }) {
     if (open) {
       const base = initial ? { ...EMPTY, ...initial, auto_restart: !!initial.auto_restart } : EMPTY;
       setForm(base);
-      setEnvText(initial?.environment || '{}');
+      const rawEnv = initial?.environment || '{}';
+      const rows = parseEnvRows(rawEnv);
+      setEnvRawText(rawEnv);
+      if (rows) {
+        setEnvRows(rows);
+        setEnvAdvanced(false);
+      } else {
+        // JSON que não é um objeto simples de chave/valor — preserva como
+        // está e abre direto no modo avançado, sem arriscar perder dados.
+        setEnvRows([]);
+        setEnvAdvanced(true);
+      }
       setEnvError('');
       setSubmitError('');
       setVolumeRows(parseVolumesArr(initial?.volumes));
@@ -78,18 +119,46 @@ export default function ServiceFormModal({ open, onClose, onSubmit, initial }) {
     setVolumeRows((r) => r.map((row, idx) => (idx === i ? { ...row, [key]: value } : row)));
   const removeVolumeRow = (i) => setVolumeRows((r) => r.filter((_, idx) => idx !== i));
 
+  const addEnvRow = () => setEnvRows((r) => [...r, { key: '', value: '' }]);
+  const updateEnvRow = (i, key, value) =>
+    setEnvRows((r) => r.map((row, idx) => (idx === i ? { ...row, [key]: value } : row)));
+  const removeEnvRow = (i) => setEnvRows((r) => r.filter((_, idx) => idx !== i));
+
+  const toggleEnvAdvanced = () => {
+    if (envAdvanced) {
+      // Saindo do modo avançado: tenta reconverter o JSON digitado em linhas.
+      const rows = parseEnvRows(envRawText);
+      if (!rows) {
+        setEnvError('JSON inválido — corrija antes de voltar para campos simples');
+        return;
+      }
+      setEnvRows(rows);
+      setEnvError('');
+      setEnvAdvanced(false);
+    } else {
+      setEnvRawText(envRowsToJSON(envRows));
+      setEnvAdvanced(true);
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-    try {
-      JSON.parse(envText || '{}');
-    } catch {
-      setEnvError('JSON inválido');
-      return;
+    let environment;
+    if (envAdvanced) {
+      try {
+        JSON.parse(envRawText || '{}');
+      } catch {
+        setEnvError('JSON inválido');
+        return;
+      }
+      environment = envRawText;
+    } else {
+      environment = envRowsToJSON(envRows);
     }
     setSaving(true);
     setSubmitError('');
     try {
-      const payload = { ...form, environment: envText };
+      const payload = { ...form, environment };
       if (isDocker) {
         payload.volumes = JSON.stringify(volumeRows.filter((r) => r.source.trim() && r.target.trim()));
         payload.docker_networks = JSON.stringify(networksText.split(',').map((s) => s.trim()).filter(Boolean));
@@ -195,6 +264,38 @@ export default function ServiceFormModal({ open, onClose, onSubmit, initial }) {
           <div>
             <Label htmlFor="command">Comando de inicialização</Label>
             <MonoInput id="command" value={form.command} onChange={set('command')} placeholder="node index.js" required />
+              <div>
+                <Label htmlFor="git_repo">Repositório Git (opcional)</Label>
+                <Input id="git_repo" value={form.git_repo} onChange={set('git_repo')} placeholder="https://github.com/usuario/repo.git" />
+                <div className="grid sm:grid-cols-3 gap-2 mt-2">
+                  <Input id="git_branch" value={form.git_branch} onChange={set('git_branch')} placeholder="branch (ex: main)" />
+                  <Input id="git_username" value={form.git_username} onChange={set('git_username')} placeholder="git user (opcional)" />
+                  <Input id="git_token" value={form.git_token} onChange={set('git_token')} placeholder="git token (opcional)" />
+                </div>
+                <div className="mt-2">
+                  <Toggle checked={form.auto_update} onChange={(v) => setForm((f) => ({ ...f, auto_update: v }))} label="Auto Update (git pull na inicialização)" />
+                </div>
+              </div>
+              <div>
+                <Label htmlFor="main_file">Arquivo Principal</Label>
+                <MonoInput id="main_file" value={form.main_file} onChange={set('main_file')} placeholder="index.js ou src/index.ts" />
+                <p className="text-xs text-ink-faint mt-1">Pode ser .js ou .ts — o painel tentará usar `node` ou `ts-node` conforme extensão.</p>
+              </div>
+              <div>
+                <Label htmlFor="node_packages">Adicionar Pacotes NodeJS (separar por espaço)</Label>
+                <MonoInput id="node_packages" value={form.node_packages} onChange={set('node_packages')} placeholder="discord.js express" />
+              </div>
+              <div>
+                <Label htmlFor="unnode_packages">Remover Pacotes NodeJS (separar por espaço)</Label>
+                <MonoInput id="unnode_packages" value={form.unnode_packages} onChange={set('unnode_packages')} placeholder="discord.js" />
+              </div>
+              <div>
+                <Label htmlFor="node_args">Argumentos adicionais</Label>
+                <MonoInput id="node_args" value={form.node_args} onChange={set('node_args')} placeholder="--inspect" />
+              </div>
+              <div>
+                <Toggle checked={form.allow_file_uploads} onChange={(v) => setForm((f) => ({ ...f, allow_file_uploads: v }))} label="Permitir arquivos enviados pelo usuário" />
+              </div>
           </div>
         )}
 
@@ -291,9 +392,53 @@ export default function ServiceFormModal({ open, onClose, onSubmit, initial }) {
         )}
 
         <div>
-          <Label htmlFor="env">Variáveis de ambiente (JSON)</Label>
-          <TextArea id="env" rows={3} value={envText} onChange={(e) => { setEnvText(e.target.value); setEnvError(''); }} placeholder='{"TOKEN": "abc123"}' />
-          {envError && <p className="text-xs text-error mt-1.5">{envError}</p>}
+          <div className="flex items-center justify-between">
+            <Label htmlFor="env">Variáveis de ambiente</Label>
+            <button
+              type="button"
+              onClick={toggleEnvAdvanced}
+              className="text-xs text-signal hover:underline mb-1.5"
+            >
+              {envAdvanced ? 'Usar campos simples' : 'Modo avançado (JSON)'}
+            </button>
+          </div>
+
+          {envAdvanced ? (
+            <>
+              <TextArea id="env" rows={3} value={envRawText} onChange={(e) => { setEnvRawText(e.target.value); setEnvError(''); }} placeholder='{"TOKEN": "abc123"}' />
+              {envError && <p className="text-xs text-error mt-1.5">{envError}</p>}
+            </>
+          ) : (
+            <div className="space-y-2">
+              {envRows.length === 0 && (
+                <p className="text-xs text-ink-faint">Nenhuma variável ainda. Use para tokens, chaves de API, URLs de banco etc.</p>
+              )}
+              {envRows.map((row, i) => (
+                <div key={i} className="flex gap-2 items-center">
+                  <div className="w-2/5 shrink-0">
+                    <MonoInput
+                      value={row.key}
+                      onChange={(e) => updateEnvRow(i, 'key', e.target.value.toUpperCase())}
+                      placeholder="NOME_DA_VARIAVEL"
+                    />
+                  </div>
+                  <span className="text-ink-faint text-xs shrink-0">=</span>
+                  <MonoInput
+                    value={row.value}
+                    onChange={(e) => updateEnvRow(i, 'value', e.target.value)}
+                    placeholder="valor"
+                  />
+                  <button type="button" onClick={() => removeEnvRow(i)} className="text-ink-faint hover:text-error shrink-0 p-1.5">
+                    <X size={14} />
+                  </button>
+                </div>
+              ))}
+              <button type="button" onClick={addEnvRow} className="text-xs text-signal hover:underline flex items-center gap-1">
+                <Plus size={12} /> Adicionar variável
+              </button>
+              {envError && <p className="text-xs text-error mt-1.5">{envError}</p>}
+            </div>
+          )}
         </div>
 
         <div className="grid sm:grid-cols-3 gap-4 items-end">
