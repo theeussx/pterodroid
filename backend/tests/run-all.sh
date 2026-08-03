@@ -28,6 +28,7 @@ run "Integração — segurança da autenticação"             node tests/auth-
 run "Integração — segurança das instâncias de banco"    node tests/database-security-test.js
 run "Segurança — compactar/descompactar (Zip Slip)"      node tests/archive-test.js
 run "Integração — terminal do serviço"                   node tests/terminal-test.js
+run "Integração — configuração inicial e bootstrap"     node tests/service-setup-test.js
 run "Integração — API HTTP completa"                     bash tests/smoke-test.sh
 
 echo ""

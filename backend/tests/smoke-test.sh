@@ -132,7 +132,7 @@ OVERLIMIT_COUNT=$(curl -s "$BASE/api/services/$SVC_ID/backups" -H "$AUTH" | node
 
 echo "== backups: download is a real zip =="
 curl -s "$BASE/api/services/$SVC_ID/backups/$BK_ID/download" -H "$AUTH" -o "/tmp/pterodroid-backup-test-$$.zip"
-FILETYPE=$(file -b "/tmp/pterodroid-backup-test-$$.zip")
+FILETYPE=$(node -e "try { const b=require('fs').readFileSync('/tmp/pterodroid-backup-test-$$.zip'); console.log(b[0]===0x50&&b[1]===0x4B?'zip':'other') } catch(e){ console.log('error') }")
 echo "$FILETYPE" | grep -qi "zip" && pass "download é um .zip válido ($FILETYPE)" || fail "download não parece um zip: $FILETYPE"
 rm -f "/tmp/pterodroid-backup-test-$$.zip"
 

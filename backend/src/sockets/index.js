@@ -12,6 +12,7 @@ const dbm = require('../services/dbInstanceManager');
 const tm = require('../services/tunnelManager');
 const ntm = require('../services/namedTunnelManager');
 const terminals = require('../services/terminalManager');
+const setupManager = require('../services/serviceSetupManager');
 
 const SNAPSHOT_INTERVAL_MS = 2000;
 
@@ -48,6 +49,8 @@ function setupSockets(httpServer) {
   // aparecendo enquanto roda em vez de só no fim.
   terminals.on('data', (payload) => io.emit('terminal:data', payload));
   terminals.on('exit', (payload) => io.emit('terminal:exit', payload));
+  setupManager.on('status', (payload) => io.emit('service:setup-status', payload));
+  setupManager.on('log', (payload) => io.emit('service:setup-log', payload));
 
   // ── Periodic system snapshot, only while someone's listening ─────────
   let snapshotTimer = null;

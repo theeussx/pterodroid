@@ -51,6 +51,8 @@ export const api = {
   sendServiceInput: (id, text) => request(`/services/${id}/input`, { method: 'POST', body: { text } }),
   serviceLogs: (id, limit = 200) => request(`/services/${id}/logs?limit=${limit}`),
   serviceDiskUsage: (id) => request(`/services/${id}/disk-usage`),
+  getServiceSetup: (id) => request(`/services/${id}/setup`),
+  runServiceSetup: (id) => request(`/services/${id}/setup`, { method: 'POST' }),
 
   // docker
   listDockerHosts: () => request('/docker/hosts'),

@@ -122,6 +122,14 @@ export default function Services() {
 
             {s.description && <p className="text-xs text-ink-dim line-clamp-2">{s.description}</p>}
 
+            {s.setup_status && s.setup_status !== 'Concluído' && (
+              <div className={`text-[10px] px-2 py-1 rounded border truncate font-mono ${
+                s.setup_status === 'Falhou' ? 'bg-error-soft text-error border-error/20' : 'bg-running/10 text-running border-running/20'
+              }`}>
+                Setup: {s.setup_status} {typeof s.setup_progress === 'number' ? `(${s.setup_progress}%)` : ''}
+              </div>
+            )}
+
             {s.public_url && (
               <div className="text-[10px] bg-signal-soft text-signal px-2 py-1 rounded border border-signal/20 truncate font-mono">
                 {s.public_url}

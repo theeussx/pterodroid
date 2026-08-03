@@ -101,6 +101,7 @@ function bootstrapNodeProject(rootDir, name) {
     fs.writeFileSync(tsConfigPath, JSON.stringify({
       compilerOptions: {
         outDir: 'dist',
+        rootDir: 'src',
         module: 'commonjs',
         target: 'es2020',
         esModuleInterop: true,
@@ -154,7 +155,7 @@ function bootstrapNodeProject(rootDir, name) {
  * Devolve o diretório final, se ele foi criado pelo painel (e portanto
  * pode ser removido junto com o serviço), os volumes e o comando.
  */
-function resolveServiceWorkspace({ name, runtime_type, working_directory, volumes, image, command,
+function resolveServiceWorkspace({ name, runtime_type, working_directory, volumes, image, command, startup_command,
   git_repo, git_branch, git_username, git_token,
   main_file, node_packages, unnode_packages, node_args, auto_update = 0, allow_file_uploads = 0 }) {
   const isDocker = runtime_type === 'docker';
@@ -172,7 +173,7 @@ function resolveServiceWorkspace({ name, runtime_type, working_directory, volume
   }
 
   let nextVolumes = volumes;
-  let nextCommand = (command || '').trim();
+  let nextCommand = (startup_command || command || '').trim();
 
   if (isDocker) {
     // O workspace do serviço é sempre montado em /app — é isso que faz
@@ -191,8 +192,9 @@ function resolveServiceWorkspace({ name, runtime_type, working_directory, volume
     }
   }
 
-  // If user provided a main file, prefer it for the default command.
-  if (main_file && main_file.trim()) {
+  // Se o usuário especificou main_file, mas NÃO informou um Startup Command customizado,
+  // inferimos o comando padrão a partir de main_file (Etapa 2).
+  if (!nextCommand && main_file && main_file.trim()) {
     const mf = main_file.trim();
     const mfRel = mf.replace(/^\/+/, '');
     const looksLikeFullCommand = /\s/.test(mfRel);
@@ -207,9 +209,6 @@ function resolveServiceWorkspace({ name, runtime_type, working_directory, volume
         nextCommand = `sh -c 'cd /app && node "${mfRel}" ${node_args || ''}'`;
       }
     } else {
-      // For process runtime we spawn the command with cwd already set to the
-      // service workspace on the host, so don't cd into /app — just run the
-      // file path relative to that cwd.
       if (looksLikeFullCommand) {
         nextCommand = `sh -c '${mfRel} ${node_args || ''}'`;
       } else if (mf.endsWith('.js')) {
@@ -221,64 +220,6 @@ function resolveServiceWorkspace({ name, runtime_type, working_directory, volume
       }
     }
   }
-
-  // Background tasks: git clone/pull and npm installs/uninstalls. Use terminal sessions so we don't block the HTTP handler.
-  (async () => {
-    try {
-      // Ensure workspace dir exists
-      workspaces.ensureDir(finalWorkingDir);
-
-      // Git clone or pull
-      if (git_repo && git_repo.trim()) {
-        const repo = git_repo.trim();
-        const gitDir = path.join(finalWorkingDir, '.git');
-        // Build clone url with credentials if provided
-        let cloneUrl = repo;
-        if (git_username && git_token) {
-          try {
-            const u = new URL(repo);
-            u.username = encodeURIComponent(String(git_username));
-            u.password = encodeURIComponent(String(git_token));
-            cloneUrl = u.toString();
-          } catch {
-            // ignore, use raw repo
-          }
-        }
-
-        const session = terminals.create({ serviceId: null, serviceName: name, cwd: finalWorkingDir });
-        if (fs.existsSync(gitDir)) {
-          if (auto_update) {
-            session.run('git pull --rebase || true');
-          }
-        } else {
-          // Clone into current dir
-          session.run(`git clone ${cloneUrl} . || true`);
-        }
-        if (git_branch && git_branch.trim()) {
-          session.run(`git checkout ${git_branch.trim()} || true`);
-        }
-      }
-
-      // Node package installs/uninstalls
-      if (node_packages && node_packages.trim()) {
-        const session = terminals.create({ serviceId: null, serviceName: name, cwd: finalWorkingDir });
-        session.run(`/usr/local/bin/npm install ${node_packages}`);
-      }
-      if (unnode_packages && unnode_packages.trim()) {
-        const session = terminals.create({ serviceId: null, serviceName: name, cwd: finalWorkingDir });
-        session.run(`/usr/local/bin/npm uninstall ${unnode_packages}`);
-      }
-
-      // If package.json exists and there is no explicit node_packages, run a plain install to restore deps
-      const pkg = path.join(finalWorkingDir, 'package.json');
-      if (fs.existsSync(pkg) && (!node_packages || !node_packages.trim())) {
-        const session = terminals.create({ serviceId: null, serviceName: name, cwd: finalWorkingDir });
-        session.run('/usr/local/bin/npm install');
-      }
-    } catch (e) {
-      console.error('[serviceWorkspace] background setup failed:', e.message);
-    }
-  })();
 
   return { finalWorkingDir, scaffolded, volumes: nextVolumes, command: nextCommand };
 }

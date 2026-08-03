@@ -16,7 +16,7 @@ const TYPES = [
 ];
 
 const EMPTY = {
-  name: '', description: '', type: 'node', command: '', working_directory: '',
+  name: '', description: '', type: 'node', command: '', startup_command: '', working_directory: '',
   environment: '{}', auto_restart: true, restart_delay: 3, max_restarts: 10, port: '', tunnel_hostname: '',
   runtime_type: 'process', docker_host_id: '', image: '', cpu_limit: '', memory_limit: '',
   // initial config
@@ -262,15 +262,18 @@ export default function ServiceFormModal({ open, onClose, onSubmit, initial }) {
           </>
         ) : (
           <div>
-            <Label htmlFor="command">Comando de inicialização</Label>
-            <MonoInput id="command" value={form.command} onChange={set('command')} placeholder="node index.js" required />
+            <Label htmlFor="command">Comando de inicialização / Startup Command (opcional)</Label>
+            <MonoInput id="command" value={form.startup_command || form.command} onChange={(e) => setForm((f) => ({ ...f, startup_command: e.target.value, command: e.target.value }))} placeholder="node index.js ou npm start" />
+            <p className="text-xs text-ink-faint mt-1">
+              Tem prioridade sobre qualquer inferência automática. Deixe vazio para que o Pterodroid infira automaticamente o comando a partir do projeto (package.json, dist/index.js ou Arquivo Principal).
+            </p>
               <div>
                 <Label htmlFor="git_repo">Repositório Git (opcional)</Label>
                 <Input id="git_repo" value={form.git_repo} onChange={set('git_repo')} placeholder="https://github.com/usuario/repo.git" />
                 <div className="grid sm:grid-cols-3 gap-2 mt-2">
                   <Input id="git_branch" value={form.git_branch} onChange={set('git_branch')} placeholder="branch (ex: main)" />
                   <Input id="git_username" value={form.git_username} onChange={set('git_username')} placeholder="git user (opcional)" />
-                  <Input id="git_token" value={form.git_token} onChange={set('git_token')} placeholder="git token (opcional)" />
+                  <Input id="git_token" type="password" value={form.git_token} onChange={set('git_token')} placeholder="git token (oculto)" />
                 </div>
                 <div className="mt-2">
                   <Toggle checked={form.auto_update} onChange={(v) => setForm((f) => ({ ...f, auto_update: v }))} label="Auto Update (git pull na inicialização)" />

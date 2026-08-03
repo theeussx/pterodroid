@@ -158,6 +158,27 @@ async function initDB() {
   ensureColumn(db, 'services', 'node_args', 'TEXT');
   ensureColumn(db, 'services', 'auto_update', 'INTEGER DEFAULT 0');
   ensureColumn(db, 'services', 'allow_file_uploads', 'INTEGER DEFAULT 0');
+  ensureColumn(db, 'services', 'startup_command', "TEXT DEFAULT ''");
+  ensureColumn(db, 'services', 'setup_status', "TEXT DEFAULT 'Aguardando'");
+  ensureColumn(db, 'services', 'setup_progress', 'INTEGER DEFAULT 0');
+  ensureColumn(db, 'services', 'setup_error', "TEXT DEFAULT ''");
+  ensureColumn(db, 'services', 'setup_logs', "TEXT DEFAULT '[]'");
+
+  // Retrocompatibilidade: serviços existentes simples que já possuem comando são marcados como Concluído
+  db.exec(`
+    UPDATE services
+    SET setup_status = 'Concluído', setup_progress = 100
+    WHERE (setup_status IS NULL OR setup_status = '' OR setup_status = 'Aguardando')
+      AND command IS NOT NULL AND command != ''
+      AND (git_repo IS NULL OR git_repo = '')
+  `);
+
+  // Robustez: reseta setups interrompidos por reinicialização do painel
+  db.exec(`
+    UPDATE services
+    SET setup_status = 'Falhou', setup_error = 'O painel foi reiniciado durante a execução do setup.'
+    WHERE setup_status NOT IN ('Aguardando', 'Concluído', 'Falhou') AND setup_status IS NOT NULL
+  `);
 
   /**
    * `desired_state` separa o que o usuário QUER ('running'/'stopped') do

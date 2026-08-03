@@ -54,8 +54,35 @@ export function useServiceStatusEvents(onStatus) {
     const socket = getSocket();
     if (!socket) return;
     socket.on('service:status', onStatus);
-    return () => socket.off('service:status', onStatus);
+    socket.on('service:setup-status', onStatus);
+    return () => {
+      socket.off('service:status', onStatus);
+      socket.off('service:setup-status', onStatus);
+    };
   }, [onStatus]);
+}
+
+export function useServiceSetupEvents(serviceId, onStatus, onLog) {
+  useEffect(() => {
+    const socket = getSocket();
+    if (!socket || !serviceId) return undefined;
+    const handleStatus = (payload) => {
+      if (Number(payload?.serviceId) === Number(serviceId) && onStatus) {
+        onStatus(payload);
+      }
+    };
+    const handleLog = (payload) => {
+      if (Number(payload?.serviceId) === Number(serviceId) && onLog) {
+        onLog(payload);
+      }
+    };
+    socket.on('service:setup-status', handleStatus);
+    socket.on('service:setup-log', handleLog);
+    return () => {
+      socket.off('service:setup-status', handleStatus);
+      socket.off('service:setup-log', handleLog);
+    };
+  }, [serviceId, onStatus, onLog]);
 }
 
 export function useDbStatusEvents(onStatus) {

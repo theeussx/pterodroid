@@ -6,6 +6,7 @@ import StatusDot from './StatusDot';
 import LogViewer from './LogViewer';
 import ServiceFileBrowser from './files/ServiceFileBrowser';
 import ServiceTerminal from './ServiceTerminal';
+import ServiceSetupTab from './ServiceSetupTab';
 import BackupsTab from './BackupsTab';
 import { api } from '../lib/api';
 import { useLiveLogs } from '../lib/hooks';
@@ -91,52 +92,6 @@ export default function ServiceDetailModal({ open, onClose, serviceId, onChanged
     }
   };
 
-  // Config form state
-  const [cfg, setCfg] = useState({});
-  useEffect(() => {
-    if (service) {
-      setCfg({
-        git_repo: service.git_repo || '',
-        git_branch: service.git_branch || '',
-        git_username: service.git_username || '',
-        git_token: service.git_token || '',
-        main_file: service.main_file || '',
-        node_packages: service.node_packages || '',
-        unnode_packages: service.unnode_packages || '',
-        node_args: service.node_args || '',
-        auto_update: !!service.auto_update,
-        allow_file_uploads: !!service.allow_file_uploads,
-      });
-    }
-  }, [service]);
-
-  const saveConfig = async () => {
-    try {
-      setBusy(true);
-      const payload = {
-        git_repo: cfg.git_repo || null,
-        git_branch: cfg.git_branch || null,
-        git_username: cfg.git_username || null,
-        git_token: cfg.git_token || null,
-        main_file: cfg.main_file || null,
-        node_packages: cfg.node_packages || null,
-        unnode_packages: cfg.unnode_packages || null,
-        node_args: cfg.node_args || null,
-        auto_update: cfg.auto_update ? 1 : 0,
-        allow_file_uploads: cfg.allow_file_uploads ? 1 : 0,
-      };
-      await api.updateService(serviceId, payload);
-      const fresh = await api.getService(serviceId);
-      setService(fresh);
-      notify('Configuração salva', 'success');
-      onChanged?.();
-    } catch (e) {
-      notify(e.message, 'error');
-    } finally {
-      setBusy(false);
-    }
-  };
-
   if (!service) {
     return (
       <Modal open={open} onClose={onClose} title="Carregando..." size="xl">
@@ -147,10 +102,6 @@ export default function ServiceDetailModal({ open, onClose, serviceId, onChanged
 
   const isDocker = service.runtime_type === 'docker';
   const runtime = service.runtime;
-  // Terminal usa "docker exec", então precisa do container já criado.
-  // Arquivos, porém, opera direto na pasta do host (working_directory),
-  // que já existe desde a criação do serviço — não depende do container
-  // ter sido criado nem do serviço já ter rodado alguma vez.
   const terminalReady = !isDocker || !!service.container_id;
 
   return (
@@ -209,79 +160,97 @@ export default function ServiceDetailModal({ open, onClose, serviceId, onChanged
         </div>
 
         {tab === 'overview' && (
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-            {isDocker ? (
-              <>
-                <div className="bg-raised rounded-lg p-3">
-                  <p className="text-ink-faint mb-1">Imagem</p>
-                  <p className="text-ink font-mono truncate" title={service.image}>{service.image}</p>
+          <div className="space-y-4">
+            {service.setup_status && service.setup_status !== 'Concluído' && (
+              <div className="bg-raised rounded-lg p-3 border border-line flex items-center justify-between gap-4">
+                <div>
+                  <p className="text-ink font-semibold text-xs mb-0.5">
+                    Configuração Inicial: <span className="font-mono">{service.setup_status}</span>
+                  </p>
+                  <p className="text-ink-faint text-xs">
+                    {service.setup_error ? `Falha: ${service.setup_error}` : 'Progresso em tempo real da clonagem, instalação e build.'}
+                  </p>
                 </div>
-                <div className="bg-raised rounded-lg p-3">
-                  <p className="text-ink-faint mb-1">Auto-restart</p>
-                  <p className="text-ink">{service.auto_restart ? 'Ativado (política nativa Docker)' : 'Desativado'}</p>
-                </div>
-                {runtime?.cpuPercent != null && (
-                  <div className="bg-raised rounded-lg p-3">
-                    <p className="text-ink-faint mb-1">CPU</p>
-                    <p className="text-ink font-mono">{runtime.cpuPercent}%</p>
-                  </div>
-                )}
-                {runtime?.memUsageMB != null && (
-                  <div className="bg-raised rounded-lg p-3">
-                    <p className="text-ink-faint mb-1">Memória</p>
-                    <p className="text-ink font-mono">{runtime.memUsageMB}{runtime.memLimitMB ? ` / ${runtime.memLimitMB}` : ''} MB</p>
-                  </div>
-                )}
-              </>
-            ) : (
-              <>
-                <div className="bg-raised rounded-lg p-3">
-                  <p className="text-ink-faint mb-1">Tipo</p>
-                  <p className="text-ink font-mono">{service.type}</p>
-                </div>
-                <div className="bg-raised rounded-lg p-3">
-                  <p className="text-ink-faint mb-1">Auto-restart</p>
-                  <p className="text-ink">{service.auto_restart ? 'Ativado' : 'Desativado'}</p>
-                </div>
-                <div className="bg-raised rounded-lg p-3 col-span-2 sm:col-span-1">
-                  <p className="text-ink-faint mb-1">Comando</p>
-                  <p className="text-ink font-mono truncate" title={service.command}>{service.command}</p>
-                </div>
-              </>
+                <Button size="sm" variant="secondary" onClick={() => setTab('config')}>
+                  Ver Progresso
+                </Button>
+              </div>
             )}
-            <div className="bg-raised rounded-lg p-3">
-              <p className="text-ink-faint mb-1">Última inicialização</p>
-              <p className="text-ink">{service.last_started ? new Date(service.last_started + 'Z').toLocaleString('pt-BR') : '—'}</p>
-            </div>
-            <div className="bg-raised rounded-lg p-3">
-              <p className="text-ink-faint mb-1 flex items-center gap-1"><HardDrive size={11} /> Uso de disco</p>
-              <p className="text-ink font-mono">
-                {diskUsage ? `${formatBytes(diskUsage.bytes)}${diskUsage.truncated ? '+' : ''}` : '...'}
-              </p>
-            </div>
-            {service.port && (
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+              {isDocker ? (
+                <>
+                  <div className="bg-raised rounded-lg p-3">
+                    <p className="text-ink-faint mb-1">Imagem</p>
+                    <p className="text-ink font-mono truncate" title={service.image}>{service.image}</p>
+                  </div>
+                  <div className="bg-raised rounded-lg p-3">
+                    <p className="text-ink-faint mb-1">Auto-restart</p>
+                    <p className="text-ink">{service.auto_restart ? 'Ativado (política nativa Docker)' : 'Desativado'}</p>
+                  </div>
+                  {runtime?.cpuPercent != null && (
+                    <div className="bg-raised rounded-lg p-3">
+                      <p className="text-ink-faint mb-1">CPU</p>
+                      <p className="text-ink font-mono">{runtime.cpuPercent}%</p>
+                    </div>
+                  )}
+                  {runtime?.memUsageMB != null && (
+                    <div className="bg-raised rounded-lg p-3">
+                      <p className="text-ink-faint mb-1">Memória</p>
+                      <p className="text-ink font-mono">{runtime.memUsageMB}{runtime.memLimitMB ? ` / ${runtime.memLimitMB}` : ''} MB</p>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <>
+                  <div className="bg-raised rounded-lg p-3">
+                    <p className="text-ink-faint mb-1">Tipo</p>
+                    <p className="text-ink font-mono">{service.type}</p>
+                  </div>
+                  <div className="bg-raised rounded-lg p-3">
+                    <p className="text-ink-faint mb-1">Auto-restart</p>
+                    <p className="text-ink">{service.auto_restart ? 'Ativado' : 'Desativado'}</p>
+                  </div>
+                  <div className="bg-raised rounded-lg p-3 col-span-2 sm:col-span-1">
+                    <p className="text-ink-faint mb-1">Comando</p>
+                    <p className="text-ink font-mono truncate" title={service.command}>{service.command}</p>
+                  </div>
+                </>
+              )}
               <div className="bg-raised rounded-lg p-3">
-                <p className="text-ink-faint mb-1">Porta Local</p>
-                <p className="text-ink font-mono">{service.port}</p>
+                <p className="text-ink-faint mb-1">Última inicialização</p>
+                <p className="text-ink">{service.last_started ? new Date(service.last_started + 'Z').toLocaleString('pt-BR') : '—'}</p>
               </div>
-            )}
-            {service.public_url && (
-              <div className="bg-signal-soft rounded-lg p-3 col-span-2">
-                <p className="text-signal mb-1 font-semibold">URL Pública (túnel rápido)</p>
-                <a href={service.public_url} target="_blank" rel="noreferrer" className="text-signal underline break-all font-mono">
-                  {service.public_url}
-                </a>
+              <div className="bg-raised rounded-lg p-3">
+                <p className="text-ink-faint mb-1 flex items-center gap-1"><HardDrive size={11} /> Uso de disco</p>
+                <p className="text-ink font-mono">
+                  {diskUsage ? `${formatBytes(diskUsage.bytes)}${diskUsage.truncated ? '+' : ''}` : '...'}
+                </p>
               </div>
-            )}
-            {!service.public_url && service.tunnel_hostname && (
-              <div className="bg-signal-soft rounded-lg p-3 col-span-2">
-                <p className="text-signal mb-1 font-semibold">Domínio configurado</p>
-                <a href={`https://${service.tunnel_hostname}`} target="_blank" rel="noreferrer" className="text-signal underline break-all font-mono">
-                  {service.tunnel_hostname}
-                </a>
-                <p className="text-xs text-ink-faint mt-1">Ativo assim que o túnel nomeado estiver rodando (Configurações → Domínio personalizado).</p>
-              </div>
-            )}
+              {service.port && (
+                <div className="bg-raised rounded-lg p-3">
+                  <p className="text-ink-faint mb-1">Porta Local</p>
+                  <p className="text-ink font-mono">{service.port}</p>
+                </div>
+              )}
+              {service.public_url && (
+                <div className="bg-signal-soft rounded-lg p-3 col-span-2">
+                  <p className="text-signal mb-1 font-semibold">URL Pública (túnel rápido)</p>
+                  <a href={service.public_url} target="_blank" rel="noreferrer" className="text-signal underline break-all font-mono">
+                    {service.public_url}
+                  </a>
+                </div>
+              )}
+              {!service.public_url && service.tunnel_hostname && (
+                <div className="bg-signal-soft rounded-lg p-3 col-span-2">
+                  <p className="text-signal mb-1 font-semibold">Domínio configurado</p>
+                  <a href={`https://${service.tunnel_hostname}`} target="_blank" rel="noreferrer" className="text-signal underline break-all font-mono">
+                    {service.tunnel_hostname}
+                  </a>
+                  <p className="text-xs text-ink-faint mt-1">Ativo assim que o túnel nomeado estiver rodando (Configurações → Domínio personalizado).</p>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
@@ -311,65 +280,14 @@ export default function ServiceDetailModal({ open, onClose, serviceId, onChanged
 
         {tab === 'backups' && <BackupsTab serviceId={serviceId} />}
         {tab === 'config' && (
-          <div className="space-y-3">
-            <div className="grid sm:grid-cols-2 gap-3">
-              <div>
-                <Label htmlFor="git_repo">Repositório Git</Label>
-                <Input id="git_repo" value={cfg.git_repo || ''} onChange={(e) => setCfg((c) => ({ ...c, git_repo: e.target.value }))} />
-              </div>
-              <div>
-                <Label htmlFor="git_branch">Branch</Label>
-                <Input id="git_branch" value={cfg.git_branch || ''} onChange={(e) => setCfg((c) => ({ ...c, git_branch: e.target.value }))} />
-              </div>
-              <div>
-                <Label htmlFor="git_username">Git usuário</Label>
-                <Input id="git_username" value={cfg.git_username || ''} onChange={(e) => setCfg((c) => ({ ...c, git_username: e.target.value }))} />
-              </div>
-              <div>
-                <Label htmlFor="git_token">Git token (oculto)</Label>
-                <Input id="git_token" type="password" value={cfg.git_token || ''} onChange={(e) => setCfg((c) => ({ ...c, git_token: e.target.value }))} />
-              </div>
-              <div>
-                <Label htmlFor="main_file">Arquivo principal</Label>
-                <Input id="main_file" value={cfg.main_file || ''} onChange={(e) => setCfg((c) => ({ ...c, main_file: e.target.value }))} placeholder="dist/index.js ou src/index.ts" />
-              </div>
-              <div>
-                <Label htmlFor="node_args">Node args</Label>
-                <Input id="node_args" value={cfg.node_args || ''} onChange={(e) => setCfg((c) => ({ ...c, node_args: e.target.value }))} />
-              </div>
-            </div>
-
-            <div className="grid sm:grid-cols-2 gap-3">
-              <div>
-                <Label htmlFor="node_packages">Adicionar pacotes</Label>
-                <Input id="node_packages" value={cfg.node_packages || ''} onChange={(e) => setCfg((c) => ({ ...c, node_packages: e.target.value }))} placeholder="ex: discord.js express" />
-              </div>
-              <div>
-                <Label htmlFor="unnode_packages">Remover pacotes</Label>
-                <Input id="unnode_packages" value={cfg.unnode_packages || ''} onChange={(e) => setCfg((c) => ({ ...c, unnode_packages: e.target.value }))} placeholder="ex: discord.js" />
-              </div>
-            </div>
-
-            <div className="flex items-center gap-4">
-              <div>
-                <label className="flex items-center gap-2">
-                  <input type="checkbox" checked={!!cfg.auto_update} onChange={(e) => setCfg((c) => ({ ...c, auto_update: e.target.checked }))} />
-                  <span className="text-sm">Auto Update (git pull na inicialização)</span>
-                </label>
-              </div>
-              <div>
-                <label className="flex items-center gap-2">
-                  <input type="checkbox" checked={!!cfg.allow_file_uploads} onChange={(e) => setCfg((c) => ({ ...c, allow_file_uploads: e.target.checked }))} />
-                  <span className="text-sm">Permitir uploads de usuário</span>
-                </label>
-              </div>
-            </div>
-
-            <div className="flex gap-2">
-              <Button variant="ghost" onClick={() => { setCfg({}); setService((s) => ({ ...s })); }}>Cancelar</Button>
-              <Button variant="primary" onClick={saveConfig} loading={busy}>Salvar Configuração</Button>
-            </div>
-          </div>
+          <ServiceSetupTab
+            serviceId={serviceId}
+            service={service}
+            onChanged={() => {
+              act(api.getService, 'Serviço atualizado');
+              onChanged?.();
+            }}
+          />
         )}
       </div>
     </Modal>
