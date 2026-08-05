@@ -141,20 +141,42 @@ function runCmd({ cwd, command, args = [], env, timeoutMs = 10 * 60 * 1000, onLo
   });
 }
 
-/** Monta a URL de clone com credenciais, se fornecidas. */
+/**
+ * Monta a URL de clone SEM expor o token no comando (evita vazamento via ps).
+ * O token é fornecido separadamente via GIT_ASKPASS para autenticação segura.
+ */
 function buildCloneUrl(repo, username, token) {
-  if (!username || !token) return repo;
   try {
     const u = new URL(repo);
-    u.username = encodeURIComponent(String(username));
-    // Token nunca vai para a URL "pura" que poderia aparecer em logs — em
-    // vez disso, configuramos o git pra usar um header ou helper? Mantemos
-    // a URL mas garantimos que os logs a receberão mascarada (maskLogs).
-    u.password = encodeURIComponent(String(token));
+    // Sempre inclui username (real ou oauth2) para que git solicite
+    // apenas senha (token), permitindo usar GIT_ASKPASS de forma segura.
+    if (username && String(username).trim()) {
+      u.username = encodeURIComponent(String(username).trim());
+    } else if (token && String(token).trim()) {
+      u.username = encodeURIComponent('oauth2');
+    } else {
+      u.username = '';
+    }
+    // NUNCA embute token na URL — protege contra exposição em ps / logs / erros.
+    u.password = '';
     return u.toString();
   } catch {
     return repo;
   }
+}
+
+/** Cria um script temporário GIT_ASKPASS que responde apenas o token. */
+function createAskPass(rootDir, token) {
+  const askPath = path.join(rootDir, '.git-askpass');
+  const safeToken = String(token || '').trim();
+  const script = `#!/bin/sh\necho "${safeToken}"\n`;
+  try {
+    fs.writeFileSync(askPath, script);
+    fs.chmodSync(askPath, 0o700);
+  } catch {
+    // Se não conseguir escrever, o clone pode falhar — mas não bloqueia.
+  }
+  return askPath;
 }
 
 /** Substitui ocorrências do token em qualquer texto que vá pro log. */
@@ -173,8 +195,7 @@ function detectPackageManager(rootDir) {
   if (fs.existsSync(path.join(rootDir, 'bun.lockb'))) return 'bun';
   if (fs.existsSync(path.join(rootDir, 'pnpm-lock.yaml'))) return 'pnpm';
   if (fs.existsSync(path.join(rootDir, 'yarn.lock'))) return 'yarn';
-  // package-lock.json é o default do npm; se não existir mas houver
-  // package.json, ainda assim usamos npm (install cria o lockfile).
+  if (fs.existsSync(path.join(rootDir, 'package-lock.json'))) return 'npm';
   return 'npm';
 }
 
@@ -306,6 +327,19 @@ async function runSetup(serviceId, opts = {}) {
     throw Object.assign(new Error('Já existe um setup em execução para este serviço'), { status: 409 });
   }
 
+  // Proteção contra sessões anteriores após reinício do painel (stale state)
+  const currentDB = db.prepare('SELECT setup_status, setup_started_at FROM services WHERE id = ?').get(serviceId);
+  if (currentDB && currentDB.setup_status === 'running') {
+    const started = currentDB.setup_started_at ? new Date(currentDB.setup_started_at) : null;
+    const now = new Date();
+    if (started && (now - started) < 5 * 60 * 1000) {
+      throw Object.assign(new Error('Setup parece ainda estar em andamento (sessão anterior) — aguarde ou reinicie o serviço'), { status: 409 });
+    } else {
+      // Stale state — reseta para permitir nova tentativa sem corromper workspace
+      db.prepare("UPDATE services SET setup_status = 'idle', setup_step = 'idle', setup_progress = 0, setup_error = '' WHERE id = ?").run(serviceId);
+    }
+  }
+
   running.set(serviceId, { startedAt: Date.now() });
   const isDocker = service.runtime_type === 'docker';
   const rootDir = workspaces.normalize(service.working_directory)
@@ -357,6 +391,12 @@ async function runSetup(serviceId, opts = {}) {
       const gitDir = path.join(rootDir, '.git');
       const branch = (service.git_branch || '').trim();
 
+      // Segurança: prepara script de autenticação quando há token (nunca expõe na URL)
+      let askPassPath = null;
+      if (service.git_token && String(service.git_token).trim()) {
+        askPassPath = createAskPass(rootDir, service.git_token);
+      }
+
       if (fs.existsSync(gitDir)) {
         emitLog('info', `↻ Atualizando repositório em ${rootDir}…\n`);
         if (branch) {
@@ -365,6 +405,7 @@ async function runSetup(serviceId, opts = {}) {
             cwd: rootDir,
             command: 'git',
             args: ['checkout', branch],
+            env: askPassPath ? { GIT_ASKPASS: askPassPath } : {},
             onLog: (l) => emitLog(l.stream, l.text),
             timeoutMs: 60_000,
           });
@@ -381,6 +422,7 @@ async function runSetup(serviceId, opts = {}) {
             cwd: rootDir,
             command: 'git',
             args: ['pull', '--ff-only'],
+            env: askPassPath ? { GIT_ASKPASS: askPassPath } : {},
             onLog: (l) => emitLog(l.stream, l.text),
             timeoutMs: 2 * 60_000,
           });
@@ -408,10 +450,13 @@ async function runSetup(serviceId, opts = {}) {
         if (branch) args.push('--branch', branch);
         args.push(cloneUrl, '.');
 
+        const gitEnv = askPassPath ? { GIT_ASKPASS: askPassPath } : {};
+
         const r = await runCmd({
           cwd: rootDir,
           command: 'git',
           args,
+          env: gitEnv,
           onLog: (l) => emitLog(l.stream, l.text),
           timeoutMs: 5 * 60_000,
         });
@@ -508,10 +553,11 @@ async function runSetup(serviceId, opts = {}) {
       const hasBuildScript = !!pkg?.scripts?.build;
       const distDir = path.join(rootDir, 'dist');
       const distReady = fs.existsSync(distDir) && fs.readdirSync(distDir).length > 0;
+      const tscAvailable = fs.existsSync(path.join(rootDir, 'node_modules', '.bin', 'tsc')) || fs.existsSync(path.join(rootDir, 'node_modules', 'typescript', 'bin', 'tsc'));
 
       if (hasBuildScript) {
         setStep('building', 5);
-        emitLog('info', '→ tsconfig.json detectado; rodando build\n');
+        emitLog('info', '→ tsconfig.json detectado; rodando build via script\n');
         const pm = detectPackageManager(rootDir);
         const bin = pmBinary(pm);
 
@@ -537,8 +583,26 @@ async function runSetup(serviceId, opts = {}) {
         } else {
           emitLog('info', '✓ build concluído\n');
         }
+      } else if (tscAvailable) {
+        setStep('building', 5);
+        emitLog('info', '→ tsconfig.json detectado (sem script "build"); executando compile direto (tsc)\n');
+        const r = await runCmd({
+          cwd: rootDir,
+          command: 'npx',
+          args: ['tsc'],
+          onLog: (l) => emitLog(l.stream, l.text),
+          timeoutMs: 5 * 60_000,
+        });
+        if (r.code !== 0) {
+          throw new Error(`compilação TypeScript direta falhou (código ${r.code}) — corrija os erros antes de iniciar`);
+        }
+        if (!fs.existsSync(distDir) || fs.readdirSync(distDir).length === 0) {
+          emitLog('warn', '(tsc concluído mas nenhum arquivo foi gerado em dist/ — seguindo assim mesmo)\n');
+        } else {
+          emitLog('info', '✓ compilação TypeScript concluída\n');
+        }
       } else {
-        emitLog('info', '• tsconfig.json presente mas não há script "build" — pulando compilação\n');
+        emitLog('info', '• tsconfig.json presente mas não há script "build" nem typescript instalado — pulando compilação\n');
       }
     }
     setStep('building', 100);
