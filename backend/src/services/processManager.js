@@ -151,7 +151,17 @@ class ProcessManager extends EventEmitter {
     }
 
     let env = { ...process.env };
-    try { env = { ...env, ...JSON.parse(svc.environment || '{}') }; } catch { /* keep base env */ }
+    let explicitEnvironment = {};
+    try {
+      explicitEnvironment = JSON.parse(svc.environment || '{}');
+      env = { ...env, ...explicitEnvironment };
+    } catch { /* keep base env */ }
+    // O painel costuma definir PORT para si mesmo. Nunca repasse essa porta
+    // para um serviço que não escolheu uma porta explicitamente, pois o
+    // processo scaffoldado pode tentar escutar na mesma porta do painel.
+    if (!svc.port && !Object.prototype.hasOwnProperty.call(explicitEnvironment, 'PORT')) {
+      delete env.PORT;
+    }
 
     if (svc.port) {
       try {

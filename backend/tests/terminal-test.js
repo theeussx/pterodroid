@@ -81,6 +81,16 @@ async function api(path, { method = 'GET', body, token } = {}) {
   ok('cwd é o workspace do serviço', session.cwd === svc.working_directory, session.cwd);
   const sid = session.id;
 
+  const waitForIdle = async (timeout = 5000) => {
+    const deadline = Date.now() + timeout;
+    while (Date.now() < deadline) {
+      const state = await api(`/services/${svc.id}/terminal/${sid}`, { token });
+      if (state.status === 200 && state.data?.busy === false) return true;
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    return false;
+  };
+
   const runAndWait = async (command, ms = 1500) => {
     chunks.length = 0; exits.length = 0;
     const r = await api(`/services/${svc.id}/terminal/${sid}/exec`, { method: 'POST', token, body: { command } });
@@ -137,15 +147,19 @@ async function api(path, { method = 'GET', body, token } = {}) {
   const stdoutOnly = chunks.filter((c) => c.stream === 'stdout').map((c) => c.text).join('');
   ok('comando foi interrompido', stdoutOnly.includes('iniciou') && !stdoutOnly.includes('NAO_DEVERIA'),
     JSON.stringify(stdoutOnly));
+  ok('comando interrompido terminou', await waitForIdle(), 'sessão ainda ocupada');
   r = await runAndWait('echo sessao_viva');
   ok('sessão sobrevive ao Ctrl+C', r.text.includes('sessao_viva'), JSON.stringify(r.text));
 
   console.log('\nUm comando por vez:');
-  await api(`/services/${svc.id}/terminal/${sid}/exec`, { method: 'POST', token, body: { command: 'sleep 3' } });
+  await waitForIdle();
+  const first = await api(`/services/${svc.id}/terminal/${sid}/exec`, { method: 'POST', token, body: { command: 'sleep 3' } });
+  const stateBusy = await api(`/services/${svc.id}/terminal/${sid}`, { token });
   const busy = await api(`/services/${svc.id}/terminal/${sid}/exec`, { method: 'POST', token, body: { command: 'echo x' } });
+  ok('primeiro comando iniciou', first.status === 200 && stateBusy.data?.busy === true, JSON.stringify({ first, stateBusy }));
   ok('segundo comando é recusado com 409', busy.status === 409, `status ${busy.status}`);
   await api(`/services/${svc.id}/terminal/${sid}/interrupt`, { method: 'POST', token });
-  await new Promise((r2) => setTimeout(r2, 400));
+  ok('comando concorrente terminou após interrupt', await waitForIdle(), 'sessão ainda ocupada');
 
   console.log('\nHistórico e isolamento:');
   const { data: state } = await api(`/services/${svc.id}/terminal/${sid}`, { token });
@@ -156,6 +170,7 @@ async function api(path, { method = 'GET', body, token } = {}) {
   ok('exige autenticação', semToken.status === 401, `status ${semToken.status}`);
 
   console.log('\nSaída longa é truncada (proteção de memória):');
+  await waitForIdle();
   r = await runAndWait('for i in $(seq 1 200000); do echo "linha muito longa de preenchimento $i"; done', 6000);
   ok('truncou em vez de estourar', r.chunks.some((c) => c.stream === 'system' && c.text.includes('truncada')));
 

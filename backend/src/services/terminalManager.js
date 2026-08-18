@@ -91,6 +91,7 @@ class TerminalSession extends EventEmitter {
     if (!trimmed) throw Object.assign(new Error('Comando vazio'), { status: 400 });
 
     this.lastUsedAt = Date.now();
+    this._captureExplicitEnvChanges(trimmed);
 
     // O diretório pode ter sido apagado pelo gerenciador de arquivos desde
     // o último comando; voltar pra raiz do workspace é melhor que falhar.
@@ -107,7 +108,6 @@ class TerminalSession extends EventEmitter {
       trimmed,
       `__ptd_code=$?`,
       `printf '\\n${CWD_MARK}%s\\n' "$PWD"`,
-      `export -p 2>/dev/null | sed 's/^/${ENV_MARK}/' || true`,
       `exit $__ptd_code`,
     ].join('\n');
 
@@ -203,7 +203,26 @@ class TerminalSession extends EventEmitter {
     return { pid: child.pid };
   }
 
-  /** Lê uma linha de `export -p` e guarda a variável para os próximos comandos. */
+  /** Captura apenas exports/unsets digitados pelo usuário; nunca copia o ambiente inteiro. */
+  _captureExplicitEnvChanges(command) {
+    const exportRe = /(?:^|[;&|])\s*export\s+([A-Za-z_][A-Za-z0-9_]*)(?:=("(?:\\.|[^"\\])*"|'(?:[^']|'')*'|[^;&|\s]+))?/g;
+    let match;
+    while ((match = exportRe.exec(command))) {
+      const key = match[1];
+      if (BLOCKED_ENV.has(key)) continue;
+      let value = match[2];
+      if (value === undefined) continue;
+      value = value.trim();
+      if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+        value = value.slice(1, -1);
+      }
+      this.env[key] = value;
+    }
+    const unsetRe = /(?:^|[;&|])\s*unset\s+([A-Za-z_][A-Za-z0-9_]*)/g;
+    while ((match = unsetRe.exec(command))) delete this.env[match[1]];
+  }
+
+  /** Compatibilidade com marcadores antigos; ignora o ambiente herdado. */
   _absorbEnvLine(line) {
     // Formatos possíveis: `export FOO="bar"`, `export FOO='bar'`, `FOO=bar`
     const match = line.match(/^(?:export\s+|declare\s+-x\s+)?([A-Za-z_][A-Za-z0-9_]*)=(.*)$/);
@@ -218,6 +237,7 @@ class TerminalSession extends EventEmitter {
     }
     if (process.env[key] === value) return;
     if (key === 'PWD' || key === 'OLDPWD' || key === 'SHLVL' || key === '_') return;
+    if (Object.keys(this.env).length >= 128 && !Object.prototype.hasOwnProperty.call(this.env, key)) return;
     this.env[key] = value;
   }
 
