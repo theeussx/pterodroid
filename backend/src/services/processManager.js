@@ -10,6 +10,7 @@ const config = require('../config');
 const { findAvailablePort } = require('./portFinder');
 const tunnelManager = require('./tunnelManager');
 const workspaces = require('./workspaceManager');
+const { classifyLogLevel } = require('./logLevel');
 const { parseCommand } = require('./commandParser');
 
 class ProcessManager extends EventEmitter {
@@ -198,23 +199,27 @@ class ProcessManager extends EventEmitter {
 
     const handleData = (level) => (data) => {
       const message = data.toString();
-      const log = { level, message, ts: Date.now() };
+      // stdout/stderr pode conter várias linhas no mesmo chunk. Classificar o
+      // chunk inteiro faria um WARNING e um ERROR compartilharem uma só cor.
+      const messages = message.match(/[^\n]*\n|[^\n]+/g) || [message];
+      for (const line of messages) {
+        const classifiedLevel = classifyLogLevel(level, line);
+        const log = { level: classifiedLevel, message: line, ts: Date.now() };
 
-      entry.logs.push(log);
-      if (entry.logs.length > config.LOG_MAX_MEMORY) entry.logs.shift();
+        entry.logs.push(log);
+        if (entry.logs.length > config.LOG_MAX_MEMORY) entry.logs.shift();
 
-      // Only persist error-level lines to SQLite — keeps the DB small and
-      // avoids serializing the whole in-memory file on every stdout chunk.
-      if (level === 'error') {
+        // Persiste todos os níveis para que o histórico do painel preserve as
+        // cores corretas mesmo depois que o processo termina ou é reiniciado.
         try {
           db.prepare('INSERT INTO logs(service_id, level, message) VALUES(?,?,?)')
-            .run(svc.id, level, message.slice(0, 2000));
+            .run(svc.id, classifiedLevel, line.slice(0, 2000));
         } catch (err) {
           console.error('[SVC] falha ao persistir log:', err.message);
         }
-      }
 
-      this.emit('log', { serviceId: svc.id, ...log });
+        this.emit('log', { serviceId: svc.id, ...log });
+      }
     };
 
     child.stdout.on('data', handleData('info'));

@@ -36,7 +36,13 @@ export default function DatabaseDetailModal({ open, onClose, instanceId, onChang
   useEffect(() => {
     if (!open || !instanceId) return;
     api.getDatabase(instanceId)
-      .then((data) => { setInst(data); seedOnce(data.recentLogs || []); })
+      .then((data) => {
+        setInst(data);
+        const historical = data.recentLogs?.length
+          ? data.recentLogs
+          : [...(data.persistedLogs || [])].reverse();
+        seedOnce(historical);
+      })
       .catch((e) => notify(e.message, 'error'));
   }, [open, instanceId]); // eslint-disable-line react-hooks/exhaustive-deps
 

@@ -71,7 +71,10 @@ export default function ServiceDetailModal({ open, onClose, serviceId, onChanged
     ]).then(([data, setup]) => {
       if (cancelled) return;
       setService(data);
-      seedOnce(data.recentLogs || []);
+      const historical = data.recentLogs?.length
+        ? data.recentLogs
+        : [...(data.persistedLogs || [])].reverse();
+      seedOnce(historical);
       if (setup) {
         setSetupState({
           status: setup.status || 'idle',

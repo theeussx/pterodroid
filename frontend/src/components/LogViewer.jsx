@@ -10,9 +10,15 @@ const LEVEL_STYLE = {
 };
 
 function detectLevel(line) {
-  if (line.level === 'error') return 'error'; // authoritative: this came from stderr
-  if (/\b(WARN|WARNING)\b/.test(line.message)) return 'warn';
-  if (/\b(DEBUG|TRACE)\b/.test(line.message)) return 'debug';
+  // O backend já classifica stdout/stderr; respeite essa informação primeiro.
+  if (line.level === 'error') return 'error';
+  if (line.level === 'warn' || line.level === 'warning') return 'warn';
+  if (line.level === 'debug') return 'debug';
+
+  const message = String(line.message || '');
+  if (/\b(WARN|WARNING)\b|\[WARNING\]|\bDEPRECATION\b/i.test(message)) return 'warn';
+  if (/\b(DEBUG|TRACE)\b/i.test(message)) return 'debug';
+  if (/\[NOTE\]|\bNOTICE\b|\bINFO(?:RMATION)?\b/i.test(message)) return 'info';
   return 'info';
 }
 

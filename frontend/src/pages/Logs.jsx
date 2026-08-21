@@ -28,7 +28,10 @@ export default function Logs() {
     setSelected({ kind, id: entity.id, name: entity.name, status: entity.status });
     try {
       const detail = kind === 'service' ? await api.getService(entity.id) : await api.getDatabase(entity.id);
-      seedOnce(detail.recentLogs || []);
+      const historical = detail.recentLogs?.length
+        ? detail.recentLogs
+        : [...(detail.persistedLogs || [])].reverse();
+      seedOnce(historical);
     } catch {
       // no historical backlog available — live tail still works from here
     }

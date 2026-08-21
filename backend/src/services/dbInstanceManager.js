@@ -13,6 +13,7 @@ const EventEmitter = require('events');
 const path = require('path');
 const { getDB } = require('../db');
 const config = require('../config');
+const { classifyLogLevel } = require('./logLevel');
 const drivers = require('./dbDrivers');
 const workspaces = require('./workspaceManager');
 const { isPortAvailable } = require('./portFinder');
@@ -167,28 +168,26 @@ class DBInstanceManager extends EventEmitter {
 
     const handleData = (level) => (data) => {
       const message = data.toString();
-      const log = { level, message, ts: Date.now() };
-      entry.logs.push(log);
-      if (entry.logs.length > config.LOG_MAX_MEMORY) entry.logs.shift();
+      const messages = message.match(/[^\n]*\n|[^\n]+/g) || [message];
+      for (const line of messages) {
+        const classifiedLevel = classifyLogLevel(level, line);
+        const log = { level: classifiedLevel, message: line, ts: Date.now() };
+        entry.logs.push(log);
+        if (entry.logs.length > config.LOG_MAX_MEMORY) entry.logs.shift();
 
-      // FILTRO: Motores de DB jogam informativos comuns como [Note] e [Warning] no stderr.
-      // Filtramos isso para não disparar escritas síncronas desnecessárias no SQLite.
-      const isRealError = level === 'error' && 
-                          !message.includes('[Warning]') && 
-                          !message.includes('[Note]');
-
-      if (isRealError) {
-        // setImmediate desvincula a query da execução principal do pipe, impedindo Deadlocks no Termux
+        // Motores de banco enviam notas e avisos pelo stderr. Como a UI precisa
+        // preservar as três cores também no histórico, persiste todos os níveis.
+        // setImmediate evita bloquear o processamento do pipe no Termux.
         setImmediate(() => {
           try {
             db.prepare('INSERT INTO logs(db_instance_id, level, message) VALUES(?,?,?)')
-              .run(inst.id, level, message.slice(0, 2000));
+              .run(inst.id, classifiedLevel, line.slice(0, 2000));
           } catch (e) {
             console.error("Erro ao persistir logs do banco de dados:", e);
           }
         });
+        this.emit('log', { instanceId: inst.id, ...log });
       }
-      this.emit('log', { instanceId: inst.id, ...log });
     };
     child.stdout.on('data', handleData('info'));
     child.stderr.on('data', handleData('error'));

@@ -30,6 +30,7 @@
 const EventEmitter = require('events');
 const { getDB } = require('../db');
 const hosts = require('./dockerHostManager');
+const { classifyLogLevel } = require('./logLevel');
 const tunnelManager = require('./tunnelManager');
 const workspaces = require('./workspaceManager');
 const { tokenize } = require('./commandParser');
@@ -267,7 +268,7 @@ class DockerServiceDriver extends EventEmitter {
     const engine = hosts.engineFor(svc.docker_host_id);
     const lines = await engine.getLogs(svc.container_id, { tail: limit });
     return lines.map((l) => ({
-      level: l.stream === 'stderr' ? 'error' : 'info',
+      level: classifyLogLevel(l.stream, l.text),
       message: l.text,
       ts: Date.now(),
     }));
@@ -475,7 +476,7 @@ class DockerServiceDriver extends EventEmitter {
           partial = lines.pop(); // pedaço sem quebra de linha ainda — guarda pro próximo chunk
           for (const line of lines) {
             if (!line) continue;
-            this.emit('log', { serviceId, level: stream === 'stderr' ? 'error' : 'info', message: line, ts: Date.now() });
+            this.emit('log', { serviceId, level: classifyLogLevel(stream, line), message: line, ts: Date.now() });
           }
         },
         onError: () => {

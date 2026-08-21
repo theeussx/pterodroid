@@ -85,7 +85,15 @@ export function useLiveLogs(kind, id) {
   const seedOnce = useCallback((seedLines) => {
     if (seededRef.current) return;
     seededRef.current = true;
-    if (seedLines?.length) setLines((prev) => [...seedLines, ...prev]);
+    if (seedLines?.length) {
+      const normalized = seedLines.map((line) => {
+        if (line.ts != null) return line;
+        const raw = line.timestamp;
+        const parsed = raw ? new Date(`${String(raw).replace(' ', 'T')}Z`).getTime() : Date.now();
+        return { ...line, ts: Number.isFinite(parsed) ? parsed : Date.now() };
+      });
+      setLines((prev) => [...normalized, ...prev]);
+    }
   }, []);
 
   useEffect(() => {
