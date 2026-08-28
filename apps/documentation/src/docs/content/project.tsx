@@ -2,32 +2,34 @@ import { C, Callout, CodeBlock, DocTable, Ext, H2, P, Ul } from '../../component
 import { site } from '../../site';
 import type { DocPage } from '../types';
 
-/* Diagrama de arquitetura leve, em HTML/CSS (fiel ao arquitetura.png do repositório). */
+/* Diagrama oficial do repositório, servido junto com o site de documentação. */
 export function ArchDiagram({ compact = false }: { compact?: boolean }) {
-  const box = 'rounded-lg border px-3 py-2 text-center font-mono text-xs';
   return (
-    <div className="my-6 overflow-x-auto rounded-xl border border-line bg-[#070c18] p-5" role="img" aria-label="Diagrama: usuário acessa o painel web, que fala com o backend; o backend orquestra process manager, docker engine, workspaces, arquivos, terminal, monitoramento e cloudflare">
-      <div className="mx-auto flex min-w-[300px] max-w-lg flex-col items-center gap-1.5">
-        <div className={`${box} w-44 border-line-2 bg-surface-2 text-fg`}>Usuário</div>
-        <div aria-hidden="true" className="font-mono text-cyan-neon">↓</div>
-        <div className={`${box} w-64 border-cyan-neon/40 bg-cyan-neon/10 text-cyan-neon`}>Pterodroid Web Panel<br /><span className="text-fg-dim">React · Vite · Tailwind</span></div>
-        <div aria-hidden="true" className="font-mono text-cyan-neon">↓ REST + WebSocket</div>
-        <div className={`${box} w-64 border-blue-electric/40 bg-blue-electric/10 text-blue-electric`}>Backend (Supervisor)<br /><span className="text-fg-dim">Node · Express · Socket.io · JWT</span></div>
-        <div aria-hidden="true" className="font-mono text-cyan-neon">↓</div>
-        <div className="grid w-full grid-cols-2 gap-1.5 sm:grid-cols-3">
-          {['Process Manager', 'Docker Engine', 'Workspace Manager', 'File Manager', 'Terminal', 'Monitoramento'].map((m) => (
-            <div key={m} className={`${box} border-line bg-surface text-fg-muted`}>{m}</div>
-          ))}
-        </div>
-        <div className="grid w-full grid-cols-2 gap-1.5">
-          <div className={`${box} border-emerald-400/30 bg-emerald-400/5 text-emerald-300`}>DB Manager<br /><span className="text-fg-dim">PostgreSQL · MariaDB</span></div>
-          <div className={`${box} border-amber-400/30 bg-amber-400/5 text-amber-300`}>Cloudflare Tunnel<br /><span className="text-fg-dim">cloudflared</span></div>
-        </div>
-        {!compact && (
-          <div className={`${box} mt-1.5 w-full border-line bg-surface-2 text-fg-dim`}>SQLite interno via sql.js (WASM) — zero compilação nativa</div>
-        )}
-      </div>
-    </div>
+    <figure className={`${compact ? '' : 'my-6'} overflow-hidden rounded-xl border border-line bg-[#070c18] shadow-2xl shadow-cyan-neon/5`}>
+      <a
+        href={site.repo.arquiteturaPng}
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label="Abrir o diagrama de arquitetura do Pterodroid em tamanho original"
+        className="group block focus:outline-none"
+      >
+        <img
+          src="./arquitetura.png"
+          alt="Diagrama da arquitetura do Pterodroid: o aplicativo se conecta ao API Gateway, que coordena autenticação, processos, bancos, Docker e túneis sobre processos locais e containers."
+          width={4096}
+          height={2736}
+          loading="lazy"
+          decoding="async"
+          className="h-auto w-full transition-opacity duration-200 group-hover:opacity-90"
+        />
+      </a>
+      {!compact && (
+        <figcaption className="border-t border-line px-4 py-2.5 text-center text-xs text-fg-dim">
+          Diagrama oficial da arquitetura do Pterodroid.{' '}
+          <Ext href={site.repo.arquiteturaPng}>Abrir em tamanho original</Ext>
+        </figcaption>
+      )}
+    </figure>
   );
 }
 
@@ -55,10 +57,6 @@ export const arquitetura: DocPage = {
 
       <H2 id="diagrama">Diagrama</H2>
       <ArchDiagram />
-      <P>
-        O diagrama oficial completo está no repositório:{' '}
-        <Ext href={site.repo.arquiteturaPng}>arquitetura.png</Ext>.
-      </P>
 
       <H2 id="componentes">Componentes</H2>
       <DocTable
