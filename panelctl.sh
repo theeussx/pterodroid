@@ -6,7 +6,7 @@
 
 set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BACKEND_DIR="$ROOT_DIR/backend"
+BACKEND_DIR="$ROOT_DIR/apps/backend"
 RUN_DIR="$ROOT_DIR/data"
 PID_FILE="$RUN_DIR/panel.pid"
 LOG_FILE="$RUN_DIR/panel.out.log"
@@ -25,13 +25,13 @@ cmd_start() {
 
   # Avisa cedo em vez de deixar a pessoa abrir o navegador e ver uma
   # página em branco sem entender o porquê.
-  if [ ! -f "$ROOT_DIR/frontend/dist/index.html" ]; then
+  if [ ! -f "$ROOT_DIR/apps/frontend/dist/index.html" ]; then
     echo "Aviso: a interface ainda não foi compilada."
-    echo "       Rode: cd frontend && npm install && npm run build"
+    echo "       Rode: cd apps/frontend && npm install && npm run build"
   fi
   if [ ! -d "$BACKEND_DIR/node_modules" ]; then
     echo "Erro: dependências do backend não instaladas."
-    echo "      Rode: cd backend && npm install"
+    echo "      Rode: cd apps/backend && npm install"
     exit 1
   fi
 
@@ -73,7 +73,7 @@ cmd_stop() {
   if ! is_running; then
     echo "Não está rodando."
     rm -f "$PID_FILE"
-    exit 0
+    return 0
   fi
   PID="$(cat "$PID_FILE")"
   echo "Parando (pid $PID)..."

@@ -8,7 +8,7 @@
  * dockerd de verdade rodando (que não existe neste sandbox, e que em
  * produção pode estar numa máquina remota ainda não configurada).
  *
- * Roda com: node backend/tests/docker-engine-smoke-test.js
+ * Roda com: node apps/backend/tests/docker-engine-smoke-test.js
  */
 
 const http = require('http');

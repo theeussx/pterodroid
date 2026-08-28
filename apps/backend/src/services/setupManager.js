@@ -205,7 +205,7 @@ function pmBinary(pm) {
     case 'pnpm': return 'pnpm';
     case 'yarn': return 'yarn';
     case 'bun': return 'bun';
-    default: return '/usr/local/bin/npm';
+    default: return 'npm';
   }
 }
 

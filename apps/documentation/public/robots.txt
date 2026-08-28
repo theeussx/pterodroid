@@ -1,0 +1,9 @@
+# Pterodroid — site público de documentação
+User-agent: *
+Allow: /
+# Áreas que nunca devem ser indexadas (não existem neste site estático,
+# mas ficam bloqueadas por segurança caso o painel seja servido no mesmo host)
+Disallow: /api
+Disallow: /admin
+
+Sitemap: https://theeussx.github.io/pterodroid/sitemap.xml

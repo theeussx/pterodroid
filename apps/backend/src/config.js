@@ -2,9 +2,9 @@ const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
 
-// Load backend/.env if present. Explicit path so this works regardless of
+// Load apps/backend/.env if present. Explicit path so this works regardless of
 // the cwd the process was launched from (panelctl.sh always cds into
-// backend/ first, but this makes `node src/server.js` from anywhere safe too).
+// apps/backend/ first, but this makes `node src/server.js` from anywhere safe too).
 require('dotenv').config({ path: path.join(__dirname, '../.env') });
 
 function toAbsolute(value, fallback) {
@@ -13,7 +13,7 @@ function toAbsolute(value, fallback) {
   return path.isAbsolute(raw) ? path.normalize(raw) : path.resolve(raw);
 }
 
-const DATA_ROOT = toAbsolute(process.env.DATA_ROOT, path.join(__dirname, '../../data'));
+const DATA_ROOT = toAbsolute(process.env.DATA_ROOT, path.join(__dirname, '../../../data'));
 
 /**
  * WORKSPACES_ROOT — a ÚNICA raiz de onde todo caminho de projeto é

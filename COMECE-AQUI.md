@@ -54,8 +54,8 @@ docker compose ps        # deve mostrar "healthy"
 ### Manual (qualquer sistema com Node 18+)
 
 ```bash
-cd pterodroid/frontend && npm install && npm run build
-cd ../backend          && npm install && npm start
+cd pterodroid/apps/frontend && npm install && npm run build
+cd ../backend               && npm install && npm start
 ```
 
 ---
@@ -78,7 +78,7 @@ cloudflared:
 
 | Instalação | Caminho |
 |---|---|
-| Termux / Linux | `backend/data/` |
+| Termux / Linux | `data/` |
 | Docker | `./data/` (na raiz do projeto) |
 
 Cada serviço ganha um diretório exclusivo em `data/workspaces/<nome-do-serviço>`.
@@ -89,7 +89,7 @@ Cada serviço ganha um diretório exclusivo em `data/workspaces/<nome-do-serviç
 ## Verificar se está tudo certo
 
 ```bash
-cd backend && npm test
+cd apps/backend && npm test
 ```
 
 São 163 testes. Não exigem Docker instalado e não tocam num painel real
@@ -102,8 +102,8 @@ São 163 testes. Não exigem Docker instalado e não tocam num painel real
 | Arquivo | Conteúdo |
 |---|---|
 | `README.md` | Visão geral, funcionalidades, acesso remoto |
-| `docs/RELATORIO.md` | O que foi corrigido, como foi validado e **o que ainda está pendente** (seção 9) |
-| `docs/AUDITORIA.md` | Levantamento dos problemas encontrados, com evidências |
+| `apps/docs/RELATORIO.md` | O que foi corrigido, como foi validado e **o que ainda está pendente** (seção 9) |
+| `apps/docs/AUDITORIA.md` | Levantamento dos problemas encontrados, com evidências |
 
 ---
 
@@ -111,12 +111,12 @@ São 163 testes. Não exigem Docker instalado e não tocam num painel real
 
 1. **Veja o log primeiro:** `./panelctl.sh logs` (ou `docker compose logs -f`).
 2. **Interface em branco?** O frontend não foi compilado:
-   `cd frontend && npm install && npm run build`
+   `cd apps/frontend && npm install && npm run build`
 3. **Docker: painel não enxerga os containers?** O `DOCKER_GID` provavelmente
    está errado. Confira com `getent group docker | cut -d: -f3` e ajuste o `.env`.
-4. **Porta 3001 ocupada?** Defina `PORT=3002` no `backend/.env` (ou no `.env` da
+4. **Porta 3001 ocupada?** Defina `PORT=3002` no `apps/backend/.env` (ou no `.env` da
    raiz, no caso do Docker).
 
 Os pontos que **não puderam ser testados** no ambiente onde este código foi
-preparado estão na seção 9 do [`docs/RELATORIO.md`](docs/RELATORIO.md) — vale a
+preparado estão na seção 9 do [`apps/docs/RELATORIO.md`](apps/docs/RELATORIO.md) — vale a
 leitura antes de colocar em uso sério.

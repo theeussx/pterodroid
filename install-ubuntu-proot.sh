@@ -74,11 +74,11 @@ fi
 
 echo ""
 echo "== Instalando dependências do backend =="
-cd "$ROOT_DIR/backend"
+cd "$ROOT_DIR/apps/backend"
 npm install
 
 echo "== Instalando dependências do frontend e gerando build =="
-cd "$ROOT_DIR/frontend"
+cd "$ROOT_DIR/apps/frontend"
 npm install
 npm run build
 

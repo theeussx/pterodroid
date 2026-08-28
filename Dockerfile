@@ -5,16 +5,16 @@ FROM node:20-alpine AS frontend-builder
 WORKDIR /app/frontend
 # Copiar só os manifestos primeiro faz o npm ci ser reaproveitado do cache
 # enquanto as dependências não mudarem — importante em máquina lenta.
-COPY frontend/package.json frontend/package-lock.json ./
+COPY apps/frontend/package.json apps/frontend/package-lock.json ./
 # Sem --omit=dev de propósito: o Vite é devDependency e é o que faz o build.
 RUN npm ci
-COPY frontend/ ./
+COPY apps/frontend/ ./
 RUN npm run build
 
 # ── Estágio 2: dependências de produção do backend ───────────────────────
 FROM node:20-alpine AS backend-deps
 WORKDIR /app/backend
-COPY backend/package.json backend/package-lock.json ./
+COPY apps/backend/package.json apps/backend/package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 
 # ── Estágio 3: imagem final ──────────────────────────────────────────────
@@ -31,9 +31,9 @@ WORKDIR /app
 
 # node_modules antes do código-fonte: o código muda a cada commit, as
 # dependências não — assim o rebuild reaproveita a camada pesada.
-COPY --from=backend-deps /app/backend/node_modules ./backend/node_modules
-COPY backend/ ./backend/
-COPY --from=frontend-builder /app/frontend/dist ./frontend/dist
+COPY --from=backend-deps /app/backend/node_modules ./apps/backend/node_modules
+COPY apps/backend/ ./apps/backend/
+COPY --from=frontend-builder /app/frontend/dist ./apps/frontend/dist
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
@@ -62,4 +62,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
   CMD curl -fsS http://127.0.0.1:3001/api/health || exit 1
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
-CMD ["node", "backend/src/server.js"]
+CMD ["node", "apps/backend/src/server.js"]

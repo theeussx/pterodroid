@@ -98,7 +98,7 @@ async function main() {
   // do SPA, senão /api/inexistente devolveria o index.html.
   app.use('/api', (req, res) => res.status(404).json({ error: 'Endpoint não encontrado' }));
 
-  // Serve the built frontend (frontend/dist) if present, so a single
+  // Serve the built frontend (apps/frontend/dist) if present, so a single
   // `node src/server.js` can serve the whole panel on one port.
   const frontendDist = path.join(__dirname, '../../frontend/dist');
   const indexHtml = path.join(frontendDist, 'index.html');
@@ -118,7 +118,7 @@ async function main() {
     }));
     app.get('*', (req, res) => res.sendFile(indexHtml));
   } else {
-    console.warn('⚠️  frontend/dist não encontrado — rode `npm run build` em frontend/ para servir a interface.');
+    console.warn('⚠️  apps/frontend/dist não encontrado — rode `npm run build` em apps/frontend/ para servir a interface.');
     app.get('*', (req, res) =>
       res.status(200).send('Pterodroid backend está rodando. Gere o build do frontend para ver o painel aqui.'));
   }

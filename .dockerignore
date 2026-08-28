@@ -4,11 +4,11 @@ node_modules
 npm-debug.log*
 
 # Build do frontend (gerado dentro da imagem)
-frontend/dist
+apps/frontend/dist
 
 # Dados locais — nunca entram na imagem; são montados como volume
 data
-backend/data
+apps/backend/data
 *.db
 *.log
 *.pid
@@ -27,8 +27,8 @@ backend/data
 !.env.example
 
 # Testes e documentação (não afetam o runtime)
-backend/tests
-docs
+apps/backend/tests
+apps/docs
 *.md
 !README.md
 

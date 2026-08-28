@@ -249,7 +249,7 @@ Para projetos Node/TypeScript, o painel cria um starter mínimo com `package.jso
 O backend traz uma bateria de testes que **não precisa de Docker instalado** e nunca toca no seu painel real (tudo roda em diretórios temporários e numa porta separada):
 
 ```bash
-cd backend
+cd apps/backend
 npm test
 ```
 
