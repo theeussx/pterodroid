@@ -1,10 +1,11 @@
 import { CodeBlock } from '../components/docui';
 import { Link } from '../router';
 import { site } from '../site';
+import { BrandIcon, BRAND_ICONS } from '../components/BrandIcon';
 
 const OPTIONS = [
   {
-    icon: '🤖',
+    icon: BRAND_ICONS.android,
     name: 'Android / Termux',
     desc: 'O caminho principal: painel completo rodando no celular, sem root.',
     to: '/docs/termux',
@@ -15,7 +16,7 @@ cd pterodroid && chmod +x install-termux.sh panelctl.sh
 ./install-termux.sh && ./panelctl.sh start`,
   },
   {
-    icon: '📦',
+    icon: BRAND_ICONS.ubuntu,
     name: 'Ubuntu Proot',
     desc: 'Userland Ubuntu completo dentro do Android, com o mesmo panelctl.sh.',
     to: '/docs/proot',
@@ -25,7 +26,7 @@ cd pterodroid && chmod +x install-ubuntu-proot.sh panelctl.sh
 ./install-ubuntu-proot.sh && ./panelctl.sh start`,
   },
   {
-    icon: '🐳',
+    icon: BRAND_ICONS.docker,
     name: 'Docker',
     desc: 'Compose com healthcheck, dados em ./data e gestão de containers do host.',
     to: '/docs/docker',
@@ -37,7 +38,7 @@ echo "JWT_SECRET=$(openssl rand -hex 32)" >> .env
 docker compose up -d --build`,
   },
   {
-    icon: '🐧',
+    icon: BRAND_ICONS.linux,
     name: 'Linux',
     desc: 'Qualquer distro com Node 18+ — VPS, Raspberry Pi ou desktop.',
     to: '/docs/linux',
@@ -62,7 +63,7 @@ export function DownloadPage() {
         {OPTIONS.map((o) => (
           <section key={o.name} aria-label={o.name} className="flex flex-col rounded-xl border border-line bg-surface/40 p-5 transition-colors hover:border-cyan-neon/30">
             <div className="flex items-center gap-3">
-              <span className="text-3xl" aria-hidden="true">{o.icon}</span>
+              <span className="inline-flex h-11 w-11 items-center justify-center rounded-lg border border-cyan-neon/30 bg-cyan-neon/10 text-cyan-neon" aria-hidden="true"><BrandIcon name={o.icon} className="h-7 w-7" /></span>
               <div>
                 <h2 className="font-semibold text-fg">{o.name}</h2>
                 <p className="text-sm text-fg-muted">{o.desc}</p>
@@ -102,7 +103,7 @@ export function DownloadPage() {
       </div>
 
       <p className="mt-10 rounded-lg border border-amber-400/30 bg-amber-400/5 p-4 text-sm text-fg-muted">
-        <strong className="text-amber-300">⚠ Depois de instalar:</strong> o login padrão é <code className="font-mono text-cyan-neon">admin</code>/
+        <strong className="text-amber-300">Atenção após a instalação:</strong> o login padrão é <code className="font-mono text-cyan-neon">admin</code>/
         <code className="font-mono text-cyan-neon">admin</code> — troque a senha imediatamente. O painel tem um terminal embutido: quem entrar
         com a senha padrão executa comandos no seu dispositivo.
       </p>

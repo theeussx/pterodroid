@@ -8,7 +8,7 @@ export function ArchDiagram({ compact = false }: { compact?: boolean }) {
   return (
     <div className="my-6 overflow-x-auto rounded-xl border border-line bg-[#070c18] p-5" role="img" aria-label="Diagrama: usuário acessa o painel web, que fala com o backend; o backend orquestra process manager, docker engine, workspaces, arquivos, terminal, monitoramento e cloudflare">
       <div className="mx-auto flex min-w-[300px] max-w-lg flex-col items-center gap-1.5">
-        <div className={`${box} w-44 border-line-2 bg-surface-2 text-fg`}>👤 Usuário</div>
+        <div className={`${box} w-44 border-line-2 bg-surface-2 text-fg`}>Usuário</div>
         <div aria-hidden="true" className="font-mono text-cyan-neon">↓</div>
         <div className={`${box} w-64 border-cyan-neon/40 bg-cyan-neon/10 text-cyan-neon`}>Pterodroid Web Panel<br /><span className="text-fg-dim">React · Vite · Tailwind</span></div>
         <div aria-hidden="true" className="font-mono text-cyan-neon">↓ REST + WebSocket</div>

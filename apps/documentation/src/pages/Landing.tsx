@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from '../router';
 import { site } from '../site';
 import { ArchDiagram } from '../docs/content/project';
+import { BrandIcon, BRAND_ICONS } from '../components/BrandIcon';
 
 /* ───────── Terminal animado (comandos reais de instalação) ───────── */
 
@@ -15,11 +16,7 @@ const TERMINAL_SCRIPT: { cmd?: string; out?: string[] }[] = [
 function TerminalDemo() {
   const [lines, setLines] = useState<{ text: string; type: 'cmd' | 'out' }[]>([]);
   const [typing, setTyping] = useState('');
-  const started = useRef(false);
-
   useEffect(() => {
-    if (started.current) return;
-    started.current = true;
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     if (reduced) {
       const all: { text: string; type: 'cmd' | 'out' }[] = [];
@@ -114,7 +111,7 @@ function PanelMockup() {
           <span className="h-3 w-3 rounded-full bg-line-2" />
         </span>
         <span className="mx-auto flex items-center gap-1.5 rounded-md border border-line bg-ink px-3 py-1 font-mono text-[11px] text-fg-dim">
-          <span aria-hidden="true" className="text-emerald-400">🔒</span> localhost:3001
+          <span aria-hidden="true" className="font-mono text-emerald-400">TLS</span> localhost:3001
         </span>
       </div>
       <div className="grid gap-3 p-4 sm:grid-cols-5">
@@ -165,29 +162,29 @@ function PanelMockup() {
 /* ───────── Dados das seções ───────── */
 
 const FEATURES = [
-  { icon: '📱', title: 'Nasceu no Android', desc: 'Projetado para Termux e Ubuntu proot — sem systemd, sem root, sem compilação nativa.', to: '/docs/termux' },
-  { icon: '🗂️', title: 'Workspaces isolados', desc: 'Cada serviço ganha um diretório exclusivo criado automaticamente. Você nunca toca no filesystem à mão.', to: '/docs/primeiro-servico' },
-  { icon: '🛡️', title: 'Watchdog inteligente', desc: 'Serviços que caem voltam sozinhos, com backoff. Bancos ficam de fora — proteção contra corrupção.', to: '/docs/primeiro-servico' },
-  { icon: '📁', title: 'Arquivos completos', desc: 'Editor integrado, upload de até 2 GB, escrita atômica, busca e log de auditoria.', to: '/docs/arquivos' },
-  { icon: '💻', title: 'Terminal no navegador', desc: 'npm install, git pull e afins direto no workspace — com histórico, cd persistente e Ctrl+C.', to: '/docs/terminal' },
-  { icon: '🐳', title: 'Docker de verdade', desc: 'Serviços em containers com bind mount do workspace, logs e exec — quando há um Engine disponível.', to: '/docs/docker-services' },
-  { icon: '🗄️', title: 'Bancos locais', desc: 'PostgreSQL e MySQL/MariaDB provisionados como processos filhos, sem containers obrigatórios.', to: '/docs/bancos' },
-  { icon: '🌐', title: 'Cloudflare Tunnel', desc: 'Quick Tunnel para testes e Named Tunnel com domínio próprio — sem abrir portas no roteador.', to: '/docs/cloudflare' },
-  { icon: '📈', title: 'Monitoramento real', desc: 'CPU, RAM, disco, rede, temperatura e top 20 processos, lidos direto de /proc e /sys.', to: '/docs/monitoramento' },
-  { icon: '📝', title: 'Logs ao vivo', desc: 'stdout/stderr em tempo real via WebSocket, com histórico em memória e no banco.', to: '/docs/primeiro-servico' },
-  { icon: '🔒', title: 'Seguro por padrão', desc: 'JWT de 7 dias, senhas com bcryptjs e proteção contra path traversal coberta por testes.', to: '/docs/primeiro-acesso' },
-  { icon: '🪶', title: 'Leve de verdade', desc: 'SQLite em WASM, zero node-gyp, zero agentes — roda até em hardware modesto.', to: '/docs/arquitetura' },
+  { icon: BRAND_ICONS.android, title: 'Nasceu no Android', desc: 'Projetado para Termux e Ubuntu proot — sem systemd, sem root, sem compilação nativa.', to: '/docs/termux' },
+  { icon: BRAND_ICONS.git, title: 'Workspaces isolados', desc: 'Cada serviço ganha um diretório exclusivo criado automaticamente. Você nunca toca no filesystem à mão.', to: '/docs/primeiro-servico' },
+  { icon: BRAND_ICONS.nginx, title: 'Watchdog inteligente', desc: 'Serviços que caem voltam sozinhos, com backoff. Bancos ficam de fora — proteção contra corrupção.', to: '/docs/primeiro-servico' },
+  { icon: BRAND_ICONS.github, title: 'Arquivos completos', desc: 'Editor integrado, upload de até 2 GB, escrita atômica, busca e log de auditoria.', to: '/docs/arquivos' },
+  { icon: BRAND_ICONS.git, title: 'Terminal no navegador', desc: 'npm install, git pull e afins direto no workspace — com histórico, cd persistente e Ctrl+C.', to: '/docs/terminal' },
+  { icon: BRAND_ICONS.docker, title: 'Docker de verdade', desc: 'Serviços em containers com bind mount do workspace, logs e exec — quando há um Engine disponível.', to: '/docs/docker-services' },
+  { icon: BRAND_ICONS.postgresql, title: 'Bancos locais', desc: 'PostgreSQL e MySQL/MariaDB provisionados como processos filhos, sem containers obrigatórios.', to: '/docs/bancos' },
+  { icon: BRAND_ICONS.cloudflare, title: 'Cloudflare Tunnel', desc: 'Quick Tunnel para testes e Named Tunnel com domínio próprio — sem abrir portas no roteador.', to: '/docs/cloudflare' },
+  { icon: BRAND_ICONS.linux, title: 'Monitoramento real', desc: 'CPU, RAM, disco, rede, temperatura e top 20 processos, lidos direto de /proc e /sys.', to: '/docs/monitoramento' },
+  { icon: BRAND_ICONS.react, title: 'Logs ao vivo', desc: 'stdout/stderr em tempo real via WebSocket, com histórico em memória e no banco.', to: '/docs/primeiro-servico' },
+  { icon: BRAND_ICONS.github, title: 'Seguro por padrão', desc: 'JWT de 7 dias, senhas com bcryptjs e proteção contra path traversal coberta por testes.', to: '/docs/primeiro-acesso' },
+  { icon: BRAND_ICONS.sqlite, title: 'Leve de verdade', desc: 'SQLite em WASM, zero node-gyp, zero agentes — roda até em hardware modesto.', to: '/docs/arquitetura' },
 ];
 
 const PLATFORMS = [
-  { icon: '🤖', name: 'Android', note: 'via Termux ou proot', to: '/docs/termux' },
-  { icon: '🐚', name: 'Termux', note: 'ambiente principal', to: '/docs/termux' },
-  { icon: '📦', name: 'Ubuntu Proot', note: 'userland completo', to: '/docs/proot' },
-  { icon: '🐧', name: 'Linux', note: 'Node 18+, qualquer distro', to: '/docs/linux' },
-  { icon: '🐳', name: 'Docker', note: 'compose com healthcheck', to: '/docs/docker' },
-  { icon: '🍓', name: 'Raspberry Pi', note: 'ARM sem compilação nativa', to: '/docs/linux' },
-  { icon: '☁️', name: 'VPS', note: 'manual ou Docker', to: '/docs/linux' },
-  { icon: '🖥️', name: 'PC', note: 'Linux desktop', to: '/docs/linux' },
+  { icon: BRAND_ICONS.android, name: 'Android', note: 'via Termux ou proot', to: '/docs/termux' },
+  { icon: BRAND_ICONS.android, name: 'Termux', note: 'ambiente principal', to: '/docs/termux' },
+  { icon: BRAND_ICONS.ubuntu, name: 'Ubuntu Proot', note: 'userland completo', to: '/docs/proot' },
+  { icon: BRAND_ICONS.linux, name: 'Linux', note: 'Node 18+, qualquer distro', to: '/docs/linux' },
+  { icon: BRAND_ICONS.docker, name: 'Docker', note: 'compose com healthcheck', to: '/docs/docker' },
+  { icon: BRAND_ICONS.raspberrypi, name: 'Raspberry Pi', note: 'ARM sem compilação nativa', to: '/docs/linux' },
+  { icon: BRAND_ICONS.cloudflare, name: 'VPS', note: 'manual ou Docker', to: '/docs/linux' },
+  { icon: BRAND_ICONS.linux, name: 'PC', note: 'Linux desktop', to: '/docs/linux' },
 ];
 
 /* ───────── Página ───────── */
@@ -274,7 +271,7 @@ export function Landing() {
                 to={f.to}
                 className="group rounded-xl border border-line bg-surface/50 p-5 transition-all hover:-translate-y-0.5 hover:border-cyan-neon/40 hover:bg-surface"
               >
-                <span className="text-2xl" aria-hidden="true">{f.icon}</span>
+                <span className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-cyan-neon/30 bg-cyan-neon/10 text-cyan-neon" aria-hidden="true"><BrandIcon name={f.icon} className="h-5 w-5" /></span>
                 <h3 className="mt-3 font-semibold text-fg group-hover:text-cyan-neon">{f.title}</h3>
                 <p className="mt-1.5 text-sm leading-relaxed text-fg-muted">{f.desc}</p>
               </Link>
@@ -294,7 +291,7 @@ export function Landing() {
               to={p.to}
               className="group flex flex-col items-center rounded-xl border border-line bg-surface/40 p-5 text-center transition-all hover:border-cyan-neon/40"
             >
-              <span className="text-3xl" aria-hidden="true">{p.icon}</span>
+              <span className="inline-flex h-11 w-11 items-center justify-center rounded-lg border border-line-2 bg-surface text-cyan-neon" aria-hidden="true"><BrandIcon name={p.icon} className="h-7 w-7" /></span>
               <span className="mt-2 font-semibold text-fg group-hover:text-cyan-neon">{p.name}</span>
               <span className="mt-0.5 font-mono text-[11px] text-fg-dim">{p.note}</span>
             </Link>
