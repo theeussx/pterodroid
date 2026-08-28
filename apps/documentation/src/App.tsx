@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Analytics } from '@vercel/analytics/react';
+import { SpeedInsights } from '@vercel/speed-insights/react';
 import { useRoute, useScrollToTop } from './router';
 import { Footer, Navbar, SearchModal, useSearchShortcut } from './components/chrome';
 import { Landing } from './pages/Landing';
@@ -38,6 +39,7 @@ export default function App() {
       <Footer />
       <SearchModal open={searchOpen} onClose={() => setSearchOpen(false)} />
       <Analytics />
+      <SpeedInsights />
     </div>
   );
 }
