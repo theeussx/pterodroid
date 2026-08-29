@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './stores/AuthContext';
 import { ToastProvider } from './stores/ToastContext';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -19,10 +19,20 @@ import Settings from './pages/Settings';
  * No front, forçamos o usuário a ir para /settings (onde fica o formulário
  * de troca de senha) e impedimos navegar para outras páginas. Isso elimina
  * a janela de risco do login admin/admin com terminal embutido.
+ *
+ * IMPORTANTE: quando já estamos em /settings, o gate precisa renderizar os
+ * children (o Layout com a página de configurações dentro), NÃO redirecionar.
+ * Este componente fica no lugar do <Layout/>, que é quem carrega o <Outlet/>
+ * onde a página de /settings aparece — se ele devolver <Navigate to=
+ * "/settings"> estando já em /settings, a navegação "para a mesma URL" se
+ * assenta sem renderizar nada: tela branca, sem menu e sem o formulário de
+ * troca de senha. Era isso que deixava o usuário travado no primeiro login.
  */
 function SetupGate({ children }) {
   const { setupDone } = useAuth();
-  if (!setupDone) return <Navigate to="/settings" replace />;
+  const { pathname } = useLocation();
+  const onSettings = (pathname.replace(/\/+$/, '') || '/') === '/settings';
+  if (!setupDone && !onSettings) return <Navigate to="/settings" replace />;
   return children;
 }
 

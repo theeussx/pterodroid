@@ -29,6 +29,16 @@ export default function Settings() {
     loadRemoteAccess();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Enquanto a senha padrão está em uso, essas duas chamadas acima voltam
+  // 403 SETUP_REQUIRED e os cards ficam desativados. No instante em que a
+  // senha é trocada (setupDone vira true) a trava abre — recarregar aqui
+  // evita exigir um F5 manual pra página acordar logo depois do desbloqueio.
+  useEffect(() => {
+    if (!setupDone) return;
+    if (!settings) api.getSettings().then(setSettings).catch(() => {});
+    if (!remoteAccess) loadRemoteAccess();
+  }, [setupDone]); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     const socket = getSocket();
     if (!socket) return;
@@ -234,7 +244,10 @@ export default function Settings() {
         )}
       </Card>
 
-      <DomainSettings />
+      {/* key por estado de setup: o card consulta o status no mount e, com
+          a trava ativa, a resposta é 403 — remontar quando a trava abre faz
+          ele recarregar sem precisar de F5. */}
+      <DomainSettings key={setupDone ? 'unlocked' : 'locked'} />
 
       <Card>
         <h2 className="font-display font-semibold text-sm text-ink mb-4">Alterar senha</h2>
