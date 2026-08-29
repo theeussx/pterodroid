@@ -1,5 +1,5 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import { AuthProvider } from './stores/AuthContext';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { AuthProvider, useAuth } from './stores/AuthContext';
 import { ToastProvider } from './stores/ToastContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import Layout from './components/Layout';
@@ -13,6 +13,19 @@ import Logs from './pages/Logs';
 import Monitoring from './pages/Monitoring';
 import Settings from './pages/Settings';
 
+/**
+ * Enquanto a senha padrão não é trocada (setupDone=false), o painel ainda
+ * NÃO libera as rotas de negócio — o backend devolve 403 SETUP_REQUIRED.
+ * No front, forçamos o usuário a ir para /settings (onde fica o formulário
+ * de troca de senha) e impedimos navegar para outras páginas. Isso elimina
+ * a janela de risco do login admin/admin com terminal embutido.
+ */
+function SetupGate({ children }) {
+  const { setupDone } = useAuth();
+  if (!setupDone) return <Navigate to="/settings" replace />;
+  return children;
+}
+
 export default function App() {
   return (
     <ToastProvider>
@@ -23,7 +36,9 @@ export default function App() {
             <Route
               element={
                 <ProtectedRoute>
-                  <Layout />
+                  <SetupGate>
+                    <Layout />
+                  </SetupGate>
                 </ProtectedRoute>
               }
             >

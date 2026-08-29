@@ -26,6 +26,7 @@ const terminalRoutes = require('./routes/terminal');
 const backupRoutes = require('./routes/backups');
 const dockerRoutes = require('./routes/docker');
 const { authMiddleware } = require('./middleware/auth');
+const { setupRequired } = require('./middleware/setupRequired');
 
 /**
  * Se o painel morreu à força (OOM killer do Android, bateria acabando,
@@ -71,7 +72,29 @@ async function main() {
   const stopPrune = schedulePrune(db);
 
   const app = express();
-  app.use(cors());
+
+  // CORS configurável. Padrão: abre para qualquer origem (o painel é servido
+  // pelo próprio backend e o cliente usa Bearer token; sem cookies, CSRF não
+  // é um vetor). Para restringir, defina CORS_ORIGINS="https://meu.dominio".
+  if (config.CORS_ORIGINS.length > 0) {
+    app.use(cors({ origin: config.CORS_ORIGINS }));
+  } else {
+    app.use(cors());
+  }
+
+  // ── Headers de segurança ──────────────────────────────────────────────
+  // O painel é feito para ficar exposto à internet via Cloudflare Tunnel e
+  // roda um terminal embutido, então esconder o stack (X-Powered-By) e
+  // configurar os headers defensivos vale a pena. Nada de X-Frame-Options
+  // nem CSP frame-ancestors: o painel é embutido em iframe por origens
+  // diferentes (nuvens de preview/uso), e isso quebraria a visualização.
+  app.use((req, res, next) => {
+    res.removeHeader('X-Powered-By');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+    return next();
+  });
+
   // O limite default do Express (100kb) é menor que o arquivo máximo que o
   // editor do painel aceita abrir (2MB), então salvar um arquivo grande
   // falhava com um 500 sem explicação (P29).
@@ -84,15 +107,18 @@ async function main() {
   }));
 
   app.use('/api/auth', authRoutes);
-  app.use('/api/services/:id/files', authMiddleware, serviceFileRoutes);
-  app.use('/api/services/:id/terminal', authMiddleware, terminalRoutes);
-  app.use('/api/services/:id/backups', authMiddleware, backupRoutes);
-  app.use('/api/services', authMiddleware, serviceRoutes);
-  app.use('/api/databases', authMiddleware, databaseRoutes);
-  app.use('/api/monitor', authMiddleware, monitorRoutes);
-  app.use('/api/settings', authMiddleware, settingsRoutes);
-  app.use('/api/files', authMiddleware, fileRoutes);
-  app.use('/api/docker', authMiddleware, dockerRoutes);
+  // Painel pessoal: enquanto a senha padrão não for trocada, a interface
+  // fica bloqueada (só auth/me/change-password respondem). É a diferença
+  // entre "avisar" e "impedir" que o login admin/admin vire acesso remoto.
+  app.use('/api/services/:id/files', authMiddleware, setupRequired, serviceFileRoutes);
+  app.use('/api/services/:id/terminal', authMiddleware, setupRequired, terminalRoutes);
+  app.use('/api/services/:id/backups', authMiddleware, setupRequired, backupRoutes);
+  app.use('/api/services', authMiddleware, setupRequired, serviceRoutes);
+  app.use('/api/databases', authMiddleware, setupRequired, databaseRoutes);
+  app.use('/api/monitor', authMiddleware, setupRequired, monitorRoutes);
+  app.use('/api/settings', authMiddleware, setupRequired, settingsRoutes);
+  app.use('/api/files', authMiddleware, setupRequired, fileRoutes);
+  app.use('/api/docker', authMiddleware, setupRequired, dockerRoutes);
 
   // 404 para rotas de API não encontradas — precisa vir antes do fallback
   // do SPA, senão /api/inexistente devolveria o index.html.
@@ -142,6 +168,10 @@ async function main() {
 
   // Resume services that were running before the panel last stopped.
   await driver.restoreAll();
+
+  // Avisa o dono (se um webhook de alerta estiver configurado) que o painel
+  // subiu. Útil para perceber reinício inesperado do painel.
+  require('./services/alertNotifier').onBoot().catch(() => {});
 
   // ── Graceful shutdown ────────────────────────────────────────────────
   let shuttingDown = false;

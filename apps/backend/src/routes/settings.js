@@ -4,7 +4,7 @@ const tm = require('../services/tunnelManager');
 const ntm = require('../services/namedTunnelManager');
 const config = require('../config');
 
-const EDITABLE_KEYS = ['panel_name', 'panel_color', 'log_retention_days'];
+const EDITABLE_KEYS = ['panel_name', 'panel_color', 'log_retention_days', 'alert_webhook_url'];
 const PANEL_TUNNEL_ID = 'main';
 
 // GET /api/settings
@@ -35,6 +35,21 @@ router.put('/', (req, res) => {
 // concluída sem trocar a senha padrão era justamente o que permitia
 // silenciar o aviso de segurança sem resolver o problema. Quem grava
 // setup_done agora é a própria troca de senha (ver routes/auth.js).
+
+// POST /api/settings/alert/test — sobe um alerta de teste pro webhook
+// configurado. Retorna o resultado da chamada (ok/skipped), sem lançar erro
+// se o webhook estiver vazio (o front mostra "configure primeiro").
+router.post('/alert/test', async (req, res) => {
+  const alert = require('../services/alertNotifier');
+  const result = await alert.notify({
+    serviceId: 'panel-test',
+    name: 'Teste',
+    status: 'test',
+    title: '🔔 Alerta de teste',
+    message: 'Este é um teste do webhook de alertas do Pterodroid.',
+  });
+  return res.json(result);
+});
 
 // GET /api/settings/cloudflared — is cloudflared installed and usable?
 // Shared by the remote-access panel and any service/database form that

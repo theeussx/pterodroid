@@ -280,3 +280,87 @@ export const bancos: DocPage = {
     </>
   ),
 };
+
+export const tiposDedicados: DocPage = {
+  slug: 'tipos-dedicados',
+  title: 'Tipos dedicados (receitas)',
+  navLabel: 'Tipos dedicados',
+  description: 'Como o Pterodroid usa receitas por tipo de serviço para deixar a criação mais prática — porta, comando, runtime e template prontos.',
+  keywords: ['receita', 'tipo dedicado', 'egg', 'nest', 'template', 'scaffold', 'node-api', 'node-bot', 'static-site', 'python-api', 'minecraft', 'docker', 'categoria', 'default'],
+  sourcePath: 'README.md',
+  sections: [
+    { id: 'o-que-e', title: 'O que é uma receita' },
+    { id: 'catalogo', title: 'Catálogo de receitas' },
+    { id: 'defaults', title: 'O que a receita já preenche' },
+    { id: 'template', title: 'Projeto inicial (template)' },
+    { id: 'legado', title: 'Serviços antigos (type)' },
+  ],
+  render: () => (
+    <>
+      <H2 id="o-que-e">O que é uma receita</H2>
+      <P>
+        Uma <strong>receita</strong> é um "molde" dedicado para um tipo de serviço — a analogia com os <em>eggs</em>{' '}
+        de painéis como o Pterodactyl. Em vez de um formulário genérico cheio de campos que não se aplicam, você
+        escolhe o que vai hospedar e o painel já sabe: qual porta usar, qual comando iniciar, qual runtime e — quando
+        faz sentido — quais arquivos criar.
+      </P>
+      <P>
+        Tecnicamente, o campo <C>recipe</C> é salvo no serviço e o backend mantém um catálogo (em{' '}
+        <C>services/serviceRecipes.js</C>) que a API expõe para a interface. O frontend desenha um seletor dedicado e
+        aplica os defaults.
+      </P>
+
+      <H2 id="catalogo">Catálogo de receitas</H2>
+      <DocTable
+        head={['Receita', 'Categoria', 'Porta padrão', 'Comando de início']}
+        rows={[
+          ['API Node.js (node-api)', 'Web & API', '3000', 'node src/index.js'],
+          ['Bot (node-bot)', 'Bots', '—', 'node src/index.js'],
+          ['Site Node.js (node-web)', 'Web & API', '3000', 'node src/index.js'],
+          ['Site estático (static-site)', 'Web & API', '8080', 'python3 -m http.server 8080 --directory .'],
+          ['API Python (python-api)', 'Web & API', '8000', 'python3 app.py'],
+          ['Servidor Minecraft (minecraft)', 'Jogos', '25565', 'java -Xmx1024M -jar server.jar nogui'],
+          ['Container Docker (docker)', 'Container', '—', 'padrão da imagem'],
+          ['Geral / customizado (generic)', 'Outro', '—', 'você define'],
+        ]}
+      />
+      <Callout type="note" title="Edite sempre depois">
+        <p>
+          A receita é um ponto de partida. Depois de criado, o serviço continua totalmente editável — porta, comando,
+          variáveis de ambiente, Git e config de inicialização.
+        </p>
+      </Callout>
+
+      <H2 id="defaults">O que a receita já preenche</H2>
+      <Ul>
+        <li><C>type</C> (engine) — node, python, web, bot, api, other…</li>
+        <li>porta padrão, quando faz sentido (3000, 8080, 8000, 25565);</li>
+        <li>comando de início;</li>
+        <li>runtime — a receita "Container Docker" força <C>docker</C>;</li>
+        <li>sugestão de instalação de dependências (npm/pip detectados no setup).</li>
+      </Ul>
+
+      <H2 id="template">Projeto inicial (template)</H2>
+      <P>
+        Receitas com <strong>template</strong> podem criar, na hora, um projeto inicial na pasta do serviço. Exemplos:
+      </P>
+      <Ul>
+        <li><strong>API Node.js</strong> → <C>package.json</C> + <C>src/index.js</C> com um servidor HTTP de exemplo;</li>
+        <li><strong>Site estático</strong> → <C>index.html</C> pronto;</li>
+        <li><strong>API Python</strong> → <C>app.py</C> + <C>requirements.txt</C>;</li>
+        <li><strong>Servidor Minecraft</strong> → <C>eula.txt</C> + <C>server.properties</C> de exemplo (você coloca o <C>server.jar</C>).</li>
+      </Ul>
+      <P>
+        O template NUNCA roda <C>install</C>/<C>build</C> por conta própria — isso é papel do{" "}
+        <DocLink to="/docs/primeiro-servico">setup</DocLink>, acionado sob demanda com progresso observável.
+      </P>
+
+      <H2 id="legado">Serviços antigos (type)</H2>
+      <P>
+        Serviços criados antes deste recurso só têm o campo <C>type</C>. O painel deriva a receita mais próxima
+        (ex.: <C>type: 'bot'</C> → receita <C>node-bot</C>) só para exibir rótulo e ícone corretos. Você pode editar um
+        serviço antigo e selecionar uma receita a qualquer momento.
+      </P>
+    </>
+  ),
+};

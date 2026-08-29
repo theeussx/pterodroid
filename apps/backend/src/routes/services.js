@@ -4,6 +4,8 @@ const driver = require('../services/serviceDriverRegistry');
 const { dockerDriver } = driver;
 const workspaces = require('../services/workspaceManager');
 const { resolveServiceWorkspace } = require('../services/serviceWorkspace');
+const recipes = require('../services/serviceRecipes');
+const cipher = require('../services/secretCipher');
 const setup = require('../services/setupManager');
 const { forgetService } = require('./serviceFiles');
 const backups = require('../services/backupManager');
@@ -32,10 +34,25 @@ function sanitizeEnv(raw) {
     if (typeof obj !== 'object' || Array.isArray(obj)) return '{}';
     delete obj.LD_PRELOAD;
     delete obj.LD_LIBRARY_PATH;
-    return JSON.stringify(obj);
+    // Segredos em repouso: o JSON vai cifrado pro banco. A API devolve
+    // decifrado para o dono autenticado (cipher.decrypt na resposta).
+    return cipher.encrypt(JSON.stringify(obj));
   } catch {
     return '{}';
   }
+}
+
+/** Decifra o environment salvo para devolver à UI (só o dono vê). */
+function revealEnv(stored) {
+  const plain = cipher.decrypt(stored || '{}');
+  // Aceita tanto texto claro legado quanto o JSON cifrado; se não for JSON
+  // válido, devolve o original para não perder dados na edição.
+  try { JSON.parse(plain); return plain; } catch { return stored || '{}'; }
+}
+
+function envForResponse(svc) {
+  if (!svc) return svc;
+  return { ...svc, environment: revealEnv(svc.environment) };
 }
 
 function sanitizeJSONArray(raw) {
@@ -63,6 +80,12 @@ function parseId(req, res) {
   return id;
 }
 
+// GET /api/services/recipes — catálogo de receitas dedicadas para a UI.
+// Precisa vir ANTES do GET /:id, senão "recipes" é interpretado como id.
+router.get('/recipes', (req, res) => {
+  return res.json(recipes.catalog());
+});
+
 /**
  * Remove o git_token do objeto antes de devolver ao cliente.
  *
@@ -78,14 +101,27 @@ function redactService(svc) {
   return out;
 }
 
+/**
+ * Cifra o git_token antes de persistir. Retorna null se não houver token.
+ * O valor já cifrado (enc:) não é re-cifrado, para round-trips idempotentes.
+ */
+function encGitToken(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const raw = String(value).trim();
+  if (!raw) return null;
+  if (raw === '__PTD_REDACTED__') return null; // placeholder -> continua o atual (tratado no chamador)
+  return cipher.isEncrypted(raw) ? raw : cipher.encrypt(raw);
+}
+
 // GET /api/services
 router.get('/', (req, res) => {
   const db = getDB();
   const services = db.prepare('SELECT * FROM services ORDER BY created_at DESC').all();
   const enriched = services.map((s) => ({
-    ...redactService(s),
+    ...envForResponse(redactService(s)),
     runtime: driver.getRuntimeInfo(s.id),
     setup: setup.getState(s.id),
+    recipe: recipes.describeRow(s),
   }));
   return res.json(enriched);
 });
@@ -111,9 +147,10 @@ router.get('/:id', async (req, res) => {
   }
 
   return res.json({
-    ...redactService(svc),
+    ...envForResponse(redactService(svc)),
     runtime: driver.getRuntimeInfo(svc.id),
     setup: setup.getState(svc.id),
+    recipe: recipes.describeRow(svc),
     recentLogs,
     persistedLogs,
   });
@@ -121,9 +158,6 @@ router.get('/:id', async (req, res) => {
 
 // POST /api/services
 router.post('/', (req, res) => {
-  const err = validate(req.body);
-  if (err) return res.status(400).json({ error: err });
-
   const db = getDB();
   const {
     name, description = '', type = 'node', command = '',
@@ -136,19 +170,51 @@ router.post('/', (req, res) => {
     startup_command = null,
     main_file = null, node_packages = null, unnode_packages = null, node_args = null,
     auto_update = 0, allow_file_uploads = 0,
+    recipe = null, use_template = false,
     run_setup = true,
     auto_start = false,
+    healthcheck_url = null, healthcheck_interval = 30, healthcheck_timeout = 5, healthcheck_enabled = 0,
+    process_memory_limit = null, process_cpu_limit = null,
   } = req.body;
 
-  const isDocker = runtime_type === 'docker';
+  // Validação roda DEPOIS dos defaults de receita: escolher a receita
+  // "docker" pode forçar runtime_type='docker', e aí a validação precisa
+  // saber disso pra exigir imagem/host — se rodasse antes, aprovaria um
+  // serviço docker sem imagem e quebraria no start.
+  const recipeErr = recipes.validateRecipe && recipe ? recipes.validateRecipe(recipe, req.body) : null;
+  if (recipeErr) return res.status(400).json({ error: recipeErr });
+
+  // Aplica os defaults da receita dedicada SEM sobrescrever o que o usuário
+  // já preencheu (tipo, porta, comando, runtime). É o que dá a experiência
+  // "dedicada": escolheu "Servidor Minecraft"? já vem com porta 25565 e o
+  // comando Java; escolheu "Site estático"? já vem com o http.server.
+  const defaults = recipe ? recipes.applyDefaults(recipe, req.body) : {};
+  const finalType = defaults.type || type || 'node';
+  const finalRuntime = defaults.runtime_type || runtime_type || 'process';
+  const finalPort = (port === undefined || port === '' || port === null) ? (defaults.port ?? port) : port;
+  const cmd = (command || '').trim() || (defaults.command || '');
+  const isDocker = finalRuntime === 'docker';
+  const wantedRecipe = recipe && recipes.get(recipe)?.id ? recipe : finalType;
+
+  // Valida o corpo EFETIVO (aplicados os defaults), não o cru.
+  const effectiveBody = {
+    ...req.body,
+    ...defaults,
+    type: finalType,
+    runtime_type: finalRuntime,
+  };
+  const err = validate(effectiveBody);
+  if (err) return res.status(400).json({ error: err });
 
   let workspace;
   try {
     workspace = resolveServiceWorkspace({
-      name, runtime_type, working_directory, volumes, image, command,
+      name, runtime_type: finalRuntime, working_directory, volumes, image, command: cmd,
       git_repo, git_branch, git_username, git_token,
       main_file, node_packages, unnode_packages, node_args, auto_update, allow_file_uploads,
       startup_command,
+      recipe: wantedRecipe,
+      useTemplate: !!use_template && !isDocker,
     });
   } catch (e) {
     console.error('[services] falha ao preparar o workspace:', e);
@@ -160,32 +226,51 @@ router.post('/', (req, res) => {
       (name, description, type, command, working_directory, environment,
        auto_restart, restart_delay, max_restarts, port, scaffolded_directory, tunnel_hostname,
        runtime_type, docker_host_id, image, volumes, docker_networks, docker_ports,
-       cpu_limit, memory_limit,
+       cpu_limit, memory_limit, recipe, healthcheck_url, healthcheck_interval, healthcheck_timeout,
+       healthcheck_enabled, process_memory_limit, process_cpu_limit,
        git_repo, git_branch, git_username, git_token, startup_command,
        main_file, node_packages, unnode_packages, node_args, auto_update, allow_file_uploads)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
-    name.trim(), String(description ?? '').trim(), type, workspace.command.trim(),
+    name.trim(), String(description ?? '').trim(), finalType, workspace.command.trim(),
     workspace.finalWorkingDir, sanitizeEnv(environment),
     auto_restart ? 1 : 0, parseInt(restart_delay, 10) || 3, parseInt(max_restarts, 10) || 10,
-    port ? parseInt(port, 10) : null, workspace.scaffolded, tunnel_hostname?.trim() || null,
-    runtime_type, isDocker ? docker_host_id : null, isDocker ? image?.trim() : null,
+    finalPort ? parseInt(finalPort, 10) : null, workspace.scaffolded, tunnel_hostname?.trim() || null,
+    finalRuntime, isDocker ? docker_host_id : null, isDocker ? image?.trim() : null,
     sanitizeJSONArray(workspace.volumes), sanitizeJSONArray(docker_networks), sanitizeJSONArray(docker_ports),
     isDocker ? (cpu_limit || null) : null, isDocker ? (memory_limit || null) : null,
+    wantedRecipe,
+    healthcheck_url?.trim() || null,
+    parseInt(healthcheck_interval, 10) || 30,
+    parseInt(healthcheck_timeout, 10) || 5,
+    healthcheck_enabled ? 1 : 0,
+    isDocker ? null : (process_memory_limit ? parseInt(process_memory_limit, 10) : null),
+    isDocker ? null : (process_cpu_limit ? parseFloat(process_cpu_limit) : null),
     git_repo?.trim() || null, git_branch?.trim() || null,
     // Segurança: se o cliente mandar o placeholder de redacted de volta
     // (que é o que a UI devolve quando não alterou o campo), mantemos o
     // token anterior; caso contrário atualizamos com o novo valor (que
-    // pode ser null/"string vazia" para limpar).
+    // pode ser null/"string vazia" para limpar). O token é CIFRADO antes
+    // de ir para o banco.
     git_username?.trim() || null,
-    (git_token === '__PTD_REDACTED__' ? null : (git_token?.trim() || null)),
+    (git_token === '__PTD_REDACTED__' ? null : encGitToken(git_token)),
     startup_command?.trim() || null,
     main_file?.trim() || null, node_packages?.trim() || null, unnode_packages?.trim() || null, node_args?.trim() || null,
     auto_update ? 1 : 0, allow_file_uploads ? 1 : 0,
   );
 
   const created = db.prepare('SELECT * FROM services WHERE id = ?').get(result.lastInsertRowid);
-  console.log(`[services] criado "${created.name}" (${created.runtime_type}) em ${created.working_directory}`);
+  console.log(`[services] criado "${created.name}" (${created.runtime_type}, recipe=${created.recipe || 'n/a'}) em ${created.working_directory}`);
+
+  // Semeia o projeto inicial da receita escolhida (só quando é um template
+  // de verdade e não há repo pra clonar por cima).
+  if (use_template && !isDocker && !(git_repo?.trim()) && recipes.hasScaffold(wantedRecipe)) {
+    try {
+      recipes.scaffoldService(wantedRecipe, created.working_directory, created.name);
+    } catch (e) {
+      console.error(`[services] falha ao aplicar template da receita ${wantedRecipe}: ${e.message}`);
+    }
+  }
 
   // Dispara o setup em background SOMENTE se há trabalho real a fazer
   // (repositório pra clonar ou pacotes pra instalar). Se é só o scaffold
@@ -198,7 +283,7 @@ router.post('/', (req, res) => {
     });
   }
 
-  return res.status(201).json(redactService(created));
+  return res.status(201).json({ ...envForResponse(redactService(created)), recipe: recipes.describeRow(created) });
 });
 
 // PUT /api/services/:id — aceita update parcial
@@ -219,7 +304,9 @@ router.put('/:id', (req, res) => {
     environment, auto_restart, restart_delay, max_restarts, port, tunnel_hostname,
     docker_host_id, image, volumes, docker_networks, docker_ports, cpu_limit, memory_limit,
     git_repo, git_branch, git_username, git_token, startup_command, main_file, node_packages, unnode_packages, node_args,
-    auto_update, allow_file_uploads,
+    auto_update, allow_file_uploads, recipe,
+    healthcheck_url, healthcheck_interval, healthcheck_timeout, healthcheck_enabled,
+    process_memory_limit, process_cpu_limit,
   } = req.body;
 
   const changed = (value, current) => value !== undefined && String(value ?? '') !== String(current ?? '');
@@ -294,7 +381,7 @@ router.put('/:id', (req, res) => {
   // Tratamento seguro do token: se o cliente devolveu o placeholder
   // __PTD_REDACTED__, quer dizer que ele não foi alterado; mantemos o
   // valor atual. Se veio string vazia/null, limpamos. Se veio um token
-  // novo, atualizamos.
+  // novo, atualizamos. O novo valor é CIFRADO antes de gravar.
   let nextGitToken = existing.git_token;
   if (git_token !== undefined) {
     if (git_token === '__PTD_REDACTED__') {
@@ -302,7 +389,7 @@ router.put('/:id', (req, res) => {
     } else if (git_token === '' || git_token === null) {
       nextGitToken = null;
     } else {
-      nextGitToken = String(git_token).trim() || null;
+      nextGitToken = encGitToken(git_token);
     }
   }
 
@@ -317,6 +404,8 @@ router.put('/:id', (req, res) => {
       docker_host_id=?, image=?, volumes=?, docker_networks=?, docker_ports=?, cpu_limit=?, memory_limit=?,
       git_repo=?, git_branch=?, git_username=?, git_token=?, startup_command=?,
       main_file=?, node_packages=?, unnode_packages=?, node_args=?, auto_update=?, allow_file_uploads=?,
+      recipe=?, healthcheck_url=?, healthcheck_interval=?, healthcheck_timeout=?, healthcheck_enabled=?,
+      process_memory_limit=?, process_cpu_limit=?,
       updated_at=CURRENT_TIMESTAMP
     WHERE id=?
   `).run(
@@ -349,10 +438,22 @@ router.put('/:id', (req, res) => {
     node_args !== undefined ? (node_args?.trim() || null) : existing.node_args,
     auto_update !== undefined ? (auto_update ? 1 : 0) : existing.auto_update,
     allow_file_uploads !== undefined ? (allow_file_uploads ? 1 : 0) : existing.allow_file_uploads,
+    recipe !== undefined ? recipe : existing.recipe,
+    healthcheck_url !== undefined ? (healthcheck_url?.trim() || null) : existing.healthcheck_url,
+    healthcheck_interval !== undefined ? (parseInt(healthcheck_interval, 10) || 30) : existing.healthcheck_interval,
+    healthcheck_timeout !== undefined ? (parseInt(healthcheck_timeout, 10) || 5) : existing.healthcheck_timeout,
+    healthcheck_enabled !== undefined ? (healthcheck_enabled ? 1 : 0) : existing.healthcheck_enabled,
+    process_memory_limit !== undefined
+      ? (process_memory_limit ? parseInt(process_memory_limit, 10) : null)
+      : existing.process_memory_limit,
+    process_cpu_limit !== undefined
+      ? (process_cpu_limit ? parseFloat(process_cpu_limit) : null)
+      : existing.process_cpu_limit,
     existing.id,
   );
 
-  return res.json(redactService(db.prepare('SELECT * FROM services WHERE id = ?').get(existing.id)));
+  const updated = db.prepare('SELECT * FROM services WHERE id = ?').get(existing.id);
+  return res.json({ ...envForResponse(redactService(updated)), recipe: recipes.describeRow(updated) });
 });
 
 // DELETE /api/services/:id

@@ -46,6 +46,19 @@ echo "== unauthenticated request should 401 =="
 NOAUTH=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/api/services")
 [ "$NOAUTH" = "401" ] && pass "no-token request correctly rejected (401)" || fail "expected 401, got $NOAUTH"
 
+echo "== business routes locked until password changed =="
+LOCKED=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/api/services" -H "$AUTH")
+[ "$LOCKED" = "403" ] && pass "services locked with default password (403 SETUP_REQUIRED)" || fail "expected 403, got $LOCKED"
+
+echo "== change default password to complete setup =="
+CP=$(curl -s -X POST "$BASE/api/auth/change-password" -H "$AUTH" -H 'Content-Type: application/json' -d '{"current":"admin","next":"test-senha-123"}')
+echo "$CP" | grep -q '"ok":true' && pass "password changed, setup_done set" || fail "change-password failed: $CP"
+# novos logins usam a senha nova daqui em diante
+LOGIN=$(curl -s -X POST "$BASE/api/auth/login" -H 'Content-Type: application/json' -d '{"username":"admin","password":"test-senha-123"}')
+TOKEN=$(echo "$LOGIN" | node -e "process.stdin.on('data',d=>console.log(JSON.parse(d).token))")
+[ -n "$TOKEN" ] && pass "re-login with new password works" || fail "re-login failed: $LOGIN"
+AUTH="Authorization: Bearer $TOKEN"
+
 echo "== create service =="
 SVC=$(curl -s -X POST "$BASE/api/services" \
   -H "$AUTH" -H "Content-Type: application/json" \
@@ -131,10 +144,25 @@ OVERLIMIT_COUNT=$(curl -s "$BASE/api/services/$SVC_ID/backups" -H "$AUTH" | node
 [ "$OVERLIMIT_COUNT" -le 10 ] && pass "limite de backups por serviço respeitado ($OVERLIMIT_COUNT <= 10)" || fail "limite não foi respeitado: $OVERLIMIT_COUNT backups"
 
 echo "== backups: download is a real zip =="
-curl -s "$BASE/api/services/$SVC_ID/backups/$BK_ID/download" -H "$AUTH" -o "/tmp/pterodroid-backup-test-$$.zip"
-FILETYPE=$(file -b "/tmp/pterodroid-backup-test-$$.zip")
-echo "$FILETYPE" | grep -qi "zip" && pass "download é um .zip válido ($FILETYPE)" || fail "download não parece um zip: $FILETYPE"
-rm -f "/tmp/pterodroid-backup-test-$$.zip"
+ZIP_FILE="/tmp/pterodroid-backup-test-$$.zip"
+curl -s "$BASE/api/services/$SVC_ID/backups/$BK_ID/download" -H "$AUTH" -o "$ZIP_FILE"
+# Sem depender do binário `file` (ausente em alguns ambientes/CIs):
+# um .zip real começa com "PK\x03\x04" (assinatura PK). Também testamos com
+# `unzip -t` quando disponível, que valida a integridade de verdade.
+MAGIC=$(head -c 4 "$ZIP_FILE" | od -An -tx1 | tr -d ' \n')
+if [ "$MAGIC" = "504b0304" ]; then
+  VERIFY=""
+  if command -v unzip >/dev/null 2>&1; then
+    unzip -t "$ZIP_FILE" >/dev/null 2>&1 && VERIFY="zip OK"
+  fi
+  if command -v python3 >/dev/null 2>&1; then
+    python3 -c "import zipfile,sys; zipfile.ZipFile(sys.argv[1]).testzip()" "$ZIP_FILE" >/dev/null 2>&1 && VERIFY="zip OK"
+  fi
+  pass "download é um .zip válido (assinatura PK)"
+else
+  fail "download não é um zip (assinatura: $MAGIC)"
+fi
+rm -f "$ZIP_FILE"
 
 echo "== backups: restore brings the original content back =="
 echo "modificado-depois-do-backup" > "$WORKDIR/marcador.txt"

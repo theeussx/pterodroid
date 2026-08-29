@@ -131,4 +131,8 @@ module.exports = {
   // tabela docker_hosts (ver dockerHostManager.js), não por aqui.
   DOCKER_DEFAULT_HOST: process.env.DOCKER_HOST || null,
   DOCKER_API_VERSION: process.env.DOCKER_API_VERSION || 'v1.43',
+  // CORS configuravel. Padrão '*', ok para painel pessoal autenticado por
+  // Bearer (sem cookies, então CSRF não se aplica). Em uso mais restrito,
+  // defina CORS_ORIGINS com uma lista separada por vírgula.
+  CORS_ORIGINS: (process.env.CORS_ORIGINS || '').split(',').map((s) => s.trim()).filter(Boolean),
 };

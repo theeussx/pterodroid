@@ -41,6 +41,7 @@ export const api = {
 
   // services
   listServices: () => request('/services'),
+  listServiceRecipes: () => request('/services/recipes'),
   getService: (id) => request(`/services/${id}`),
   createService: (payload) => request('/services', { method: 'POST', body: payload }),
   updateService: (id, payload) => request(`/services/${id}`, { method: 'PUT', body: payload }),
@@ -85,6 +86,7 @@ export const api = {
   // settings
   getSettings: () => request('/settings'),
   updateSettings: (payload) => request('/settings', { method: 'PUT', body: payload }),
+  testAlertWebhook: () => request('/settings/alert/test', { method: 'POST' }),
   cloudflaredStatus: () => request('/settings/cloudflared'),
   remoteAccessStatus: () => request('/settings/remote-access'),
   startRemoteAccess: () => request('/settings/remote-access/start', { method: 'POST' }),

@@ -18,7 +18,9 @@ const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
 const { getDB } = require('../db');
+const cipher = require('./secretCipher');
 const workspaces = require('./workspaceManager');
+const recipes = require('./serviceRecipes');
 const driver = require('./serviceDriverRegistry');
 const io = require('../sockets/lazyIo');
 
@@ -227,7 +229,9 @@ function withArgs(cmd, nodeArgs) {
   return a ? `${cmd} ${a}` : cmd;
 }
 
-function resolveStartupCommand({ startup_command, main_file, rootDir, isDocker, node_args = '' }) {
+function resolveStartupCommand({ startup_command, main_file, rootDir, isDocker, node_args = '', recipe = null }) {
+  const dockerPrefix = isDocker ? 'cd /app && ' : '';
+  const cwdPrefix = isDocker ? '/app/' : '';
   const sc = (startup_command || '').trim();
   if (sc) {
     const inner = withArgs(sc, node_args);
@@ -236,8 +240,6 @@ function resolveStartupCommand({ startup_command, main_file, rootDir, isDocker, 
   }
 
   const mf = (main_file || '').trim();
-  const dockerPrefix = isDocker ? 'cd /app && ' : '';
-  const cwdPrefix = isDocker ? '/app/' : '';
 
   if (mf) {
     const mfRel = mf.replace(/^\/+/, '');
@@ -277,6 +279,21 @@ function resolveStartupCommand({ startup_command, main_file, rootDir, isDocker, 
     if (fs.existsSync(path.join(rootDir, f))) {
       return `sh -c '${dockerPrefix}node "${cwdPrefix}${f}" ${withArgs('', node_args)}'`.replace(/\s*'$/, "'");
     }
+  }
+
+  // Fallbacks dedicados por receita: Python e site estático não têm
+  // package.json, mas não devem precisar de comando explícito pra subir.
+  const recipeLang = recipe?.language;
+  if (recipeLang === 'python') {
+    for (const f of ['app.py', 'main.py', 'server.py']) {
+      if (fs.existsSync(path.join(rootDir, f))) {
+        const inner = `python3 "${cwdPrefix}${f}" ${withArgs('', node_args)}`;
+        return `sh -c '${dockerPrefix}${inner}'`.replace(/\s*'$/, "'");
+      }
+    }
+  }
+  if (recipeLang === 'static' || (fs.existsSync(path.join(rootDir, 'index.html')) && !pkg)) {
+    return `sh -c '${dockerPrefix}python3 -m http.server 8080 --directory .'`;
   }
   return '';
 }
@@ -339,6 +356,11 @@ async function runSetup(serviceId, opts = {}) {
       db.prepare("UPDATE services SET setup_status = 'idle', setup_step = 'idle', setup_progress = 0, setup_error = '' WHERE id = ?").run(serviceId);
     }
   }
+
+  // O git_token é armazenado cifrado (segredos em repouso). Decifra aqui,
+  // no único ponto em que ele é necessário — autenticação do clone.
+  const decryptedToken = cipher.decrypt(service.git_token);
+  service.git_token = decryptedToken;
 
   running.set(serviceId, { startedAt: Date.now() });
   const isDocker = service.runtime_type === 'docker';
@@ -544,6 +566,29 @@ async function runSetup(serviceId, opts = {}) {
         emitLog('info', '✓ dependências instaladas\n');
       }
     }
+    // Receitas Python (ou projetos com requirements.txt) instalam via pip,
+    // independente de haver package.json — é o equivalente dedicado ao
+    // `npm install` do Node.
+    const recipeForService = recipes.get(service.recipe) || recipes.forType(service.type);
+    const requirementsPath = path.join(rootDir, 'requirements.txt');
+    if ((recipeForService.language === 'python' || fs.existsSync(requirementsPath)) && fs.existsSync(requirementsPath)) {
+      setStep('installing', 30);
+      emitLog('info', '→ requirements.txt detectado; instalando dependências Python (pip)\\n');
+      const r = await runCmd({
+        cwd: rootDir,
+        command: 'python3',
+        args: ['-m', 'pip', 'install', '-r', 'requirements.txt'],
+        onLog: (l) => emitLog(l.stream, l.text),
+        timeoutMs: 10 * 60_000,
+      });
+      if (r.code !== 0) {
+        const msg = r.timedOut
+          ? 'pip install excedeu o tempo limite'
+          : `pip install falhou (código ${r.code}) — verifique as dependências em requirements.txt`;
+        throw new Error(msg);
+      }
+      emitLog('info', '✓ dependências Python instaladas\\n');
+    }
     setStep('installing', 100);
 
     // ── ETAPA 3: Build TypeScript ───────────────────────────────────────
@@ -614,6 +659,7 @@ async function runSetup(serviceId, opts = {}) {
       rootDir,
       isDocker,
       node_args: service.node_args,
+      recipe: recipes.get(service.recipe) || recipes.forType(service.type),
     });
 
     if (finalCommand && finalCommand.trim() !== String(service.command || '').trim()) {

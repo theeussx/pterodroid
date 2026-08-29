@@ -36,6 +36,8 @@ Com o Pterodroid, você pode facilmente hospedar e gerenciar bots de Discord, AP
 
 Descubra o que o Pterodroid pode fazer por você:
 
+- 🧩 **Tipos dedicados (receitas):** escolha o que você quer hospedar (API Node.js, bot, site estático, API Python, servidor Minecraft, container Docker...) e o painel já preenche porta, comando de início, runtime e — quando faz sentido — um projeto inicial de exemplo. No espírito dos *eggs*/nests do Pterodactyl e da praticidade de uma VPS moderna, sem tirar a robustez: tudo continua editável depois.
+
 - 🚀 **Gerenciamento Intuitivo de Processos:** Inicie, pause, reinicie e monitore seus serviços com facilidade através de um painel de controle amigável.
 
 - 🛡️ **Watchdog Inteligente para Serviços:** Um sistema de monitoramento integrado garante a resiliência dos seus **serviços**, reiniciando-os automaticamente em caso de falhas inesperadas, com políticas de *backoff* configuráveis. **Atenção:** Bancos de dados não são reiniciados automaticamente para evitar corrupção de dados.
@@ -219,7 +221,9 @@ Ao primeiro acesso, utilize as seguintes credenciais:
 
 - **Senha:** `admin`
 
-> [!WARNING]É **altamente recomendável** alterar a senha padrão imediatamente após o primeiro login, através da seção de configurações do painel.
+> [!WARNING]O painel agora **trava as rotas de negócio** (serviços, terminal, banco de dados, arquivos, Docker) enquanto a senha padrão estiver em uso. Ao entrar com `admin`/`admin`, a interface leva você direto para **Configurações**, e só libera o uso normal depois que a senha é trocada. Isso impede que alguém que alcance o login antes de você ganhe execução remota de comandos no dispositivo.
+>
+> Além disso, os segredos são **cifrados em repouso**: `git_token` e o ambiente de cada serviço são criptografados antes de ir para o banco.
 
 ### Persistência em Segundo Plano no Android
 
@@ -243,6 +247,45 @@ O painel agora oferece uma aba de configuração inicial para cada serviço, ace
 - definir argumentos de execução, auto-update e permissões de upload.
 
 Para projetos Node/TypeScript, o painel cria um starter mínimo com `package.json`, `tsconfig.json` e `src/index.ts` quando o workspace ainda não existe, facilitando o primeiro boot sem precisar montar tudo manualmente.
+
+### Tipos dedicados (receitas)
+
+Ao criar um serviço, o painel pergunta **o que você quer hospedar** e oferece um catálogo de tipos dedicados (`GET /api/services/recipes`):
+
+| Receita | Porta padrão | Comando | Template |
+| --- | --- | --- | --- |
+| API Node.js | 3000 | `node src/index.js` | package.json + src/index.js |
+| Bot (Discord/Telegram) | — | `node src/index.js` | starter Node |
+| Site Node.js | 3000 | `node src/index.js` | starter que serve `public/` |
+| Site estático | 8080 | `python3 -m http.server 8080 --directory .` | index.html |
+| API Python | 8000 | `python3 app.py` | app.py + requirements.txt |
+| Servidor Minecraft | 25565 | `java -Xmx1024M -jar server.jar nogui` | eula.txt + server.properties |
+| Container Docker | — | padrão da imagem | bind mount automático |
+| Geral / customizado | — | você define | workspace vazio |
+
+Cada receita preenche os defaults sem apagar o que você já digitou, e a criação continua 100% editável depois. Serviços antigos (que só têm o campo `type`) continuam funcionando e ganham rótulo/ícone via a receita mais próxima.
+
+### Healthcheck por serviço
+
+O watchdog de processos já reinicia um serviço que morreu. O **healthcheck** cobre o caso de o processo estar vivo mas o servidor não responder:
+
+- **URL:** um caminho (`/health`) ou URL completa (`http://127.0.0.1:8080/health`). Vazio = `/` na porta do serviço.
+- **Intervalo (s)** entre verificações (mín. 5) e **timeout (s)** de cada uma.
+- Se a URL falhar, o processo é encerrado e reiniciado como um crash normal (segue `auto_restart` / `max_restarts`), com mensagem registrada no log. Campos persistidos no banco.
+
+### Limites de recurso para processos
+
+Containers Docker já têm limites nativos. Para **processos locais**, o formulário aceita:
+
+- **Limite de memória (MB)** e **limite de CPU (núcleos)** — aplicados via `prlimit` quando disponível (best-effort). Se `prlimit` não existir no sistema, o serviço roda sem o limite e a informação é logada.
+
+### Alertas (webhook)
+
+Em **Configurações**, defina um `alert_webhook_url` (Telegram Bot API, Discord, Slack, ntfy.sh ou qualquer endpoint JSON) para ser avisado quando um serviço cair, entrar em crash-loop, ou quando o painel iniciar. Há um botão "Enviar alerta de teste" e um cooldown de 5 minutos por serviço para evitar spam. Para restringir o CORS, defina `CORS_ORIGINS` (lista separada por vírgula); por padrão aceita qualquer origem (a autenticação é por Bearer token, sem cookies, então CSRF não se aplica).
+
+### Senha padrão e trava de segurança
+
+Detalhes de como o painel força a troca de senha, cifra segredos, limita tentativas de login e dispara alertas estão na documentação em `apps/documentation` (aba **Guias → Segurança**).
 
 ## 🧪 Testes
 

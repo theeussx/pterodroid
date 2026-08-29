@@ -47,7 +47,7 @@ export const primeiroAcesso: DocPage = {
         platform="qualquer"
         title="suite de testes do backend"
         code={`cd backend && npm test`}
-        description="163 testes. Não exigem Docker instalado e nunca tocam no seu painel real — rodam em diretórios temporários e numa porta separada."
+        description="mais de 160 testes. Não exigem Docker instalado e nunca tocam no seu painel real — rodam em diretórios temporários e numa porta separada."
       />
 
       <H2 id="erros-comuns">Erros comuns no primeiro acesso</H2>
@@ -169,10 +169,11 @@ export const primeiroServico: DocPage = {
   title: 'Criando o primeiro serviço',
   navLabel: 'Primeiro serviço',
   description: 'Passo a passo para criar, configurar e iniciar seu primeiro serviço no Pterodroid — com exemplos reais.',
-  keywords: ['criar serviço', 'runtime', 'workspace', 'main_file', 'git clone', 'npm install', 'discord bot', 'api', 'node', 'typescript', 'watchdog', 'auto-update', 'starter'],
+  keywords: ['criar serviço', 'runtime', 'workspace', 'main_file', 'git clone', 'npm install', 'discord bot', 'api', 'node', 'typescript', 'watchdog', 'auto-update', 'starter', 'receita', 'tipo dedicado', 'template', 'scaffold', 'minecraft', 'site estático', 'python'],
   sourcePath: 'README.md',
   sections: [
     { id: 'passo-a-passo', title: 'Passo a passo' },
+    { id: 'tipos-dedicados', title: 'Tipos dedicados (receitas)' },
     { id: 'config-inicial', title: 'Configuração inicial do serviço' },
     { id: 'exemplos', title: 'Exemplos reais' },
     { id: 'watchdog', title: 'Watchdog e reinício automático' },
@@ -182,16 +183,48 @@ export const primeiroServico: DocPage = {
       <H2 id="passo-a-passo">Passo a passo</H2>
       <Steps
         items={[
-          { title: 'Criar serviço', body: 'No painel, crie um novo serviço.' },
+          { title: 'Criar serviço', body: 'No painel, clique em "Novo serviço".' },
+          { title: 'Escolher o tipo dedicado', body: <>O painel pergunta "o que você quer hospedar?". Escolha uma <strong>receita</strong> dedicada — API Node.js, bot, site estático, servidor Minecraft, API Python ou container Docker. Cada uma já traz a porta, o comando de início e, se for o caso, um projeto inicial de exemplo.</> },
           { title: 'Definir o nome', body: <>O nome define o workspace: <C>&lt;DATA_ROOT&gt;/workspaces/&lt;nome-do-serviço&gt;</C>, criado automaticamente. Você nunca precisa mexer no sistema de arquivos manualmente.</> },
-          { title: 'Escolher o runtime', body: <>Processo local (Node etc., gerenciado por <C>child_process</C>) ou container Docker, se houver um Docker Engine disponível.</> },
-          { title: 'Configurar o comando', body: <>Informe o <C>main_file</C> (ex.: <C>src/index.ts</C>, <C>dist/index.js</C>) ou um comando completo como <C>node .</C> — o painel infere o comando de início a partir dele.</> },
-          { title: 'Opcional: configurar Git', body: <>Aponte repositório e branch; o painel dispara <C>git clone</C> e <C>npm install</C> em background quando necessário.</> },
+          { title: 'Ajustar o que precisar', body: 'O formulário já vem preenchido com os defaults do tipo. Se quiser, troque a porta, adicione Git, variáveis de ambiente ou um comando de inicialização próprio na "Configuração inicial".' },
+          { title: 'Opcional: configurar Git', body: 'Aponte repositório e branch; o painel dispara git clone e instala dependências (npm ou pip) em background quando necessário.' },
           { title: 'Salvar e iniciar', body: 'Salve e clique em iniciar.' },
           { title: 'Abrir os logs', body: 'Acompanhe stdout/stderr ao vivo (WebSocket) na aba de logs.' },
           { title: 'Verificar o status', body: 'O card do serviço mostra o estado atual; o watchdog cuida de quedas inesperadas.' },
         ]}
       />
+
+      <H2 id="tipos-dedicados">Tipos dedicados (receitas)</H2>
+      <P>
+        Em vez de um formulário genérico, o Pterodroid oferece <strong>receitas dedicadas</strong> por tipo de serviço,
+        no espírito dos <em>eggs</em>/<em>nests</em> de painéis como o Pterodactyl. Você escolhe o que quer hospedar e o
+        painel guia pelo caminho certo:
+      </P>
+      <DocTable
+        head={['Receita', 'O que é', 'Já vem com']}
+        rows={[
+          ['API Node.js', 'Servidor HTTP em Node/Express', 'porta 3000, comando node, starter com package.json e src/index.js'],
+          ['Bot (Discord/Telegram)', 'Bot em Node, rodando em background', 'starter Node, token via variável de ambiente'],
+          ['Site Node.js', 'Web app servido por Node', 'porta 3000, starter que serve uma pasta public/'],
+          ['Site estático', 'HTML/CSS/JS puros, sem build', 'porta 8080, comando python http.server, index.html pronto'],
+          ['API Python', 'Flask/FastAPI ou http.server', 'porta 8000, app.py + requirements.txt, pip install automático'],
+          ['Servidor Minecraft', 'Servidor Java (Paper/Spigot/Vanilla)', 'porta 25565, comando java, eula.txt e server.properties de exemplo'],
+          ['Container Docker', 'Qualquer imagem em host Docker', 'runtime docker, bind mount automático do workspace'],
+          ['Geral / customizado', 'Qualquer comando ou processinho', 'workspace vazio, você define tudo'],
+        ]}
+      />
+      <P>
+        Ao escolher a receita, vários campos já vêm preenchidos (porta, comando, runtime) e, quando a receita tem{' '}
+        <strong>template</strong>, você pode pedir um <em>projeto inicial de exemplo</em> — criado na hora na pasta do
+        serviço. O tipo continua editável depois, então nada trava.
+      </P>
+      <Callout type="note" title="Tipos antigos continuam funcionando">
+        <p>
+          Serviços criados antes deste recurso usam o campo <C>type</C> (node, bot, api, web, python, shell). O painel
+          deriva a receita mais próxima para exibir o rótulo e o ícone corretos — nada é quebrado, você pode editar e
+          escolher uma receita a qualquer momento.
+        </p>
+      </Callout>
 
       <H2 id="config-inicial">Configuração inicial do serviço</H2>
       <P>
@@ -219,7 +252,7 @@ export const primeiroServico: DocPage = {
             label: 'API Node/TS',
             content: (
               <>
-                <P>Crie o serviço, escolha runtime local e informe <C>src/index.ts</C> como arquivo principal. Sem workspace prévio, o painel gera o starter TypeScript e você edita o código direto no <DocLink to="/docs/arquivos">gerenciador de arquivos</DocLink>.</P>
+                <P>Escolha a receita <strong>API Node.js</strong>. O painel preenche porta 3000 e o comando <C>node src/index.js</C>; se você ativar o template, gera <C>package.json</C> e <C>src/index.js</C> de exemplo. Edite o código direto no <DocLink to="/docs/arquivos">gerenciador de arquivos</DocLink>.</P>
               </>
             ),
           },
@@ -227,7 +260,7 @@ export const primeiroServico: DocPage = {
             label: 'Bot de Discord',
             content: (
               <>
-                <P>Na configuração inicial, aponte o repositório Git do bot e a branch. Ative a instalação automática de dependências e defina o <C>main_file</C> (ex.: <C>index.js</C>). Guarde o token do bot em um arquivo <C>.env</C> dentro do workspace, editável pelo painel.</P>
+                <P>Escolha a receita <strong>Bot (Discord/Telegram)</strong>. Na configuração inicial, aponte o repositório Git do bot e a branch; ative a instalação automática de dependências. Guarde o token do bot como variável de ambiente (chave <C>TOKEN</C>), editável pelo painel.</P>
               </>
             ),
           },
@@ -235,7 +268,15 @@ export const primeiroServico: DocPage = {
             label: 'Site estático',
             content: (
               <>
-                <P>Crie o serviço com um servidor estático como comando (ex.: um <C>server.js</C> simples com Express) e envie os arquivos do site pelo upload do gerenciador de arquivos — resolução de conflitos de nome é automática.</P>
+                <P>Escolha a receita <strong>Site estático</strong>: o painel traz a porta 8080, o comando <C>python3 -m http.server</C> e um <C>index.html</C> de exemplo. Envie seus arquivos pelo upload do gerenciador de arquivos, sem build.</P>
+              </>
+            ),
+          },
+          {
+            label: 'Servidor Minecraft',
+            content: (
+              <>
+                <P>Escolha a receita <strong>Servidor Minecraft</strong>: porta 25565, comando Java e arquivos <C>eula.txt</C>/<C>server.properties</C> de exemplo. Basta colocar o <C>server.jar</C> na pasta do serviço e iniciar (requer Java instalado).</P>
               </>
             ),
           },
@@ -243,7 +284,7 @@ export const primeiroServico: DocPage = {
             label: 'Container Docker',
             content: (
               <>
-                <P>Escolha o runtime Docker, informe a imagem e o painel monta o container com bind mount do workspace. Detalhes e ressalvas em <DocLink to="/docs/docker-services">Serviços Docker</DocLink>.</P>
+                <P>Escolha a receita <strong>Container Docker</strong>: o runtime já vem como container e o painel monta o bind mount do workspace. Detalhes e ressalvas em <DocLink to="/docs/docker-services">Serviços Docker</DocLink>.</P>
               </>
             ),
           },

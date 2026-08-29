@@ -11,6 +11,7 @@
 const fs = require('fs');
 const path = require('path');
 const workspaces = require('./workspaceManager');
+const recipes = require('./serviceRecipes');
 
 function parseJSONArray(raw) {
   try {
@@ -156,9 +157,19 @@ function bootstrapNodeProject(rootDir, name) {
 function resolveServiceWorkspace({ name, runtime_type, working_directory, volumes, image, command,
   git_repo, git_branch, git_username, git_token,
   main_file, node_packages, unnode_packages, node_args, auto_update = 0, allow_file_uploads = 0,
-  startup_command }) {
+  startup_command, recipe = null, useTemplate = false }) {
   const isDocker = runtime_type === 'docker';
   const hasGit = !!(git_repo && String(git_repo).trim());
+  // Uma receita dedicada define que tipo de projeto ela é. Receitas que NÃO
+  // são Node nem "genérica" (Minecraft, site estático, Python...) NUNCA
+  // devem receber o starter Node genérico — o comando default espera os
+  // arquivos dela (server.jar, index.html, app.py), não um package.json de
+  // brinquedo. Receitas Node continuam com o starter genérico como bom
+  // default, e receitas com template sobrescrevem via scaffold na rota.
+  const realRecipe = recipe ? recipes.get(recipe) : null;
+  const nodeFamily = realRecipe?.language === 'node';
+  const genericRecipe = !realRecipe || realRecipe.id === 'generic';
+  const recipeHandlesScaffold = !genericRecipe && ((!nodeFamily && realRecipe.language !== 'generic') || !!useTemplate);
 
   let finalWorkingDir = workspaces.normalize(working_directory);
   let scaffolded = 0;
@@ -188,8 +199,9 @@ function resolveServiceWorkspace({ name, runtime_type, working_directory, volume
     if ((imageName.includes('node') || imageName.includes('npm')) && !hasGit) {
       bootstrapNodeProject(finalWorkingDir, name);
     }
-  } else if (!hasGit) {
-    // Processo local sem repo: garante um starter mínimo.
+  } else if (!hasGit && !recipeHandlesScaffold) {
+    // Processo local sem repo: garante um starter mínimo, a menos que uma
+    // receita dedicada com template vá cuidar do scaffold na rota.
     bootstrapNodeProject(finalWorkingDir, name);
   }
 

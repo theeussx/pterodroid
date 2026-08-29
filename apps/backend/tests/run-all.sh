@@ -22,6 +22,7 @@ run() {
 }
 
 run "Unidade — classificação de níveis de log"             node tests/log-level-test.js
+run "Unidade — catálogo de receitas de serviços"         node tests/recipe-test.js
 run "Unidade — workspaces, arquivos e parser de comando" node tests/workspace-files-test.js
 run "Unidade — cliente da Docker Engine (API simulada)"  node tests/docker-engine-smoke-test.js
 run "Integração — driver Docker (engine simulada)"       node tests/docker-driver-test.js

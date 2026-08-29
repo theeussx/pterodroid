@@ -70,6 +70,13 @@ router.post('/login', async (req, res) => {
   return res.json({ token, username: user.username });
 });
 
+// GET /api/auth/me
+router.get('/me', authMiddleware, (req, res) => {
+  const db = getDB();
+  const setup = db.prepare("SELECT value FROM settings WHERE key = 'setup_done'").get();
+  return res.json({ username: req.user.username, setupDone: setup?.value === 'true' });
+});
+
 // POST /api/auth/change-password
 router.post('/change-password', authMiddleware, async (req, res) => {
   const { current, next: newPass } = req.body || {};
@@ -102,13 +109,6 @@ router.post('/change-password', authMiddleware, async (req, res) => {
 
   recordAudit(db, { action: 'senha_alterada', target: user.username, username: user.username });
   return res.json({ ok: true });
-});
-
-// GET /api/auth/me
-router.get('/me', authMiddleware, (req, res) => {
-  const db = getDB();
-  const setup = db.prepare("SELECT value FROM settings WHERE key = 'setup_done'").get();
-  return res.json({ username: req.user.username, setupDone: setup?.value === 'true' });
 });
 
 module.exports = router;
