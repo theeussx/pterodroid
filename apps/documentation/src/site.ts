@@ -21,6 +21,10 @@ export const site = {
     relatorio: 'https://github.com/theeussx/pterodroid/blob/main/docs/RELATORIO.md',
     auditoria: 'https://github.com/theeussx/pterodroid/blob/main/docs/AUDITORIA.md',
     arquiteturaPng: 'https://github.com/theeussx/pterodroid/blob/main/arquitetura.png',
+    // Fonte canônica do diagrama (a imagem que está no `main` do repositório).
+    // O site de documentação usa esta URL no <img> para refletir SEMPRE o
+    // arquivo oficial — sem depender de uma cópia local que possa desatualizar.
+    arquiteturaRaw: 'https://raw.githubusercontent.com/theeussx/pterodroid/main/arquitetura.png',
     envExample: 'https://github.com/theeussx/pterodroid/blob/main/.env.example',
     panelctl: 'https://github.com/theeussx/pterodroid/blob/main/panelctl.sh',
     clone: 'https://github.com/theeussx/pterodroid.git',

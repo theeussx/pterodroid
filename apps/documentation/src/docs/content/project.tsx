@@ -14,7 +14,7 @@ export function ArchDiagram({ compact = false }: { compact?: boolean }) {
         className="group block focus:outline-none"
       >
         <img
-          src="./arquitetura.png"
+          src={site.repo.arquiteturaRaw}
           alt="Diagrama da arquitetura do Pterodroid: o aplicativo se conecta ao API Gateway, que coordena autenticação, processos, bancos, Docker e túneis sobre processos locais e containers."
           width={4096}
           height={2736}
