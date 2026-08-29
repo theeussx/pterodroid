@@ -14,7 +14,7 @@ export function ArchDiagram({ compact = false }: { compact?: boolean }) {
         className="group block focus:outline-none"
       >
         <img
-          src="./arquitetura.png"
+          src={site.repo.arquiteturaRaw}
           alt="Diagrama da arquitetura do Pterodroid: o aplicativo se conecta ao API Gateway, que coordena autenticação, processos, bancos, Docker e túneis sobre processos locais e containers."
           width={4096}
           height={2736}
@@ -63,7 +63,12 @@ export const arquitetura: DocPage = {
         head={['Componente', 'Responsabilidade']}
         rows={[
           ['API Gateway', <>REST (Express) + WebSocket (Socket.io) + autenticação JWT com sessões de 7 dias.</>],
-          ['Process Manager', <>Ciclo de vida dos serviços locais, watchdog com backoff, monitoração de stdout/stderr.</>],
+          ['Service Recipes', <>Catálogo de receitas dedicadas por tipo de serviço (porta, comando, runtime e template de projeto inicial).</>],
+          ['Process Manager', <>Ciclo de vida dos serviços locais, watchdog com backoff, monitoração de stdout/stderr, healthcheck por serviço e limites de recurso via <C>prlimit</C>.</>],
+          ['Healthcheck', <>Verifica a URL de cada serviço; se o processo estiver vivo mas não responder, encerra e reinicia como um crash normal.</>],
+          ['Alertas', <>Notifica via webhook (Telegram/Discord/ntfy.sh) quando um serviço cai, entra em crash-loop ou quando o painel inicia.</>],
+          ['Cifra em repouso', <>AES-256-GCM para <C>git_token</C> e o ambiente dos serviços; texto claro legado é migrado no boot.</>],
+          ['Senha padrão obrigatória', <>Trava as rotas de negócio até a senha padrão ser trocada (defesa em profundidade: backend + frontend).</>],
           ['Docker Manager', <>Cliente da Docker Engine API (unix/tcp), containers de serviço, bind mounts, <C>docker exec</C>.</>],
           ['Workspace Manager', <>Um diretório exclusivo por serviço em <C>data/workspaces/&lt;nome&gt;</C>, criado automaticamente.</>],
           ['File Manager', <>Operações de arquivo com validação de caminho, escrita atômica, uploads via multer e auditoria.</>],
@@ -97,7 +102,7 @@ export const desenvolvimento: DocPage = {
   slug: 'desenvolvimento',
   title: 'Desenvolvimento e contribuição',
   navLabel: 'Contribuição',
-  description: 'Estrutura do repositório, como rodar os testes (163, sem Docker) e o fluxo de contribuição do Pterodroid.',
+  description: 'Estrutura do repositório, como rodar os testes (mais de 160, sem Docker) e o fluxo de contribuição do Pterodroid.',
   keywords: ['contribuir', 'pull request', 'fork', 'testes', 'npm test', 'estrutura do repositório', 'licença mit', 'backend', 'frontend'],
   sourcePath: 'README.md',
   sections: [
@@ -113,16 +118,19 @@ export const desenvolvimento: DocPage = {
         lang="text"
         title="theeussx/pterodroid"
         code={`pterodroid/
-├── backend/              # Node + Express + Socket.io (supervisor)
-│   └── src/
-│       ├── server.js     # bootstrap do servidor
-│       ├── config.js     # variáveis de ambiente e padrões
-│       ├── db/           # SQLite via sql.js (WASM)
-│       ├── middleware/   # autenticação JWT
-│       ├── routes/       # auth, services, files, terminal, docker,
-│       │                 # databases, monitor, backups, settings
-│       └── services/     # process manager, docker client, arquivos...
-├── frontend/             # React + Vite + Tailwind v3
+├── apps/
+│   ├── backend/          # Node + Express + Socket.io (supervisor)
+│   │   └── src/
+│   │       ├── server.js     # bootstrap do servidor
+│   │       ├── config.js     # variáveis de ambiente e padrões
+│   │       ├── db/           # SQLite via sql.js (WASM)
+│   │       ├── middleware/   # autenticação JWT
+│   │       ├── routes/       # auth, services, files, terminal, docker,
+│   │       │                 # databases, monitor, backups, settings
+│   │       └── services/     # process manager, docker client, recipes,
+│   │                         # arquivos, setup, túneis...
+│   ├── frontend/         # React + Vite + Tailwind v3
+│   └── documentation/    # site de documentação (este site)
 ├── docs/                 # AUDITORIA.md, RELATORIO.md
 ├── install-termux.sh     # instalador Termux
 ├── install-ubuntu-proot.sh
@@ -135,7 +143,7 @@ export const desenvolvimento: DocPage = {
 
       <H2 id="testes">Testes</H2>
       <CodeBlock platform="qualquer" code={`cd backend
-npm test`} description="163 testes. Não precisam de Docker e nunca tocam no painel real — rodam em diretórios temporários e porta separada." />
+npm test`} description="mais de 160 testes. Não precisam de Docker e nunca tocam no painel real — rodam em diretórios temporários e porta separada." />
       <P>A suíte cobre:</P>
       <Ul>
         <li>resolução de caminhos e proteção contra path traversal;</li>

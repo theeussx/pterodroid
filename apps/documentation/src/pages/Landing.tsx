@@ -163,6 +163,7 @@ function PanelMockup() {
 
 const FEATURES = [
   { icon: BRAND_ICONS.android, title: 'Nasceu no Android', desc: 'Projetado para Termux e Ubuntu proot — sem systemd, sem root, sem compilação nativa.', to: '/docs/termux' },
+  { icon: BRAND_ICONS.git, title: 'Tipos dedicados (receitas)', desc: 'Escolha o que vai hospedar (API, bot, site, Minecraft, container...) e o painel já traz porta, comando e projeto inicial.', to: '/docs/tipos-dedicados' },
   { icon: BRAND_ICONS.git, title: 'Workspaces isolados', desc: 'Cada serviço ganha um diretório exclusivo criado automaticamente. Você nunca toca no filesystem à mão.', to: '/docs/primeiro-servico' },
   { icon: BRAND_ICONS.nginx, title: 'Watchdog inteligente', desc: 'Serviços que caem voltam sozinhos, com backoff. Bancos ficam de fora — proteção contra corrupção.', to: '/docs/primeiro-servico' },
   { icon: BRAND_ICONS.github, title: 'Arquivos completos', desc: 'Editor integrado, upload de até 2 GB, escrita atômica, busca e log de auditoria.', to: '/docs/arquivos' },
@@ -316,7 +317,7 @@ export function Landing() {
             <ul className="mt-6 space-y-2.5 text-sm text-fg-muted">
               <li className="flex gap-2"><span className="text-cyan-neon" aria-hidden="true">▸</span> REST + WebSocket com autenticação JWT</li>
               <li className="flex gap-2"><span className="text-cyan-neon" aria-hidden="true">▸</span> SQLite interno via sql.js (WASM) — zero compilação nativa</li>
-              <li className="flex gap-2"><span className="text-cyan-neon" aria-hidden="true">▸</span> 163 testes no backend, rodando sem Docker</li>
+              <li className="flex gap-2"><span className="text-cyan-neon" aria-hidden="true">▸</span> mais de 160 testes no backend, rodando sem Docker</li>
             </ul>
             <Link to="/docs/arquitetura" className="mt-6 inline-block rounded-lg border border-line-2 bg-surface px-5 py-2.5 text-sm font-semibold text-fg transition-colors hover:border-cyan-neon/50">
               Explorar a arquitetura →

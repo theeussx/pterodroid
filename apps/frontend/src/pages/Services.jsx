@@ -1,5 +1,10 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { Plus, Play, Square, RotateCw, Trash2, Pencil, Terminal, Container } from 'lucide-react';
+import { Plus, Play, Square, RotateCw, Trash2, Pencil, Terminal, Container, Server, Bot, Globe, FileCode, Gamepad2, Boxes } from 'lucide-react';
+
+const RECIPE_ICONS = {
+  server: Server, bot: Bot, globe: Globe, filecode: FileCode, gamepad: Gamepad2, container: Container, boxes: Boxes,
+};
+function recipeIcon(id) { return RECIPE_ICONS[id] || Boxes; }
 import { api } from '../lib/api';
 import { useServiceStatusEvents } from '../lib/hooks';
 import Card from '../components/Card';
@@ -129,15 +134,11 @@ export default function Services() {
             )}
 
             <div className="flex items-center justify-between mt-auto pt-2 border-t border-line-soft">
-              <div className="flex items-center gap-2">
-                {s.runtime_type === 'docker' ? (
-                  <span className="text-[10px] uppercase tracking-wide text-ink-faint font-mono flex items-center gap-1">
-                    <Container size={10} /> container
-                  </span>
-                ) : (
-                  <span className="text-[10px] uppercase tracking-wide text-ink-faint font-mono">{s.type}</span>
-                )}
-                {s.port && <span className="text-[10px] text-ink-faint font-mono">:{s.port}</span>}
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="text-[10px] uppercase tracking-wide text-ink-faint font-mono flex items-center gap-1 truncate">
+                  {(() => { const Icon = recipeIcon(s.recipe?.icon); const rl = s.recipe?.label || s.type; return <><Icon size={10} /> {rl}</>; })()}
+                </span>
+                {s.port && <span className="text-[10px] text-ink-faint font-mono shrink-0">:{s.port}</span>}
               </div>
               <div className="flex gap-1">
                 {s.status === 'running' ? (

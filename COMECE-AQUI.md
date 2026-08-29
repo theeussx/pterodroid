@@ -92,7 +92,7 @@ Cada serviço ganha um diretório exclusivo em `data/workspaces/<nome-do-serviç
 cd apps/backend && npm test
 ```
 
-São 163 testes. Não exigem Docker instalado e não tocam num painel real
+São mais de 160 testes. Não exigem Docker instalado e não tocam num painel real
 (usam pasta temporária e porta separada).
 
 ---

@@ -97,13 +97,15 @@ export const monitoramento: DocPage = {
   slug: 'monitoramento',
   title: 'Monitoramento de recursos',
   navLabel: 'Monitoramento',
-  description: 'CPU, RAM, disco, rede, temperatura e processos ativos em tempo real — direto de /proc e /sys.',
-  keywords: ['cpu', 'ram', 'disco', 'rede', 'temperatura', 'processos', 'gráficos', '/proc', 'df', 'ps', 'status', 'tempo real'],
+  description: 'CPU, RAM, disco, rede, temperatura e processos ativos em tempo real — direto de /proc e /sys. Healthcheck por serviço e limites de recurso.',
+  keywords: ['cpu', 'ram', 'disco', 'rede', 'temperatura', 'processos', 'gráficos', '/proc', 'df', 'ps', 'status', 'tempo real', 'healthcheck', 'limite', 'memória', 'cpu'],
   sourcePath: 'README.md',
   sections: [
     { id: 'metricas', title: 'Métricas disponíveis' },
     { id: 'como-funciona', title: 'Como funciona por baixo' },
     { id: 'status-servicos', title: 'Status dos serviços' },
+    { id: 'healthcheck', title: 'Healthcheck por serviço' },
+    { id: 'limites-recurso', title: 'Limites de recurso' },
   ],
   render: () => (
     <>
@@ -138,6 +140,30 @@ export const monitoramento: DocPage = {
         <li>Cada serviço mostra seu estado atual (rodando/parado) e reinicializações do watchdog.</li>
         <li>Logs de console (stdout/stderr) ao vivo por WebSocket — veja <DocLink to="/docs/primeiro-servico">Primeiro serviço</DocLink>.</li>
         <li>Para inspecionar processos pontualmente, o <DocLink to="/docs/terminal">terminal</DocLink> aceita comandos como <C>ps aux | head -n 20</C> (programas de tela cheia como <C>htop</C> não são suportados).</li>
+      </Ul>
+
+      <H2 id="healthcheck">Healthcheck por serviço</H2>
+      <P>
+        O watchdog de processo cuida de "caiu e morreu". O <strong>healthcheck</strong> cobre o caso mais traiçoeiro:
+        o processo está vivo mas o servidor não responde (travou). No formulário do serviço, ative o healthcheck e
+        informe a URL de verificação.
+      </P>
+      <Ul>
+        <li><strong>URL</strong> pode ser um caminho (<C>/health</C>) ou URL cheia (<C>http://127.0.0.1:8080/health</C>). Se deixar vazio, usa <C>/</C> na porta do serviço.</li>
+        <li><strong>Intervalo</strong> (s) entre verificações — mínimo 5.</li>
+        <li><strong>Timeout</strong> (s) de cada verificação.</li>
+        <li>Se a verificação falhar, o processo é encerrado e reiniciado como um crash normal (respeitando <C>auto_restart</C> e as <C>max_restarts</C>). Uma mensagem é registrada no log e um <DocLink to="/docs/seguranca">alerta</DocLink> pode ser disparado.</li>
+      </Ul>
+
+      <H2 id="limites-recurso">Limites de recurso</H2>
+      <P>
+        Containers Docker têm limites nativos (<C>cpu_limit</C>/<C>memory_limit</C>). Para processos locais, o
+        formulário aceita <strong>limite de memória (MB)</strong> e <strong>limite de CPU (núcleos)</strong>. Eles são
+        aplicados via <C>prlimit</C> quando disponível:
+      </P>
+      <Ul>
+        <li>Se o <C>prlimit</C> existir no sistema, o limite é imposto ao processo.</li>
+        <li>Se o binário não estiver disponível, o serviço continua rodando normalmente e uma mensagem é logada — o limite é <strong>melhor esforço</strong>, não uma falha.</li>
       </Ul>
     </>
   ),

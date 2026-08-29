@@ -2,8 +2,9 @@ import type { DocGroup, DocPage } from './types';
 import { instalacao, introducao, requisitos } from './content/intro';
 import { docker, linux, proot, termux } from './content/install';
 import { configuracao, primeiroAcesso, primeiroServico } from './content/firstSteps';
-import { arquivos, bancos, dockerServices, terminal } from './content/guides';
+import { arquivos, bancos, dockerServices, terminal, tiposDedicados } from './content/guides';
 import { cloudflare, monitoramento } from './content/remote';
+import { seguranca } from './content/seguranca';
 import { faq, troubleshooting } from './content/help';
 import { arquitetura, changelog, desenvolvimento } from './content/project';
 
@@ -11,7 +12,7 @@ export const docGroups: DocGroup[] = [
   { label: 'Introdução', pages: [introducao, requisitos] },
   { label: 'Instalação', pages: [instalacao, termux, proot, docker, linux] },
   { label: 'Primeiros passos', pages: [primeiroAcesso, configuracao, primeiroServico] },
-  { label: 'Guias', pages: [arquivos, terminal, dockerServices, bancos, cloudflare, monitoramento] },
+  { label: 'Guias', pages: [tiposDedicados, arquivos, terminal, dockerServices, bancos, cloudflare, monitoramento, seguranca] },
   { label: 'Ajuda', pages: [troubleshooting, faq] },
   { label: 'Projeto', pages: [arquitetura, desenvolvimento, changelog] },
 ];

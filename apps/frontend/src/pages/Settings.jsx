@@ -93,18 +93,34 @@ export default function Settings() {
     }
   };
 
-  if (!settings) return <div className="text-ink-faint text-sm">Carregando...</div>;
+  // Enquanto a senha padrão não é trocada, o backend devolve 403 p/ as rotas
+  // de configuração (parte da trava de segurança). Isso NÃO pode impedir o
+  // formulário de "Alterar senha" de aparecer — é justamente o que o usuário
+  // precisa para destravar o painel. O card "Painel" segue a mesma ideia: se
+  // os settings ainda não carregaram (ou foram bloqueados), ele só desativa
+  // os campos em vez de derrubar a página inteira.
+  const settingsReady = !!settings;
+  const safeSettings = settings || {
+    panel_name: '', panel_color: '', log_retention_days: 7, alert_webhook_url: '',
+  };
 
   return (
     <div className="space-y-4 max-w-2xl">
       <Card>
         <h2 className="font-display font-semibold text-sm text-ink mb-4">Painel</h2>
         <form onSubmit={saveGeneral} className="space-y-4">
+          {!settingsReady && (
+            <p className="text-xs text-ink-faint">
+              Os campos abaixo são liberados depois que a senha padrão for trocada
+              (você ainda pode alterar a senha no card no fim desta página).
+            </p>
+          )}
           <div>
             <Label htmlFor="panel_name">Nome do painel</Label>
             <Input
               id="panel_name"
-              value={settings.panel_name}
+              value={safeSettings.panel_name}
+              disabled={!settingsReady}
               onChange={(e) => setSettings((s) => ({ ...s, panel_name: e.target.value }))}
             />
           </div>
@@ -114,11 +130,12 @@ export default function Settings() {
               <input
                 type="color"
                 id="panel_color"
-                value={settings.panel_color}
+                value={safeSettings.panel_color}
+                disabled={!settingsReady}
                 onChange={(e) => setSettings((s) => ({ ...s, panel_color: e.target.value }))}
                 className="w-10 h-10 rounded-lg border border-line bg-raised cursor-pointer"
               />
-              <span className="text-sm text-ink-dim font-mono">{settings.panel_color}</span>
+              <span className="text-sm text-ink-dim font-mono">{safeSettings.panel_color}</span>
             </div>
           </div>
           <div>
@@ -127,11 +144,40 @@ export default function Settings() {
               id="log_retention_days"
               type="number"
               min="1"
-              value={settings.log_retention_days}
+              value={safeSettings.log_retention_days}
+              disabled={!settingsReady}
               onChange={(e) => setSettings((s) => ({ ...s, log_retention_days: e.target.value }))}
             />
           </div>
-          <Button type="submit" variant="primary" loading={savingGeneral}>Salvar</Button>
+          <div>
+            <Label htmlFor="alert_webhook_url">Webhook de alerta (opcional)</Label>
+            <Input
+              id="alert_webhook_url"
+              value={safeSettings.alert_webhook_url || ''}
+              disabled={!settingsReady}
+              onChange={(e) => setSettings((s) => ({ ...s, alert_webhook_url: e.target.value }))}
+              placeholder="https://api.telegram.org/bot<TOKEN>/sendMessage  ou um webhook do Discord/ntfy.sh"
+            />
+            <p className="text-xs text-ink-faint mt-1">
+              O Pterodroid avisa quando um serviço cai ou entra em crash-loop. Deixe vazio para desativar.
+            </p>
+            <button
+              type="button"
+              onClick={async () => {
+                if (!safeSettings.alert_webhook_url) { notify('Configure um webhook primeiro', 'error'); return; }
+                try {
+                  const r = await api.testAlertWebhook();
+                  if (r.ok) notify('Alerta de teste enviado', 'success');
+                  else if (r.skipped) notify('Nenhum webhook configurado', 'error');
+                  else notify(`Falha ao enviar (${r.status})`, 'error');
+                } catch (e) { notify(e.message, 'error'); }
+              }}
+              className="mt-2 text-xs text-signal hover:underline"
+            >
+              Enviar alerta de teste
+            </button>
+          </div>
+          <Button type="submit" variant="primary" loading={savingGeneral} disabled={!settingsReady}>Salvar</Button>
         </form>
       </Card>
 

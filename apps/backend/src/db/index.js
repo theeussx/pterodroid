@@ -1,5 +1,6 @@
 const bcrypt = require('bcryptjs');
 const config = require('../config');
+const cipher = require('../services/secretCipher');
 const { openDatabase } = require('./sqliteCompat');
 
 let db;
@@ -134,6 +135,19 @@ async function initDB() {
   ensureColumn(db, 'services', 'public_url', 'TEXT');
   ensureColumn(db, 'services', 'scaffolded_directory', 'INTEGER DEFAULT 0');
   ensureColumn(db, 'services', 'tunnel_hostname', 'TEXT');
+  // Receita dedicada do serviço (ver services/serviceRecipes.js). Nulo para
+  // serviços antigos — o rótulo/ícone é então derivado do campo `type`.
+  ensureColumn(db, 'services', 'recipe', 'TEXT');
+  // Healthcheck por serviço: quando habilitado, o watchdog também confere se
+  // o serviço está respondendo (e não apenas se o processo está vivo).
+  ensureColumn(db, 'services', 'healthcheck_url', 'TEXT');
+  ensureColumn(db, 'services', 'healthcheck_interval', 'INTEGER DEFAULT 30');
+  ensureColumn(db, 'services', 'healthcheck_timeout', 'INTEGER DEFAULT 5');
+  ensureColumn(db, 'services', 'healthcheck_enabled', 'INTEGER DEFAULT 0');
+  // Limites de recurso aplicados também a PROCESSOS (não só a containers).
+  // memory_limit em MB e cpu_limit em núcleos são best-effort no processo.
+  ensureColumn(db, 'services', 'process_memory_limit', 'INTEGER');
+  ensureColumn(db, 'services', 'process_cpu_limit', 'REAL');
 
   // Campos do driver Docker (ver serviceDriverRegistry.js) — todos
   // nulos/com default, então serviços existentes continuam intactos como
@@ -218,9 +232,27 @@ async function initDB() {
     ['panel_color', '#4f8ef7'],
     ['log_retention_days', '7'],
     ['setup_done', 'false'],
+    // Webhook de alerta de queda (Telegram/qualquer endpoint). Vazio = off.
+    ['alert_webhook_url', ''],
   ];
   const upsert = db.prepare('INSERT OR IGNORE INTO settings(key, value) VALUES (?, ?)');
   for (const [k, v] of defaults) upsert.run(k, v);
+
+  // ── Cifra de segredos legados (não cifrados) ──────────────────────────
+  // Um banco já existente pode ter git_token em texto claro. Cifrar aqui,
+  // no boot, migra os valores sem exigir ação do usuário. Valores já
+  // cifrados (com o prefixo enc:) são pulados.
+  const legacy = db.prepare("SELECT id, git_token FROM services WHERE git_token IS NOT NULL AND git_token != ''").all();
+  const encToken = db.prepare('UPDATE services SET git_token = ? WHERE id = ?');
+  for (const row of legacy) {
+    if (!cipher.isEncrypted(row.git_token)) {
+      encToken.run(cipher.encrypt(row.git_token), row.id);
+    }
+  }
+
+  // default ao cadastrar novas variáveis de ambiente fica como está; a
+  // cifra é aplicada nas rotas/services no ponto de escrita, e decifrada
+  // no ponto de leitura (processManager/dbInstanceManager).
 
   // Default admin user if none exists
   const existing = db.prepare('SELECT id FROM users LIMIT 1').get();

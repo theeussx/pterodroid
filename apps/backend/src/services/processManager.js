@@ -7,11 +7,35 @@ const { spawn } = require('child_process');
 const EventEmitter = require('events');
 const { getDB } = require('../db');
 const config = require('../config');
+const cipher = require('./secretCipher');
+const alert = require('./alertNotifier');
 const { findAvailablePort } = require('./portFinder');
 const tunnelManager = require('./tunnelManager');
 const workspaces = require('./workspaceManager');
 const { classifyLogLevel } = require('./logLevel');
 const { parseCommand } = require('./commandParser');
+
+/**
+ * Faz um GET com timeout controlado e devolve true se a URL respondeu
+ * 2xx/3xx. Usado pelo healthcheck por serviço.
+ */
+async function httpOk(url, timeoutMs) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  timer.unref?.();
+  try {
+    const res = await fetch(url, {
+      method: 'GET',
+      redirect: 'follow',
+      signal: controller.signal,
+    });
+    return res.ok;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 class ProcessManager extends EventEmitter {
   constructor() {
@@ -154,7 +178,9 @@ class ProcessManager extends EventEmitter {
     let env = { ...process.env };
     let explicitEnvironment = {};
     try {
-      explicitEnvironment = JSON.parse(svc.environment || '{}');
+      // O environment pode estar cifrado em repouso (segredos). Decifra
+      // antes de montar o ambiente do processo.
+      explicitEnvironment = JSON.parse(cipher.decrypt(svc.environment || '{}'));
       env = { ...env, ...explicitEnvironment };
     } catch { /* keep base env */ }
     // O painel costuma definir PORT para si mesmo. Nunca repasse essa porta
@@ -170,6 +196,9 @@ class ProcessManager extends EventEmitter {
         if (activePort !== svc.port) {
           console.log(`[SVC] Porta ${svc.port} ocupada, usando ${activePort} para ${svc.name}`);
           db.prepare('UPDATE services SET port=? WHERE id=?').run(activePort, svc.id);
+          // Importante: reflete a porta real no objeto local, senão o
+          // healthcheck (e o túnel) apontariam para a porta antiga.
+          svc.port = activePort;
         }
         env.PORT = String(activePort);
       } catch (err) {
@@ -192,10 +221,64 @@ class ProcessManager extends EventEmitter {
       startedAt: Date.now(),
       restartCount: svc.restart_count || 0,
       watchdog: null,
+      healthcheckTimer: null,
       stopped: false, // true = intentionally stopped, suppress auto-restart
       exited: false,
     };
     this.procs.set(svc.id, entry);
+
+    // ── Limites de recurso para processos ───────────────────────────────
+    // Container tem limites nativos; processo local depende do `prlimit`
+    // (presente no Termux via util-linux e nos builds Linux). Aplicamos de
+    // forma best-effort: se o binário não existir, apenas avisamos — o
+    // serviço segue rodando sem o limite.
+    if (svc.process_memory_limit || svc.process_cpu_limit) {
+      const rl = [];
+      if (svc.process_memory_limit) rl.push(`--as=${Math.round(svc.process_memory_limit) * 1024 * 1024}`);
+      if (svc.process_cpu_limit) rl.push(`--cpu=${Math.round((parseFloat(svc.process_cpu_limit) || 1) * 100)}`);
+      if (rl.length) {
+        const pr = spawn('prlimit', [...rl, '--pid=' + child.pid], { stdio: 'ignore' });
+        pr.on('exit', (code) => {
+          if (code !== 0) console.log(`[SVC] prlimit indisponível para ${svc.name} (código ${code}) — limite de recurso não aplicado`);
+        });
+        pr.on('error', () => { /* prlimit não existe neste sistema; ignorar */ });
+      }
+    }
+
+    // ── Healthcheck por serviço ─────────────────────────────────────────
+    // O watchdog de processo cuida do "processo morreu". Este de cima cuida
+    // do "processo está vivo mas não responde" (servidor travado), que é o
+    // caso que um painel de hospedagem precisa pegar. Quando a URL falha por
+    // `healthcheck_enabled` e há auto_restart, matamos o processo e deixamos
+    // o finalize() cuidar do restart/alerta como um crash normal.
+    if (svc.healthcheck_enabled) {
+      const interval = Math.max(5, parseInt(svc.healthcheck_interval, 10) || 30) * 1000;
+      const timeout = Math.max(1, parseInt(svc.healthcheck_timeout, 10) || 5) * 1000;
+      // URL vazia (ou só um path) vira http://127.0.0.1:PORTA/. Usa a porta
+      // real do processo (a porta pode ter sido realocada por findAvailablePort).
+      let hcUrl = (svc.healthcheck_url || '/').trim();
+      if (!hcUrl.includes('://')) {
+        const hostPort = svc.port || env.PORT || '';
+        hcUrl = `http://127.0.0.1:${hostPort}${hcUrl.startsWith('/') ? hcUrl : `/${hcUrl}`}`;
+      }
+      const check = async () => {
+        if (entry.exited || entry.stopped) return;
+        if (!this.procs.has(svc.id) || this.procs.get(svc.id) !== entry) return;
+        const ok = await httpOk(hcUrl, timeout);
+        if (ok) return;
+        if (entry.exited || entry.stopped || this.procs.get(svc.id) !== entry) return;
+        const msg = `healthcheck falhou (${hcUrl}) — reiniciando`;
+        this.emit('log', { serviceId: svc.id, level: 'error', message: msg, ts: Date.now() });
+        try {
+          db.prepare('INSERT INTO logs(service_id, level, message) VALUES(?,?,?)')
+            .run(svc.id, 'error', msg.slice(0, 2000));
+        } catch { /* ignore */ }
+        // Mata o processo; o exit dispara finalize() → crash → restart/alerta.
+        try { child.kill('SIGKILL'); } catch { /* já morreu */ }
+      };
+      entry.healthcheckTimer = setInterval(check, interval);
+      entry.healthcheckTimer.unref?.();
+    }
 
     const handleData = (level) => (data) => {
       const message = data.toString();
@@ -243,6 +326,17 @@ class ProcessManager extends EventEmitter {
         .run(status, svc.id);
       this.emit('status', { serviceId: svc.id, status, error: spawnError?.message });
 
+      // Limpa o timer de healthcheck quando o processo morre; respawn cria um novo.
+      if (entry.healthcheckTimer) {
+        clearInterval(entry.healthcheckTimer);
+        entry.healthcheckTimer = null;
+      }
+
+      if (crashed && !entry.stopped) {
+        alert.onCrash({ serviceId: svc.id, name: svc.name, reason: spawnError?.message || `código ${code}` })
+          .catch(() => {});
+      }
+
       if (crashed && svc.auto_restart) {
         // Um serviço que ficou de pé bastante tempo antes de cair não está
         // num crash-loop: zera o orçamento de tentativas, senão quedas
@@ -275,6 +369,7 @@ class ProcessManager extends EventEmitter {
 
         db.prepare("UPDATE services SET status='error' WHERE id=?").run(svc.id);
         this.emit('status', { serviceId: svc.id, status: 'error', reason: 'max_restarts_exceeded' });
+        alert.onCrashLoop({ serviceId: svc.id, name: svc.name, restarts: entry.restartCount }).catch(() => {});
       }
 
       // Nenhum restart pendente: limpa a entrada se ela ainda for a atual.
@@ -317,6 +412,10 @@ class ProcessManager extends EventEmitter {
     if (entry.watchdog) {
       clearTimeout(entry.watchdog);
       entry.watchdog = null;
+    }
+    if (entry.healthcheckTimer) {
+      clearInterval(entry.healthcheckTimer);
+      entry.healthcheckTimer = null;
     }
 
     const proc = entry.process;

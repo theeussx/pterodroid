@@ -1,10 +1,14 @@
-import { useState, useEffect } from 'react';
-import { Globe, Plus, X } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import {
+  Globe, Plus, X, Server, Bot, FileCode, Gamepad2, Container, Boxes, Sparkles,
+} from 'lucide-react';
 import Modal from './Modal';
 import Button from './Button';
 import { Label, Input, MonoInput, TextArea, Select, Toggle } from './Field';
 import { api } from '../lib/api';
 
+// Os "tipos" (engine) continuam existindo — a receita dedica o serviço e
+// escolhe o engine certo pra ele. Para serviços antigos, é o que sobra.
 const TYPES = [
   { value: 'node', label: 'Node.js' },
   { value: 'python', label: 'Python' },
@@ -15,6 +19,21 @@ const TYPES = [
   { value: 'other', label: 'Outro' },
 ];
 
+const RECIPE_ICONS = {
+  server: Server,
+  bot: Bot,
+  globe: Globe,
+  filecode: FileCode,
+  gamepad: Gamepad2,
+  container: Container,
+  boxes: Boxes,
+};
+
+function RecipeIcon({ id, size = 20, className = '' }) {
+  const Icon = RECIPE_ICONS[id] || Boxes;
+  return <Icon size={size} className={className} />;
+}
+
 const EMPTY = {
   name: '', description: '', type: 'node', command: '', working_directory: '',
   environment: '{}', auto_restart: true, restart_delay: 3, max_restarts: 10, port: '', tunnel_hostname: '',
@@ -23,6 +42,11 @@ const EMPTY = {
   git_repo: '', git_branch: '', auto_update: false, git_username: '', git_token: '',
   startup_command: '',
   node_packages: '', unnode_packages: '', main_file: '', node_args: '', allow_file_uploads: false,
+  // recipe
+  recipe: '', use_template: false,
+  // healthcheck + resource limits (processes)
+  healthcheck_url: '', healthcheck_interval: 30, healthcheck_timeout: 5, healthcheck_enabled: false,
+  process_memory_limit: '', process_cpu_limit: '',
 };
 
 function parseVolumesArr(json) {
@@ -77,6 +101,8 @@ export default function ServiceFormModal({ open, onClose, onSubmit, initial }) {
   const [volumeRows, setVolumeRows] = useState([]);
   const [networksText, setNetworksText] = useState('');
   const [hosts, setHosts] = useState([]);
+  const [recipes, setRecipes] = useState([]);
+  const [recipesLoading, setRecipesLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [submitError, setSubmitError] = useState('');
   const [cloudflaredOk, setCloudflaredOk] = useState(null);
@@ -88,9 +114,22 @@ export default function ServiceFormModal({ open, onClose, onSubmit, initial }) {
   // isso é preciso remover e recriar o serviço.
   const locked = isDocker && !!initial?.container_id;
 
+  // Agrupa as receitas por categoria pra exibir como "nests" dedicados.
+  const groupedRecipes = useMemo(() => {
+    const groups = {};
+    for (const r of recipes) {
+      (groups[r.category] = groups[r.category] || []).push(r);
+    }
+    return Object.entries(groups);
+  }, [recipes]);
+
+  const selectedRecipe = recipes.find((r) => r.id === form.recipe) || null;
+
   useEffect(() => {
     if (open) {
       const base = initial ? { ...EMPTY, ...initial, auto_restart: !!initial.auto_restart } : EMPTY;
+      // Serviços antigos não têm recipe salva — deriva a mais próxima.
+      if (!base.recipe && base.type) base.recipe = recipeForType(base.type);
       setForm(base);
       const rawEnv = initial?.environment || '{}';
       const rows = parseEnvRows(rawEnv);
@@ -99,8 +138,6 @@ export default function ServiceFormModal({ open, onClose, onSubmit, initial }) {
         setEnvRows(rows);
         setEnvAdvanced(false);
       } else {
-        // JSON que não é um objeto simples de chave/valor — preserva como
-        // está e abre direto no modo avançado, sem arriscar perder dados.
         setEnvRows([]);
         setEnvAdvanced(true);
       }
@@ -113,7 +150,35 @@ export default function ServiceFormModal({ open, onClose, onSubmit, initial }) {
     }
   }, [open, initial]);
 
+  // Carrega o catálogo de receitas uma vez, na abertura do modal.
+  useEffect(() => {
+    if (!open) return;
+    setRecipesLoading(true);
+    api.listServiceRecipes()
+      .then(setRecipes)
+      .catch(() => setRecipes([]))
+      .finally(() => setRecipesLoading(false));
+  }, [open]);
+
   const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }));
+
+  // Aplica os defaults de uma receita escolhida (sem apagar o que o usuário
+  // já digitou). É o que torna a criação "dedicada": escolheu o tipo, o
+  // painel já preenche porta, comando e runtime.
+  const applyRecipe = (r) => {
+    setForm((f) => {
+      const next = { ...f, recipe: r.id, use_template: !!r.hasTemplate };
+      if (r.defaultType) next.type = r.defaultType;
+      if (r.defaultPort) next.port = String(r.defaultPort);
+      if (r.defaultCommand) next.command = r.defaultCommand;
+      // Receitas de container comandam o runtime; receitas normais rodam
+      // como processo local (se o usuário vinha de uma receita docker,
+      // volta para processo — é o que o tipo dedicado define).
+      if (r.runtimeType) next.runtime_type = r.runtimeType;
+      else if (f.runtime_type === 'docker') next.runtime_type = 'process';
+      return next;
+    });
+  };
 
   const addVolumeRow = () => setVolumeRows((r) => [...r, { source: '', target: '' }]);
   const updateVolumeRow = (i, key, value) =>
@@ -127,7 +192,6 @@ export default function ServiceFormModal({ open, onClose, onSubmit, initial }) {
 
   const toggleEnvAdvanced = () => {
     if (envAdvanced) {
-      // Saindo do modo avançado: tenta reconverter o JSON digitado em linhas.
       const rows = parseEnvRows(envRawText);
       if (!rows) {
         setEnvError('JSON inválido — corrija antes de voltar para campos simples');
@@ -160,18 +224,25 @@ export default function ServiceFormModal({ open, onClose, onSubmit, initial }) {
     setSubmitError('');
     try {
       const payload = { ...form, environment };
+      if (payload.command === '' ) delete payload.command; // deixa o backend inferir/comando padrão da receita
       if (isDocker) {
+        payload.runtime_type = 'docker';
         payload.volumes = JSON.stringify(volumeRows.filter((r) => r.source.trim() && r.target.trim()));
         payload.docker_networks = JSON.stringify(networksText.split(',').map((s) => s.trim()).filter(Boolean));
         payload.docker_host_id = form.docker_host_id ? parseInt(form.docker_host_id, 10) : null;
         payload.cpu_limit = form.cpu_limit ? parseFloat(form.cpu_limit) : null;
         payload.memory_limit = form.memory_limit ? parseInt(form.memory_limit, 10) : null;
+        payload.healthcheck_enabled = 0;
+      } else {
+        payload.healthcheck_enabled = form.healthcheck_enabled ? 1 : 0;
+        payload.healthcheck_interval = parseInt(form.healthcheck_interval, 10) || 30;
+        payload.healthcheck_timeout = parseInt(form.healthcheck_timeout, 10) || 5;
+        payload.process_memory_limit = form.process_memory_limit ? parseInt(form.process_memory_limit, 10) : null;
+        payload.process_cpu_limit = form.process_cpu_limit ? parseFloat(form.process_cpu_limit) : null;
       }
       await onSubmit(payload);
       onClose();
     } catch (err) {
-      // Sem este catch, um erro de validação do servidor (400) só rejeitava
-      // a promise: o modal ficava aberto, sem salvar e sem dizer por quê.
       setSubmitError(err.message || 'Não foi possível salvar');
     } finally {
       setSaving(false);
@@ -199,26 +270,107 @@ export default function ServiceFormModal({ open, onClose, onSubmit, initial }) {
             {submitError}
           </div>
         )}
+
+        {/* ── Seletor de receita (somente na criação) ─────────────────── */}
         {!initial && (
-          <div>
-            <Label htmlFor="runtime_type">Tipo de execução</Label>
-            <Select id="runtime_type" value={form.runtime_type} onChange={set('runtime_type')}>
-              <option value="process">Processo local (Termux)</option>
-              <option value="docker">Container Docker</option>
-            </Select>
-            <p className="text-xs text-ink-faint mt-1">
-              {isDocker
-                ? 'Roda como container num host Docker cadastrado (local ou remoto — VPS, Raspberry Pi, Mini PC, NAS...).'
-                : 'Roda como processo direto neste dispositivo — funciona em qualquer Termux, sem depender de Docker.'}
-            </p>
+          <div className="border border-line-soft rounded-xl p-3 bg-raised/40 space-y-3">
+            <div className="flex items-center gap-2">
+              <Sparkles size={16} className="text-signal" />
+              <h3 className="text-sm font-semibold text-ink">O que você quer hospedar?</h3>
+              <span className="ml-auto text-[10px] text-ink-faint font-mono">escolha o tipo dedicado</span>
+            </div>
+
+            {recipesLoading && <p className="text-xs text-ink-faint">Carregando tipos…</p>}
+
+            {!recipesLoading && recipes.length === 0 && (
+              <p className="text-xs text-ink-faint">
+                Não foi possível carregar os tipos. Você ainda pode criar usando o formulário avançado abaixo.
+              </p>
+            )}
+
+            {selectedRecipe ? (
+              <div className="rounded-lg border border-signal/30 bg-signal-soft/30 p-3">
+                <div className="flex items-start gap-2.5">
+                  <div className="mt-0.5 text-signal"><RecipeIcon id={selectedRecipe.icon} size={20} /></div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-ink">{selectedRecipe.label}</p>
+                    <p className="text-xs text-ink-dim">{selectedRecipe.description}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setForm((f) => ({ ...f, recipe: '', use_template: false }))}
+                    className="text-ink-faint hover:text-error shrink-0 p-1"
+                    title="Trocar tipo"
+                  >
+                    <X size={15} />
+                  </button>
+                </div>
+                {selectedRecipe.hasTemplate && (
+                  <div className="mt-2">
+                    <Toggle
+                      checked={form.use_template}
+                      onChange={(v) => setForm((f) => ({ ...f, use_template: v }))}
+                      label="Criar projeto inicial de exemplo (package.json, index.js, etc.)"
+                    />
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="max-h-56 overflow-y-auto pr-1 space-y-3">
+                {groupedRecipes.map(([category, items]) => (
+                  <div key={category}>
+                    <p className="text-[11px] uppercase tracking-wide text-ink-faint font-mono mb-1.5">{category}</p>
+                    <div className="grid sm:grid-cols-2 gap-2">
+                      {items.map((r) => (
+                        <button
+                          type="button"
+                          key={r.id}
+                          onClick={() => applyRecipe(r)}
+                          className="flex items-start gap-2.5 text-left rounded-lg border border-line-soft bg-raised/50 p-3 hover:border-signal/40 hover:bg-signal-soft/20 transition-colors"
+                        >
+                          <div className="mt-0.5 text-ink-dim"><RecipeIcon id={r.icon} size={18} /></div>
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-ink truncate">{r.label}</p>
+                            <p className="text-[11px] text-ink-faint line-clamp-2">{r.description}</p>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
+        {/* ── Nome + runtime ─────────────────────────────────────────── */}
         <div className="grid sm:grid-cols-2 gap-4">
           <div>
             <Label htmlFor="name">Nome</Label>
             <Input id="name" value={form.name} onChange={set('name')} placeholder="meu-bot-discord" required />
           </div>
+          <div>
+            <Label htmlFor="runtime_type">Runtime</Label>
+            <Select
+              id="runtime_type"
+              value={form.runtime_type}
+              onChange={set('runtime_type')}
+              disabled={locked || !!selectedRecipe?.runtimeType}
+            >
+              <option value="process">Processo local (Termux)</option>
+              <option value="docker">Container Docker</option>
+            </Select>
+            <p className="text-xs text-ink-faint mt-1">
+              {selectedRecipe?.runtimeType
+                ? 'Definido pelo tipo escolhido.'
+                : isDocker
+                  ? 'Roda como container num host Docker (VPS, Raspberry Pi, Mini PC, NAS...).'
+                  : 'Roda como processo direto neste dispositivo.'}
+            </p>
+          </div>
+        </div>
+
+        <div className="grid sm:grid-cols-2 gap-4">
           {isDocker ? (
             <div>
               <Label htmlFor="docker_host_id">Host Docker</Label>
@@ -233,20 +385,20 @@ export default function ServiceFormModal({ open, onClose, onSubmit, initial }) {
             </div>
           ) : (
             <div>
-              <Label htmlFor="type">Tipo</Label>
+              <Label htmlFor="type">Motor (engine)</Label>
               <Select id="type" value={form.type} onChange={set('type')}>
                 {TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
               </Select>
+              <p className="text-xs text-ink-faint mt-1">Auto-selecionado por o tipo. Mude só se souber o que está fazendo.</p>
             </div>
           )}
+          <div>
+            <Label htmlFor="description">Descrição (opcional)</Label>
+            <Input id="description" value={form.description} onChange={set('description')} placeholder="O que esse serviço faz" />
+          </div>
         </div>
 
-        <div>
-          <Label htmlFor="description">Descrição (opcional)</Label>
-          <Input id="description" value={form.description} onChange={set('description')} placeholder="O que esse serviço faz" />
-        </div>
-
-        {isDocker ? (
+        {isDocker && (
           <>
             <div>
               <Label htmlFor="image">Imagem Docker</Label>
@@ -257,11 +409,11 @@ export default function ServiceFormModal({ open, onClose, onSubmit, initial }) {
               <Label htmlFor="command">Comando (opcional — sobrescreve o CMD padrão da imagem)</Label>
               <MonoInput id="command" value={form.command} onChange={set('command')} placeholder="deixe vazio para usar o padrão da imagem e montar /app automaticamente" />
               <p className="text-xs text-ink-faint mt-1">
-                Se deixar vazio, o painel cria uma pasta para os arquivos e monta ela em /app dentro do container para você hospedar o projeto ali.
+                Se deixar vazio, o painel cria uma pasta para os arquivos e monta ela em /app dentro do container.
               </p>
             </div>
           </>
-        ) : null}
+        )}
 
         {/* Configuração inicial — serve tanto para processo local quanto para container /app */}
         <div className="border border-line-soft rounded-lg p-3 space-y-3 bg-raised/50">
@@ -278,10 +430,10 @@ export default function ServiceFormModal({ open, onClose, onSubmit, initial }) {
               id="startup_command"
               value={form.startup_command}
               onChange={set('startup_command')}
-              placeholder="ex: npm start | npm run dev | node index.js | bun run start | python main.py"
+              placeholder="ex: npm start | npm run dev | node index.js | python main.py"
             />
             <p className="text-xs text-ink-faint mt-1">
-              Tem prioridade sobre qualquer inferência automática. Se deixar vazio, o painel tenta descobrir (package.json start, dist/index.js, index.js…).
+              Tem prioridade sobre qualquer inferência automática. Se deixar vazio, o painel tenta descobrir.
             </p>
           </div>
 
@@ -302,7 +454,7 @@ export default function ServiceFormModal({ open, onClose, onSubmit, initial }) {
             <div>
               <Label htmlFor="main_file">Arquivo principal (fallback)</Label>
               <MonoInput id="main_file" value={form.main_file} onChange={set('main_file')} placeholder="index.js ou src/index.ts" />
-              <p className="text-xs text-ink-faint mt-1">Usado só se não houver startup_command nem script "start" no package.json.</p>
+              <p className="text-xs text-ink-faint mt-1">Usado só se não houver startup_command nem script "start".</p>
             </div>
             <div>
               <Label htmlFor="node_args">Argumentos adicionais</Label>
@@ -390,6 +542,65 @@ export default function ServiceFormModal({ open, onClose, onSubmit, initial }) {
           <div>
             <Label htmlFor="networks">Redes Docker (opcional, separadas por vírgula)</Label>
             <MonoInput id="networks" value={networksText} onChange={(e) => setNetworksText(e.target.value)} placeholder="minha-rede, outra-rede" disabled={locked} />
+          </div>
+        )}
+
+        {/* Healthcheck por serviço — só faz sentido quando há porta */}
+        {!isDocker && (
+          <div className="border border-line-soft rounded-lg p-3 space-y-3 bg-raised/40">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-semibold text-ink">Healthcheck</h3>
+                <p className="text-xs text-ink-faint">Reinicia o serviço se ele estiver vivo mas não responder.</p>
+              </div>
+              <Toggle
+                checked={form.healthcheck_enabled}
+                onChange={(v) => setForm((f) => ({ ...f, healthcheck_enabled: v }))}
+                label="Ativo"
+              />
+            </div>
+            {form.healthcheck_enabled && (
+              <div className="space-y-3">
+                <div>
+                  <Label htmlFor="healthcheck_url">URL de verificação</Label>
+                  <MonoInput
+                    id="healthcheck_url"
+                    value={form.healthcheck_url}
+                    onChange={set('healthcheck_url')}
+                    placeholder="/health  (sem URL vira http://127.0.0.1:PORTA/…)"
+                  />
+                  <p className="text-xs text-ink-faint mt-1">
+                    Se deixar vazio, usa <code>/</code> na porta do serviço.
+                  </p>
+                </div>
+                <div className="grid sm:grid-cols-2 gap-3">
+                  <div>
+                    <Label htmlFor="healthcheck_interval">Intervalo (s)</Label>
+                    <Input id="healthcheck_interval" type="number" min="5" value={form.healthcheck_interval} onChange={set('healthcheck_interval')} />
+                  </div>
+                  <div>
+                    <Label htmlFor="healthcheck_timeout">Timeout (s)</Label>
+                    <Input id="healthcheck_timeout" type="number" min="1" value={form.healthcheck_timeout} onChange={set('healthcheck_timeout')} />
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Limites de recurso para processos (não só containers) */}
+        {!isDocker && (
+          <div className="grid sm:grid-cols-2 gap-4">
+            <div>
+              <Label htmlFor="process_memory_limit">Limite de memória em MB (opcional)</Label>
+              <Input id="process_memory_limit" type="number" min="0" value={form.process_memory_limit} onChange={set('process_memory_limit')} placeholder="256" />
+              <p className="text-xs text-ink-faint mt-1">Aplicado ao processo local (melhor esforço).</p>
+            </div>
+            <div>
+              <Label htmlFor="process_cpu_limit">Limite de CPU em núcleos (opcional)</Label>
+              <Input id="process_cpu_limit" type="number" step="0.1" min="0" value={form.process_cpu_limit} onChange={set('process_cpu_limit')} placeholder="1" />
+              <p className="text-xs text-ink-faint mt-1">Aplicado ao processo local (melhor esforço).</p>
+            </div>
           </div>
         )}
 
@@ -488,4 +699,11 @@ export default function ServiceFormModal({ open, onClose, onSubmit, initial }) {
       </form>
     </Modal>
   );
+}
+
+// Deriva a receita mais próxima a partir do engine (`type`) para serviços
+// antigos e para a criação sem click no seletor.
+function recipeForType(type) {
+  const map = { node: 'node-api', api: 'node-api', bot: 'node-bot', web: 'node-web', python: 'python-api', shell: 'generic', other: 'generic' };
+  return map[type] || 'generic';
 }

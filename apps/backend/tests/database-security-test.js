@@ -56,10 +56,21 @@ function cleanup() {
 (async () => {
   await startServer();
 
-  const login = await fetch(`${B}/api/auth/login`, {
+  let login = await fetch(`${B}/api/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ username: 'admin', password: 'admin' }),
+  }).then((r) => r.json());
+  // Com o setup obrigatório, trocar a senha libera as rotas de negócio.
+  await fetch(`${B}/api/auth/change-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${login.token}` },
+    body: JSON.stringify({ current: 'admin', next: 'teste-db-12345' }),
+  });
+  login = await fetch(`${B}/api/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: 'admin', password: 'teste-db-12345' }),
   }).then((r) => r.json());
   const auth = { 'Content-Type': 'application/json', Authorization: `Bearer ${login.token}` };
 

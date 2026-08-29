@@ -60,7 +60,16 @@ async function api(path, { method = 'GET', body, token } = {}) {
   await startServer();
 
   const { data: login } = await api('/auth/login', { method: 'POST', body: { username: 'admin', password: 'admin' } });
-  const token = login.token;
+  let token = login.token;
+  // Com o setup obrigatório ativo, o painel trava as rotas de negócio até a
+  // senha padrão ser trocada. Este teste não testa a trava, então completa o
+  // setup (troca a senha) logo após o login, como um uso real faria.
+  await api('/auth/change-password', {
+    method: 'POST', token,
+    body: { current: 'admin', next: 'teste-terminal-123' },
+  });
+  const re = await api('/auth/login', { method: 'POST', body: { username: 'admin', password: 'teste-terminal-123' } });
+  token = re.data.token;
 
   const { data: svc } = await api('/services', {
     method: 'POST', token,
