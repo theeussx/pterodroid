@@ -200,7 +200,7 @@ export function Landing() {
         <div className="relative mx-auto grid max-w-7xl items-center gap-12 px-4 py-16 sm:py-24 lg:grid-cols-2">
           <div>
             <div className="fade-up flex flex-wrap items-center gap-2">
-              <img src="./logo.png" alt="Logo do Pterodroid" width={44} height={44} className="rounded-lg border border-line-2" />
+              <img src="/logo.png" alt="Logo do Pterodroid" width={44} height={44} className="rounded-lg border border-line-2" />
               <span className="rounded-full border border-cyan-neon/30 bg-cyan-neon/10 px-3 py-1 font-mono text-xs text-cyan-neon">painel self-hosted</span>
               <span className="rounded-full border border-line-2 bg-surface px-3 py-1 font-mono text-xs text-fg-muted">MIT · branch {site.versionLabel}</span>
             </div>
