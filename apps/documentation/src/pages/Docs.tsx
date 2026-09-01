@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, navigate } from '../router';
 import { site } from '../site';
+import { DocLink, DocsVersionNote } from '../components/docui';
 import { docGroups, findDoc, groupOf, prevNext } from '../docs/registry';
 import type { DocPage } from '../docs/types';
 
@@ -184,6 +185,10 @@ export function DocsPage({ route }: { route: string }) {
 
         <h1 className="text-3xl font-bold tracking-tight text-fg sm:text-4xl">{page.title}</h1>
         <p className="mt-2 text-lg leading-relaxed text-fg-muted">{page.description}</p>
+        <DocsVersionNote />
+        <p className="mt-2 font-mono text-xs text-fg-dim">
+          Acompanhe mudanças no <DocLink to="/docs/changelog">changelog</DocLink>.
+        </p>
 
         <article>{page.render()}</article>
 

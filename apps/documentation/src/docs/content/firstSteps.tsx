@@ -71,96 +71,140 @@ export const configuracao: DocPage = {
   slug: 'configuracao',
   title: 'Configuração (.env)',
   navLabel: 'Configuração (.env)',
-  description: 'Referência completa das variáveis de ambiente do Pterodroid: portas, caminhos, Docker, limites e cloudflared.',
-  keywords: ['env', 'PORT', 'JWT_SECRET', 'DATA_ROOT', 'WORKSPACES_ROOT', 'FILES_ROOT', 'HOST_WORKSPACES_ROOT', 'DOCKER_HOST', 'UPLOAD_MAX_BYTES', 'EDITOR_MAX_BYTES', 'CLOUDFLARED_BIN', 'variáveis de ambiente'],
+  description: 'Referência completa das variáveis de ambiente do Pterodroid: onde fica o .env, caminhos, permissões, Docker, limites, logs, backup e acesso remoto.',
+  keywords: ['env', 'PORT', 'JWT_SECRET', 'DATA_ROOT', 'WORKSPACES_ROOT', 'FILES_ROOT', 'HOST_WORKSPACES_ROOT', 'DOCKER_HOST', 'DOCKER_GID', 'UPLOAD_MAX_BYTES', 'EDITOR_MAX_BYTES', 'CLOUDFLARED_BIN', 'CORS_ORIGINS', 'BACKUPS_ROOT', 'variáveis de ambiente', 'permissões', 'chown'],
   sourcePath: 'apps/documentation/src/docs/content/firstSteps.tsx',
   sections: [
     { id: 'onde-fica', title: 'Onde fica o .env' },
     { id: 'basico', title: 'Básico' },
-    { id: 'caminhos', title: 'Caminhos' },
+    { id: 'caminhos', title: 'Caminhos e permissões' },
     { id: 'docker', title: 'Docker' },
-    { id: 'limites', title: 'Limites e logs' },
+    { id: 'limites', title: 'Limites, logs e backup' },
+    { id: 'seguranca', title: 'Segurança e CORS' },
     { id: 'remoto', title: 'Acesso remoto' },
     { id: 'dados', title: 'Onde ficam seus dados' },
   ],
   render: () => (
     <>
       <P>
-        <strong>Tudo é opcional</strong> — o painel funciona com zero configuração. O arquivo de referência é o{' '}
-        <Ext href={site.repo.envExample}>.env.example</Ext> na raiz do repositório.
+        <strong>Nenhuma variável é obrigatória</strong> — o painel funciona com zero configuração, usando os padrões
+        abaixo com segurança. O arquivo de referência é o <Ext href={site.repo.envExample}>.env.example</Ext> na raiz
+        do repositório.
       </P>
       <H2 id="onde-fica">Onde fica o .env</H2>
       <DocTable
-        head={['Instalação', 'Local do .env']}
+        head={['Instalação', 'Local do .env', 'Quem lê']}
         rows={[
-          ['Docker', <>Copie para <C>.env</C> na <strong>raiz do projeto</strong> (o compose lê daqui).</>],
-          ['Termux / proot / Linux', <>Copie para <C>apps/backend/.env</C>.</>],
+          ['Docker', <><C>.env</C> na <strong>raiz do projeto</strong></>, 'O docker-compose (passa JWT_SECRET/HOST_WORKSPACES_ROOT para o container).'],
+          ['Termux / proot / Linux', <><C>apps/backend/.env</C></>, 'O backend (config.js carrega esse arquivo, não o da raiz).'],
         ]}
       />
+      <Callout type="note">
+        <p>
+          No Docker, o <C>.env</C> da raiz não é lido pelo backend diretamente — o compose injeta as variáveis no
+          container. Em instalações locais, os valores do <C>apps/backend/.env</C> são carregados pelo Node.
+        </p>
+      </Callout>
 
       <H2 id="basico">Básico</H2>
       <DocTable
-        head={['Variável', 'Padrão', 'Descrição']}
+        head={['Variável', 'Padrão', 'Descrição', 'Risco se ignorado']}
         rows={[
-          [<C key="1">PORT</C>, <C key="1b">3001</C>, 'Porta em que o backend (e a interface, servida por ele) escuta.'],
-          [<C key="2">JWT_SECRET</C>, 'gerado', <>Segredo dos tokens de login. Sem definir, o painel gera e salva em <C>&lt;DATA_ROOT&gt;/.jwt-secret</C>. Gere um forte com <C>openssl rand -hex 32</C>.</>],
+          [<C key="1">PORT</C>, <C key="1b">3001</C>, 'Porta do backend (e da interface, servida por ele).', 'Baixo — mude apenas se a porta estiver ocupada.'],
+          [<C key="2">JWT_SECRET</C>, 'gerado no boot', <>Segredo dos tokens de login. Sem definir, o painel gera e salva em <C>&lt;DATA_ROOT&gt;/.jwt-secret</C>. Gere com <C>openssl rand -hex 32</C>.</>, 'Médio — quem lê o arquivo do disco consegue forjar tokens.'],
+          [<C key="3">CORS_ORIGINS</C>, '<C>*</C> (vazio)', <>Lista separada por vírgula de origens permitidas — ex.: <C>https://painel.meu.dominio</C>. Autenticação é por Bearer (sem cookies), então CSRF não se aplica, mas restringir reduz superfície.</>, 'Médio em instância pública — qualquer site pode chamar a API com um token vazado.'],
         ]}
       />
+      <CodeBlock
+        lang="bash"
+        title="exemplo seguro (Termux/Linux)"
+        code={`echo "JWT_SECRET=$(openssl rand -hex 32)" >> apps/backend/.env\necho 'CORS_ORIGINS="https://painel.meu.dominio"' >> apps/backend/.env`}
+        description="Gere o segredo e restrinja o CORS antes de expor o painel via Cloudflare Tunnel."
+      />
 
-      <H2 id="caminhos">Caminhos</H2>
+      <H2 id="caminhos">Caminhos e permissões</H2>
       <DocTable
         head={['Variável', 'Padrão', 'Descrição']}
         rows={[
-          [<C key="1">DATA_ROOT</C>, <C key="1b">./data</C>, <>Onde fica <strong>tudo</strong>: banco, workspaces e configuração do cloudflared (relativo ao diretório de execução do backend; em instalação manual, normalmente <C>apps/backend/</C>).</>],
+          [<C key="1">DATA_ROOT</C>, <>raiz do projeto <C>data/</C></>, <>Onde fica <strong>tudo</strong> (banco, workspaces, bancos provisionados, backups e cloudflared). No Docker, o compose monta <C>./data</C> do host em <C>/data</C>.</>],
           [<C key="2">WORKSPACES_ROOT</C>, <C key="2b">&lt;DATA_ROOT&gt;/workspaces</C>, 'Raiz única dos workspaces; cada serviço ganha uma subpasta exclusiva.'],
-          [<C key="3">FILES_ROOT</C>, <C key="3b">workspaces</C>, <>Raiz do gerenciador de arquivos global. Aponte para <C>$HOME</C> para navegar o dispositivo inteiro pelo painel.</>],
-          [<C key="4">HOST_WORKSPACES_ROOT</C>, '—', <>Só quando o painel roda <strong>dentro</strong> de um container e cria outros no host: caminho dos workspaces como o host os enxerga (senão os bind mounts apontam para um caminho inexistente).</>],
+          [<C key="3">FILES_ROOT</C>, <C key="3b">= WORKSPACES_ROOT</C>, <>Raiz do gerenciador de arquivos global. Aponte para <C>$HOME</C> para navegar o dispositivo inteiro — nunca em instância pública.</>],
+          [<C key="4">HOST_WORKSPACES_ROOT</C>, '—', <>Só quando o painel roda <strong>dentro</strong> de um container e cria outros no host: caminho dos workspaces <strong>como o host os enxerga</strong> (senão os bind mounts apontam para um caminho que não existe).</>],
+          [<C key="5">BACKUPS_ROOT</C>, <C key="5b">&lt;DATA_ROOT&gt;/backups</C>, 'Onde os ZIPs de backup por serviço ficam (fora da raiz de workspaces).'],
+          [<C key="6">DB_PATH</C>, <C key="6b">&lt;DATA_ROOT&gt;/panel.db</C>, 'Caminho do arquivo do SQLite do painel.'],
         ]}
       />
+      <Callout type="important" title="Permissões: quem roda o painel é dono dos dados">
+        <p>
+          O processo do painel precisa <strong>ler e escrever</strong> em <C>data/</C>. No Termux isso é natural. No
+          proot, rodando como root, PostgreSQL/MariaDB recusam iniciar — use um usuário comum (o{' '}
+          <C>install-ubuntu-proot.sh</C> oferece criar um). Restaurando um backup como root, ajuste:
+          <CodeBlock lang="bash" code={`chown -R $(id -u):$(id -g) data`} />
+        </p>
+      </Callout>
 
       <H2 id="docker">Docker</H2>
       <DocTable
         head={['Variável', 'Padrão', 'Descrição']}
         rows={[
-          [<C key="1">DOCKER_HOST</C>, 'auto', <>Host Docker no formato da CLI (<C>unix://</C> ou <C>tcp://</C>). Detectado automaticamente.</>],
-          [<C key="2">DOCKER_API_VERSION</C>, 'auto', <>Ex.: <C>v1.43</C>.</>],
-          [<C key="3">DOCKER_GID</C>, '—', <>GID do grupo <C>docker</C> do host (usado pelo <C>docker-compose.yml</C>). Descubra com <C>getent group docker | cut -d: -f3</C>.</>],
+          [<C key="1">DOCKER_HOST</C>, 'auto', <>Host Docker no formato da CLI (<C>unix://</C> ou <C>tcp://</C>). Detectado automaticamente; também aceito via env no modo local (atalho para um único host).</>],
+          [<C key="2">DOCKER_API_VERSION</C>, <C key="2b">v1.43</C>, 'Versão da API da Engine a ser usada no cliente embutido.'],
+          [<C key="3">DOCKER_GID</C>, '—', <>GID do grupo <C>docker</C> do host (usado pelo <C>docker-compose.yml</C> via <C>group_add</C>). Descubra com <C>getent group docker | cut -d: -f3</C>.</>],
         ]}
       />
+      <Callout type="warning" title="docker.sock = privilégio de host">
+        <p>
+          O compose monta <C>/var/run/docker.sock</C> por padrão. Se você não usa serviços em container, remova a linha
+          do <C>docker-compose.yml</C> — é o acesso de maior privilégio que o painel pode ter.
+        </p>
+      </Callout>
 
-      <H2 id="limites">Limites e logs</H2>
+      <H2 id="limites">Limites, logs e backup</H2>
       <DocTable
         head={['Variável', 'Padrão', 'Descrição']}
         rows={[
           [<C key="1">UPLOAD_MAX_BYTES</C>, '2 GB', 'Tamanho máximo de upload por arquivo, em bytes.'],
           [<C key="2">EDITOR_MAX_BYTES</C>, '2 MB', 'Tamanho máximo que o editor do painel abre.'],
-          [<C key="3">LOG_MAX_MEMORY</C>, <C key="3b">500</C>, 'Linhas de log por serviço mantidas em memória.'],
-          [<C key="4">LOG_MAX_DB</C>, <C key="4b">1000</C>, 'Linhas de log por serviço persistidas no banco.'],
-          [<C key="5">RESTART_STABLE_MS</C>, <C key="5b">60000</C>, 'Tempo que um serviço precisa ficar de pé para o contador de reinícios zerar.'],
-          [<C key="6">BACKUPS_ROOT</C>, <C key="6b">&lt;DATA_ROOT&gt;/backups</C>, 'Diretório dos backups ZIP dos serviços; fica fora da raiz dos workspaces.'],
-          [<C key="7">MAX_BACKUPS_PER_SERVICE</C>, <C key="7b">10</C>, 'Quantidade máxima de backups mantidos por serviço.'],
-          [<C key="8">LOG_PRUNE_INTERVAL_MS</C>, <C key="8b">1800000</C>, 'Intervalo, em milissegundos, para limpeza dos logs persistidos.'],
+          [<C key="3">JSON_BODY_LIMIT</C>, <C key="3b">8mb</C>, 'Limite do corpo JSON (precisa caber um arquivo do editor + escape).'],
+          [<C key="4">LOG_MAX_MEMORY</C>, <C key="4b">500</C>, 'Linhas de log por serviço mantidas em memória.'],
+          [<C key="5">LOG_MAX_DB</C>, <C key="5b">1000</C>, 'Linhas de log por serviço persistidas no banco.'],
+          [<C key="6">LOG_PRUNE_INTERVAL_MS</C>, <C key="6b">1800000</C>, 'Intervalo de limpeza dos logs persistidos (30 min).'],
+          [<C key="7">RESTART_STABLE_MS</C>, <C key="7b">60000</C>, 'Tempo que um serviço precisa ficar de pé para o contador de reinícios zerar.'],
+          [<C key="8">MAX_BACKUPS_PER_SERVICE</C>, <C key="8b">10</C>, 'Quantidade máxima de backups ZIP mantidos por serviço.'],
         ]}
       />
+
+      <H2 id="seguranca">Segurança e CORS</H2>
+      <Ul>
+        <li><C>CORS_ORIGINS</C> — restringir em instância pública (ver tabela Básico).</li>
+        <li><C>JWT_SECRET</C> — valor forte e estável; trocá-lo invalida todos os tokens.</li>
+        <li><C>CLOUDFLARED_BIN</C> — caminho do binary se não estiver no PATH.</li>
+        <li>Não há variável para expor a porta: no Docker, a porta é publicada com <C>PTERODROID_PORT</C> no compose.</li>
+      </Ul>
+      <P>
+        Detalhes de senha padrão, cifra e rate limit: <DocLink to="/docs/seguranca">Segurança</DocLink>. Checklist para
+        expor: <DocLink to="/docs/producao">Publicação segura</DocLink>.
+      </P>
 
       <H2 id="remoto">Acesso remoto</H2>
       <DocTable
         head={['Variável', 'Padrão', 'Descrição']}
-        rows={[[<C key="1">CLOUDFLARED_BIN</C>, <C key="1b">cloudflared</C>, 'Caminho do binário do cloudflared, caso não esteja no PATH.']]}
+        rows={[[<C key="1">CLOUDFLARED_BIN</C>, <C key="1b">cloudflared</C>, 'Caminho do binário do cloudflared, caso não esteja no PATH — usado por Quick e Named Tunnels.']]}
       />
 
       <H2 id="dados">Onde ficam seus dados</H2>
       <DocTable
         head={['Instalação', 'Caminho']}
         rows={[
-          ['Termux / proot / Linux', <C key="1">apps/backend/data/</C>],
-          ['Docker', <><C>./data/</C> (na raiz do projeto)</>],
+          ['Termux / proot / Linux', <C key="1">data/</C>],
+          ['Docker', <><C>./data/</C> (na raiz do projeto, montado em <C>/data</C> no container)</>],
         ]}
       />
-      <Callout type="tip" title="Backup em uma linha">
+      <Callout type="tip" title="Backup = copiar a pasta de dados">
         <p>
-          <strong>Backup = copiar a pasta de dados.</strong> Ela contém o banco, os workspaces de todos os serviços e a
-          configuração do cloudflared. Para começar do zero, apague-a.
+          A pasta contém o banco, os workspaces de todos os serviços, os bancos provisionados, os backups por serviço e
+          a configuração do cloudflared. Para começar do zero, apague-a. Procedimento completo:{' '}
+          <DocLink to="/docs/backup">Backup e restauração</DocLink>.
         </p>
       </Callout>
     </>

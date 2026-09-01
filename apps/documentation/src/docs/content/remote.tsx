@@ -24,6 +24,13 @@ export const cloudflare: DocPage = {
         serviços à internet de forma segura, <strong>sem abrir portas no roteador</strong>. Instale o binário (no
         Termux: <C>pkg install cloudflared</C>) ou aponte <C>CLOUDFLARED_BIN</C> para o caminho dele.
       </P>
+      <Callout type="danger" title="Antes de expor o painel">
+        <p>
+          Publicar o painel é publicar <strong>capacidade administrativa + execução de comandos</strong> no seu
+          dispositivo. Siga o checklist de <DocLink to="/docs/producao">Publicação segura</DocLink> antes de criar o
+          primeiro túnel.
+        </p>
+      </Callout>
 
       <H2 id="quick-tunnel">Quick Tunnel (túnel rápido)</H2>
       <P>

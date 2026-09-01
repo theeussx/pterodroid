@@ -278,6 +278,17 @@ export function Landing() {
               </Link>
             ))}
           </div>
+          <p className="mt-6 max-w-3xl text-sm text-fg-dim">
+            Cada recurso tem um status explícito — testado, melhor-esforço ou limitado — na{' '}
+            <Link to="/docs/recursos" className="text-cyan-neon underline decoration-cyan-neon/40 underline-offset-2">
+              matriz de recursos
+            </Link>
+            . Nada aqui substitui as boas práticas de segurança: veja o{' '}
+            <Link to="/docs/producao" className="text-cyan-neon underline decoration-cyan-neon/40 underline-offset-2">
+              checklist para publicação
+            </Link>{' '}
+            antes de expor o painel.
+          </p>
         </div>
       </section>
 

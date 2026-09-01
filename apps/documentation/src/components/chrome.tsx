@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, navigate } from '../router';
 import { site } from '../site';
+import { DOCS_VERSION_LABEL } from '../version';
 import { searchDocs, type SearchResult } from '../docs/registry';
 
 /* ───────── Busca global ───────── */
@@ -9,27 +10,36 @@ export function SearchModal({ open, onClose }: { open: boolean; onClose: () => v
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  const restoreFocusRef = useRef<HTMLElement | null>(null);
   const results = searchDocs(query);
 
   useEffect(() => {
     if (open) {
+      // Guarda o elemento focado para devolver o foco ao fechar (acessibilidade).
+      restoreFocusRef.current = document.activeElement as HTMLElement | null;
       setQuery('');
       setSelected(0);
-      setTimeout(() => inputRef.current?.focus(), 10);
+      const t = setTimeout(() => inputRef.current?.focus(), 10);
+      return () => clearTimeout(t);
     }
   }, [open]);
 
   useEffect(() => setSelected(0), [query]);
 
+  const close = useCallback(() => {
+    onClose();
+    restoreFocusRef.current?.focus?.();
+  }, [onClose]);
+
   const go = useCallback(
     (r: SearchResult) => {
-      onClose();
+      close();
       navigate(`/docs/${r.page.slug}`);
       if (r.section) {
         setTimeout(() => document.getElementById(r.section!.id)?.scrollIntoView(), 80);
       }
     },
-    [onClose],
+    [close],
   );
 
   if (!open) return null;
@@ -49,7 +59,8 @@ export function SearchModal({ open, onClose }: { open: boolean; onClose: () => v
       role="dialog"
       aria-modal="true"
       aria-label="Buscar na documentação"
-      onClick={onClose}
+      onClick={close}
+      onKeyDown={(e) => { if (e.key === 'Escape') close(); }}
     >
       <div className="w-full max-w-xl overflow-hidden rounded-xl border border-line-2 bg-surface shadow-2xl shadow-cyan-neon/5" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center gap-3 border-b border-line px-4">
@@ -59,7 +70,7 @@ export function SearchModal({ open, onClose }: { open: boolean; onClose: () => v
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === 'Escape') onClose();
+              if (e.key === 'Escape') close();
               if (e.key === 'ArrowDown') { e.preventDefault(); setSelected((s) => Math.min(s + 1, flat.length - 1)); }
               if (e.key === 'ArrowUp') { e.preventDefault(); setSelected((s) => Math.max(s - 1, 0)); }
               if (e.key === 'Enter' && flat[selected]) go(flat[selected]);
@@ -139,11 +150,11 @@ export function Navbar({ route, onSearch }: { route: string; onSearch: () => voi
     <header className="sticky top-0 z-40 border-b border-line bg-ink/85 backdrop-blur-md">
       <div className="mx-auto flex h-14 max-w-7xl items-center gap-2 px-4">
         <Link to="/" className="flex items-center gap-2.5 font-semibold tracking-tight text-fg" aria-label="Pterodroid — início">
-          <img src="./logo.png" alt="" width={28} height={28} className="rounded" />
+          <img src="./logo.png" alt="Logotipo do Pterodroid" width={28} height={28} className="rounded" />
           <span>Pterodroid</span>
         </Link>
-        <span className="ml-1 hidden rounded-full border border-line-2 px-2 py-0.5 font-mono text-[10px] text-fg-dim sm:inline">
-          {site.versionLabel}
+        <span className="ml-1 hidden rounded-full border border-line-2 px-2 py-0.5 font-mono text-[10px] text-fg-dim sm:inline" title={site.versionLabel}>
+          {DOCS_VERSION_LABEL}
         </span>
         <nav className="ml-auto flex items-center gap-0.5" aria-label="Navegação principal">
           {navLink('/docs', 'Docs', route.startsWith('/docs'))}
@@ -184,7 +195,7 @@ export function Footer() {
       <div className="mx-auto grid max-w-7xl gap-8 px-4 py-12 sm:grid-cols-2 lg:grid-cols-4">
         <div>
           <p className="flex items-center gap-2 font-semibold text-fg">
-            <img src="./logo.png" alt="" width={22} height={22} className="rounded" />
+            <img src="./logo.png" alt="Logotipo do Pterodroid" width={22} height={22} className="rounded" />
             Pterodroid
           </p>
           <p className="mt-2 max-w-xs text-sm text-fg-muted">

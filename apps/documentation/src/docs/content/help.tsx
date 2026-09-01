@@ -18,7 +18,7 @@ function Problem({
   symptoms: string;
   cause: string;
   solution: ReactNode;
-  commands?: { code: string; platform?: string; description?: string };
+  commands?: { code: string; platform?: string; cwd?: string; description?: string };
 }) {
   return (
     <section id={id} className="my-6 scroll-mt-24 rounded-lg border border-line bg-surface/40 p-5">
@@ -59,6 +59,8 @@ export const troubleshooting: DocPage = {
     { id: 'arquivos-upload', title: 'Arquivos não aparecem / upload falha' },
     { id: 'cloudflare-nao-conecta', title: 'Cloudflare não conecta' },
     { id: 'termux-encerra', title: 'Termux encerra em segundo plano' },
+    { id: 'permissoes-backup', title: 'Painel não grava / permissões após restaurar' },
+    { id: 'banco-nao-inicia', title: 'Instância de banco de dados não inicia' },
   ],
   render: () => (
     <>
@@ -96,7 +98,7 @@ docker compose logs -f    # logs do container do painel`} />
         symptoms="Erro EADDRINUSE no log, ou o healthcheck nunca responde."
         cause="Outro processo (ou uma instância antiga do painel) já usa a porta 3001."
         solution={<>Defina outra porta com <C>PORT</C> no <C>apps/backend/.env</C> (ou no <C>.env</C> da raiz, no caso do Docker), ou encerre o processo antigo com <C>./panelctl.sh stop</C>.</>}
-        commands={{ code: `echo "PORT=3002" >> apps/backend/.env\n./panelctl.sh restart`, platform: 'termux/linux' }}
+        commands={{ code: `echo "PORT=3002" >> apps/backend/.env\n./panelctl.sh restart`, platform: 'termux/linux', cwd: 'pterodroid/' }}
       />
 
       <Problem
@@ -156,6 +158,24 @@ docker compose up -d --build        # recrie após ajustar`, platform: 'host' }}
         cause="O Android suspende ou mata o Termux para economizar bateria."
         solution={<>Ative o wake lock e desative a otimização de bateria para o Termux — passo a passo em <DocLink to="/docs/termux">Instalação no Termux</DocLink>.</>}
         commands={{ code: `pkg install termux-api -y\ntermux-wake-lock`, platform: 'termux' }}
+      />
+
+      <Problem
+        id="permissoes-backup"
+        title="Painel não grava / permissões após restaurar backup"
+        symptoms="Erros de EACCES/EPERM ao criar arquivos ou serviços, ou o painel sobe mas não consegue escrever em data/."
+        cause="O usuário que roda o painel não é dono (ou não tem escrita) na pasta de dados — comum após restaurar um backup como root, ou ao rodar o proot como root."
+        solution={<>Confirme o dono e ajuste o <C>chown</C> para o usuário do painel. No proot, crie um usuário comum (o instalador oferece) — bancos também recusam rodar como root. Detalhes em <DocLink to="/docs/configuracao">Configuração</DocLink>.</>}
+        commands={{ code: `cd pterodroid\nls -ld data data/panel.db\nchown -R $(id -u):$(id -g) data\n./panelctl.sh restart`, platform: 'termux/linux' }}
+      />
+
+      <Problem
+        id="banco-nao-inicia"
+        title="Instância de banco de dados não inicia"
+        symptoms="O status fica em erro/provisionamento e a aba de logs mostra falha do postgres/mysql logo após o start."
+        cause="Binário do banco ausente (pkg/apt não instalou), porta ocupada, diretório de dados com permissão errada — ou execução como root (PostgreSQL/MariaDB recusam)."
+        solution={<>Instale o binário (<C>pkg install postgresql</C> / <C>mariadb</C>), confirme a porta livre e rode o painel como usuário comum. Veja o <DocLink to="/docs/bancos">guia de bancos</DocLink>.</>}
+        commands={{ code: `pkg install postgresql mariadb -y   # Termux\npg_lsclusters 2>/dev/null || true\n./panelctl.sh logs`, platform: 'termux' }}
       />
 
       <Callout type="note" title="Ainda travado?">
@@ -254,8 +274,8 @@ export const faq: DocPage = {
         </FaqItem>
         <FaqItem q="Onde ficam meus dados?">
           <p>
-            Tudo em uma pasta só — banco, workspaces e configuração do cloudflared: <C>apps/backend/data/</C> (Termux,
-            proot, Linux) ou <C>./data/</C> na raiz do projeto (Docker). Cada serviço tem seu workspace em{' '}
+            Tudo em uma pasta só — banco, workspaces e configuração do cloudflared: <C>data/</C> na raiz do repositório
+            (Termux, proot, Linux) ou <C>./data/</C> na raiz do projeto (Docker). Cada serviço tem seu workspace em{' '}
             <C>data/workspaces/&lt;nome&gt;</C>.
           </p>
         </FaqItem>

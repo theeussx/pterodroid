@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import { Link } from '../router';
+import { DOCS_VERSION_LABEL, docsUpdatedLabel } from '../version';
 
 /* ─────────────────────────── CodeBlock ─────────────────────────── */
 
@@ -42,12 +43,15 @@ export function CodeBlock({
   title,
   platform,
   description,
+  cwd,
   lang = 'bash',
 }: {
   code: string;
   title?: string;
   platform?: string;
   description?: string;
+  /** Diretório em que os comandos devem ser executados — exibido no cabeçalho do bloco. */
+  cwd?: string;
   lang?: 'bash' | 'text' | 'ini' | 'yaml';
 }) {
   const [copied, setCopied] = useState(false);
@@ -75,20 +79,28 @@ export function CodeBlock({
           <span className="h-2.5 w-2.5 rounded-full bg-[#2a3b5e]" />
           <span className="h-2.5 w-2.5 rounded-full bg-[#2a3b5e]" />
         </span>
-        {title && <span className="ml-1 truncate font-mono text-xs text-fg-muted">{title}</span>}
+        {(title || cwd) && (
+          <span className="ml-1 truncate font-mono text-xs text-fg-muted" title={cwd}>
+            {cwd && <span className="text-fg-dim">{cwd} › </span>}
+            {title}
+          </span>
+        )}
         <span className="ml-auto flex items-center gap-2">
           {platform && (
             <span className="rounded border border-cyan-neon/30 bg-cyan-neon/10 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wide text-cyan-neon">
               {platform}
             </span>
           )}
+          <span aria-live="polite" className="sr-only">
+            {copied ? 'Comando copiado' : ''}
+          </span>
           <button
             type="button"
             onClick={copy}
             aria-label={copied ? 'Copiado' : 'Copiar comando'}
             className="rounded border border-line-2 px-2 py-0.5 font-mono text-[11px] text-fg-muted transition-colors hover:border-cyan-neon/50 hover:text-cyan-neon"
           >
-            {copied ? '✓ copiado' : 'copiar'}
+            {copied ? '✓ comando copiado' : 'copiar'}
           </button>
         </span>
       </div>
@@ -164,9 +176,10 @@ export function Tabs({ tabs }: { tabs: { label: string; content: ReactNode }[] }
 /* ─────────────────────────── Tipografia de docs ─────────────────────────── */
 
 export function H2({ id, children }: { id: string; children: ReactNode }) {
+  const href = `${window.location.pathname}#${id}`;
   return (
     <h2 id={id} className="group mt-12 mb-4 scroll-mt-24 border-b border-line pb-2 text-2xl font-bold tracking-tight text-fg">
-      <a href={`#${window.location.hash.slice(1).split('#')[0]}`} onClick={(e) => { e.preventDefault(); document.getElementById(id)?.scrollIntoView(); }} className="hover:text-cyan-neon">
+      <a href={href} onClick={(e) => { e.preventDefault(); document.getElementById(id)?.scrollIntoView(); window.history.replaceState({}, '', href); }} className="hover:text-cyan-neon">
         {children}
       </a>
       <span className="ml-2 hidden text-cyan-neon/50 group-hover:inline" aria-hidden="true">#</span>
@@ -272,7 +285,17 @@ export function VersionBadge() {
   return (
     <span className="inline-flex items-center gap-1.5 rounded-full border border-line-2 bg-surface px-2.5 py-1 font-mono text-xs text-fg-muted">
       <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 pulse-dot" aria-hidden="true" />
-      branch main · MIT
+      {DOCS_VERSION_LABEL} · MIT
     </span>
+  );
+}
+
+/** Linha discreta de versão/atualização da documentação (item C5 da auditoria). */
+export function DocsVersionNote() {
+  return (
+    <p className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-xs text-fg-dim">
+      <span aria-hidden="true" className="inline-block h-1.5 w-1.5 rounded-full bg-cyan-neon/70" />
+      Documentação referente ao commit <strong className="text-fg-muted">{docsUpdatedLabel()}</strong>
+    </p>
   );
 }
