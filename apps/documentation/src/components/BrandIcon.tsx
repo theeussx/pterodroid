@@ -5,7 +5,7 @@ type BrandIconProps = {
 };
 
 export function BrandIcon({ name, label, className = 'h-7 w-7' }: BrandIconProps) {
-  const source = `url("./brands/${name}.svg")`;
+  const source = `url("/brands/${name}.svg")`;
 
   return (
     <span

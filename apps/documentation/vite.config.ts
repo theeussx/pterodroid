@@ -28,7 +28,12 @@ const DOCS_UPDATED_AT = git("git log -1 --format=%cs") || "";
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react(), tailwindcss(), viteSingleFile()],
+  // `vite-plugin-singlefile` força `base: "./"` por padrão, o que faz o Vite
+  // reescrever URLs de assets do `public/` (ex.: o favicon) para caminhos
+  // relativos. Como o site é servido na raiz do domínio (Vercel) e usa rotas
+  // client-side como `/docs/...`, mantemos `base: "/"` para que os assets
+  // resolvam de qualquer página.
+  plugins: [react(), tailwindcss(), viteSingleFile({ overrideConfig: { base: '/' } })],
   define: {
     __DOCS_COMMIT__: JSON.stringify(DOCS_COMMIT),
     __DOCS_BRANCH__: JSON.stringify(DOCS_BRANCH),

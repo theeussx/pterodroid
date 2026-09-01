@@ -150,7 +150,7 @@ export function Navbar({ route, onSearch }: { route: string; onSearch: () => voi
     <header className="sticky top-0 z-40 border-b border-line bg-ink/85 backdrop-blur-md">
       <div className="mx-auto flex h-14 max-w-7xl items-center gap-2 px-4">
         <Link to="/" className="flex items-center gap-2.5 font-semibold tracking-tight text-fg" aria-label="Pterodroid — início">
-          <img src="./logo.png" alt="Logotipo do Pterodroid" width={28} height={28} className="rounded" />
+          <img src="/logo.png" alt="Logotipo do Pterodroid" width={28} height={28} className="rounded" />
           <span>Pterodroid</span>
         </Link>
         <span className="ml-1 hidden rounded-full border border-line-2 px-2 py-0.5 font-mono text-[10px] text-fg-dim sm:inline" title={site.versionLabel}>
@@ -195,7 +195,7 @@ export function Footer() {
       <div className="mx-auto grid max-w-7xl gap-8 px-4 py-12 sm:grid-cols-2 lg:grid-cols-4">
         <div>
           <p className="flex items-center gap-2 font-semibold text-fg">
-            <img src="./logo.png" alt="Logotipo do Pterodroid" width={22} height={22} className="rounded" />
+            <img src="/logo.png" alt="Logotipo do Pterodroid" width={22} height={22} className="rounded" />
             Pterodroid
           </p>
           <p className="mt-2 max-w-xs text-sm text-fg-muted">
