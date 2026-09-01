@@ -157,7 +157,7 @@ npm test`} description="mais de 160 testes. Não precisam de Docker e nunca toca
         <p>
           O diretório <C>docs/</C> do repositório contém a <Ext href={site.repo.auditoria}>AUDITORIA.md</Ext>{' '}
           (levantamento de problemas com evidências) e o <Ext href={site.repo.relatorio}>RELATORIO.md</Ext> (o que foi
-          corrigido, como foi validado e o que ainda está pendente — seção 9). Vale ler antes de uso sério.
+          corrigido, como foi validado e o que ainda está pendente — seções 8 e 9). Vale ler antes de uso sério.
         </p>
       </Callout>
 
@@ -227,14 +227,14 @@ export const changelog: DocPage = {
         rows={[
           [<Ext key="1" href={site.repo.commits}>Commits na main</Ext>, 'Histórico completo e mais atual de mudanças.'],
           [<Ext key="2" href={site.repo.releases}>Releases no GitHub</Ext>, 'Versões empacotadas, quando publicadas.'],
-          [<Ext key="3" href={site.repo.relatorio}>docs/RELATORIO.md</Ext>, 'O que foi corrigido recentemente, como foi validado e o que ainda está pendente (seção 9).'],
+          [<Ext key="3" href={site.repo.relatorio}>docs/RELATORIO.md</Ext>, 'O que foi corrigido recentemente, como foi validado e o que ainda está pendente (seções 8 e 9).'],
           [<Ext key="4" href={site.repo.auditoria}>docs/AUDITORIA.md</Ext>, 'Levantamento de problemas encontrados, com evidências.'],
         ]}
       />
       <H2 id="estado-atual">Estado atual do projeto</H2>
       <Callout type="important">
         <p>
-          Antes de colocar o painel em uso sério, leia a <strong>seção 9 do RELATORIO.md</strong> — ela lista os pontos
+          Antes de colocar o painel em uso sério, leia as <strong>seções 8 e 9 do RELATORIO.md</strong> — elas resumem o que foi fechado e listam os pontos
           que <strong>não puderam ser testados</strong> no ambiente onde o código foi preparado. Funcionalidades citadas
           lá devem ser tratadas como experimentais.
         </p>

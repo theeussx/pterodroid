@@ -180,7 +180,7 @@ docker compose up -d --build        # recrie após ajustar`, platform: 'host' }}
 
       <Callout type="note" title="Ainda travado?">
         <p>
-          A seção 9 do <Ext href={site.repo.relatorio}>docs/RELATORIO.md</Ext> lista o que ainda não pôde ser testado
+          As seções 8 e 9 do <Ext href={site.repo.relatorio}>docs/RELATORIO.md</Ext> resumem o que foi fechado e o que ainda não pôde ser testado
           pelo projeto. Se o seu caso não está aqui, abra uma issue em{' '}
           <Ext href={site.repo.issues}>github.com/theeussx/pterodroid/issues</Ext> com as últimas linhas do log.
         </p>

@@ -156,3 +156,84 @@ No backend, o fluxo de bootstrap passou a:
 Também foram corrigidos os problemas que causavam falha ao salvar a
 configuração inicial, como o `ReferenceError` durante `PUT /api/services/:id` e
 o uso indevido de caminhos absolutos como `/src/index.ts`.
+
+## 8. Estado da auditoria (o que foi fechado)
+
+A tabela abaixo cruza os problemas registrados em `docs/AUDITORIA.md` com o
+código entregue nesta revisão. “Fechado” significa que há uma correção no
+código e/ou na interface; a validação contra binários e ambientes externos que
+não estavam disponíveis continua separada na seção 9.
+
+| Área | Itens | Fechamento no código atual |
+|---|---|---|
+| **Workspaces** | P1–P4 | `config.js` cria `DATA_ROOT`, `WORKSPACES_ROOT`, `FILES_ROOT` e `BACKUPS_ROOT` no boot. `WORKSPACES_ROOT` é a raiz canônica, `FILES_ROOT` aponta para ela por padrão, e `workspaceManager` concentra slugificação, normalização e criação dos diretórios. Caminhos legados como `/home/appuser/projects` são remapeados, não usados como destino novo; workspaces removidos por fora são recriados sob demanda. |
+| **Arquivos e upload** | P5–P11 | O `fileManager` valida travessia, caminhos absolutos, symlinks e nomes; gravações criam os pais e são atômicas. Uploads usam uma área temporária dentro da raiz, criam o destino, renomeiam sem sobrescrever (`arquivo (2).ext`) e limpam restos de falha. `fileRoutesFactory` fornece listagem, leitura, escrita, criação, renomear, mover, copiar, busca, download, upload e auditoria tanto para a área global quanto para o serviço; os ramos/imports mortos da implementação anterior foram removidos. |
+| **Processos** | P12–P17 | `restoreAll()` separa processos locais de serviços Docker e usa `desired_state`. Saídas `exit` e `error` passam pelo mesmo `finalize`, evitando entradas órfãs; updates parciais não quebram; clone/install/build foram movidos para o setup assíncrono; `commandParser` trata comandos com sintaxe de shell e é compartilhado; o contador de reinícios é resetado depois de um período estável. |
+| **Docker** | P18–P22 | Bind mounts sob o workspace são traduzidos para o caminho visto pelo daemon por `HOST_WORKSPACES_ROOT`; `DOCKER_API_VERSION` chega ao cliente; o comando inferido não instala dependências durante o start (isso pertence ao setup); o polling de 3 s para quando não há container ativo; e o restart reconecta o stream de logs e o túnel. A RestartPolicy nativa limita os reinícios do container. |
+| **Infra / Compose** | P23–P27 | O serviço Redis sem consumidor foi retirado. Dockerfile e Compose têm `HEALTHCHECK`, o Compose não força mais `user: "root"`, e o armazenamento foi reunido no bind `./data:/data`. `tini` é o processo inicial da imagem para fazer reap de filhos órfãos. O entrypoint ainda ajusta ownership do volume antes de iniciar o painel, portanto o comportamento final de permissões deve ser conferido no ambiente de implantação. |
+| **Banco, logs e performance** | P28–P32 | `auditLog` aplica retenção por idade e teto de `LOG_MAX_DB` por origem, além de limitar a auditoria. O Express aceita o tamanho previsto pelo editor (`JSON_BODY_LIMIT`, 8 MB por padrão); `df`/`ps` usam chamadas assíncronas e cache; o loop de snapshots só vive enquanto há clientes; e a persistência do SQLite WASM é atômica e debounced, sem serializar o banco a cada linha de saída. |
+| **Instâncias de banco** | P44–P47 | Provisionamento e inicialização usam argumentos (`execFileSync`), sem shell para interpretar nomes ou caminhos. O nome da instância é validado e convertido em slug; senhas são geradas com `crypto.randomBytes`; e portas são limitadas ao intervalo não privilegiado de 1024–65535, com conflito reportado claramente. |
+| **Frontend** | P33–P38/P48 | A troca de serviço limpa o estado antigo; o navegador de arquivos global e o do serviço usam o mesmo hook/adaptador e oferecem copiar, mover e buscar; a remoção tem confirmação explícita para apagar o workspace; eventos de status são agrupados por debounce; e formulários exibem erros do servidor. O progresso de upload continua sendo do lote inteiro, não individual por arquivo (P38); essa limitação cosmética está registrada na seção 9.3. |
+| **Autenticação** | P40–P43 | O login tem atraso progressivo e bloqueio temporário por IP+usuário, com limpeza após sucesso; a senha padrão não pode ser dispensada e as rotas de negócio ficam bloqueadas até a troca; bcrypt é executado também para usuário inexistente, evitando a diferença de tempo; e a nova senha exige pelo menos 8 caracteres. |
+| **Terminal** | P39 | Foi implementado terminal por serviço, com sessões locais ou `docker exec`, diretório de trabalho persistente, histórico limitado, saída em tempo real via Socket.io, interrupção de processos locais e encerramento de sessões ociosas. Ele é deliberadamente sem PTY; os limites dessa escolha estão na seção 9.2. |
+
+## 9. O que ainda está pendente / não pôde ser testado
+
+A suíte automatizada cobre o código sem depender de todos os recursos do
+ambiente. Os itens abaixo não devem ser interpretados como garantia de
+funcionamento em qualquer dispositivo ou instalação.
+
+### 9.1 Best-effort (depende de ambiente/binário externo)
+
+- **Docker Engine real:** o cliente, os mocks e a montagem do spec são
+  exercitados, mas é necessário validar com um daemon real, socket/permissões
+  e imagens reais.
+- **Cloudflared Quick Tunnel e Named Tunnel:** dependem do binário, rede,
+  login/credenciais e configuração da conta Cloudflare.
+- **PostgreSQL, MySQL e MariaDB reais:** o provisionamento depende dos
+  binários instalados, permissões, versão do engine e comportamento do sistema
+  de arquivos.
+- **Java e a receita de Minecraft:** a receita/comando precisa de uma JVM e
+  de um `server.jar`/arquivos do servidor reais.
+- **`prlimit` e limites de CPU/memória:** a aplicação dos limites de processos
+  locais é best-effort e depende do util-linux e das permissões do host.
+- **Sensores de temperatura:** `/sys/class/thermal` pode não existir ou ser
+  inacessível; a métrica fica indisponível nesses aparelhos.
+- **`DOCKER_GID` do host:** o GID do grupo `docker` varia entre instalações e
+  precisa ser conferido no host antes de subir o Compose.
+- **Painel dentro de container gerenciando containers do host:** requer
+  socket Docker, permissões e um mapeamento correto de
+  `HOST_WORKSPACES_ROOT`; esse fluxo precisa ser testado na instalação real.
+
+### 9.2 Limitações assumidas por design
+
+- **Terminal sem PTY:** é um terminal orientado a comandos, não um emulador de
+  terminal interativo. Programas como `vim`, `htop` e `nano` não são suportados
+  como numa sessão TTY completa.
+- **Quick Tunnel:** suporta apenas tráfego HTTP/HTTPS e a URL gerada não é
+  persistente; ela pode mudar quando o túnel é recriado. Não serve para o
+  protocolo de conexão de bancos.
+- **Single-user:** o painel é pessoal e não oferece modelo de usuários,
+  equipes, tenants ou permissões por recurso.
+- **Sem refresh token:** o JWT tem validade de 7 dias; depois disso é preciso
+  fazer login novamente.
+- **Windows:** não foi validado e não há suporte oficial neste momento.
+- **ARM real:** compatibilidade foi pensada para Termux, mas não foi validada
+  em hardware ARM real nesta rodada.
+
+### 9.3 Dívida técnica adiada e fora de escopo
+
+- **`npm audit`:** a atualização de `react-router-dom` exigiria o major 7.x,
+  com risco de quebra, e o `esbuild` apontado pertence ao servidor de
+  desenvolvimento; nenhum upgrade foi forçado nesta rodada.
+- **2FA e log de atividade centralizado:** permanecem como uma próxima frente;
+  o registro de auditoria atual não substitui um histórico central de
+  atividade da conta.
+- **Duplicação/legado para consolidar:** ainda vale revisar a relação entre
+  `routes/files.js` e `routes/serviceFiles.js`, as três ocorrências históricas
+  de `slugify` e a consolidação final do tokenizador de comando, mesmo com a
+  fábrica de rotas e o `commandParser` já reduzindo essa duplicação.
+- **Progresso de upload por arquivo (P38):** o indicador é do lote inteiro;
+  individualizá-lo é uma melhoria cosmética, não uma correção de integridade.
+- **Fora de escopo:** multi-usuário, marketplace, PTY completo e suporte
+  oficial a Windows.
