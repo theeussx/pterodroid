@@ -7,12 +7,19 @@ import { cloudflare, monitoramento } from './content/remote';
 import { seguranca } from './content/seguranca';
 import { faq, troubleshooting } from './content/help';
 import { arquitetura, changelog, desenvolvimento } from './content/project';
+import { atualizacao, backup, producao } from './content/ops';
+import { api, compatibilidade, glossario, recursos } from './content/reference';
 
 export const docGroups: DocGroup[] = [
-  { label: 'Introdução', pages: [introducao, requisitos] },
+  { label: 'Introdução', pages: [introducao, requisitos, compatibilidade] },
   { label: 'Instalação', pages: [instalacao, termux, proot, docker, linux] },
   { label: 'Primeiros passos', pages: [primeiroAcesso, configuracao, primeiroServico] },
-  { label: 'Guias', pages: [tiposDedicados, arquivos, terminal, dockerServices, bancos, cloudflare, monitoramento, seguranca] },
+  {
+    label: 'Guias',
+    pages: [tiposDedicados, arquivos, terminal, dockerServices, bancos, cloudflare, monitoramento, seguranca, recursos],
+  },
+  { label: 'Operação', pages: [backup, producao, atualizacao] },
+  { label: 'Referência', pages: [api, glossario] },
   { label: 'Ajuda', pages: [troubleshooting, faq] },
   { label: 'Projeto', pages: [arquitetura, desenvolvimento, changelog] },
 ];

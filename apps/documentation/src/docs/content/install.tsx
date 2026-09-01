@@ -166,7 +166,7 @@ chmod +x install-ubuntu-proot.sh panelctl.sh
       <H2 id="caminhos">Caminhos de dados</H2>
       <P>
         Como no Termux e no Linux, tudo o que o painel guarda (banco, workspaces, configuração do cloudflared) fica em{' '}
-        <C>apps/backend/data/</C>. Backup = copiar essa pasta. Detalhes em{' '}
+        <C>data/</C> na raiz do repositório. Backup = copiar essa pasta. Detalhes em{' '}
         <DocLink to="/docs/configuracao">Configuração</DocLink>.
       </P>
 
@@ -344,7 +344,7 @@ chmod +x panelctl.sh
 
       <H2 id="notas">Notas</H2>
       <Ul>
-        <li>Dados em <C>apps/backend/data/</C> (banco, workspaces, cloudflared). Backup = copiar a pasta.</li>
+        <li>Dados em <C>data/</C> na raiz do repositório (banco, workspaces, cloudflared). Backup = copiar a pasta.</li>
         <li>Porta padrão <C>3001</C>; mude com <C>PORT</C> no <C>apps/backend/.env</C> — veja <DocLink to="/docs/configuracao">Configuração</DocLink>.</li>
         <li>Para expor o painel na internet, use <DocLink to="/docs/cloudflare">Cloudflare Tunnel</DocLink> em vez de abrir portas.</li>
       </Ul>

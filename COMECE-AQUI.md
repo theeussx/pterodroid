@@ -102,8 +102,9 @@ São mais de 160 testes. Não exigem Docker instalado e não tocam num painel re
 | Arquivo | Conteúdo |
 |---|---|
 | `README.md` | Visão geral, funcionalidades, acesso remoto |
-| `apps/docs/RELATORIO.md` | O que foi corrigido, como foi validado e **o que ainda está pendente** (seção 9) |
-| `apps/docs/AUDITORIA.md` | Levantamento dos problemas encontrados, com evidências |
+| `apps/documentation/` | Site de documentação público (Vercel) |
+| `docs/RELATORIO.md` | O que foi corrigido, como foi validado e **o que ainda está pendente** (seção 9) |
+| `docs/AUDITORIA.md` | Levantamento dos problemas encontrados, com evidências |
 
 ---
 
@@ -118,5 +119,5 @@ São mais de 160 testes. Não exigem Docker instalado e não tocam num painel re
    raiz, no caso do Docker).
 
 Os pontos que **não puderam ser testados** no ambiente onde este código foi
-preparado estão na seção 9 do [`apps/docs/RELATORIO.md`](apps/docs/RELATORIO.md) — vale a
+preparado estão na seção 9 do [`docs/RELATORIO.md`](docs/RELATORIO.md) — vale a
 leitura antes de colocar em uso sério.

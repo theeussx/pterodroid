@@ -13,8 +13,8 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 echo "== Atualizando pacotes =="
 pkg update -y
 
-echo "== Instalando Node.js e Cloudflared =="
-pkg install -y nodejs cloudflared
+echo "== Instalando Node.js LTS e Cloudflared =="
+pkg install -y nodejs-lts cloudflared
 
 echo ""
 echo "== Bancos de dados (opcional) =="

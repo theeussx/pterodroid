@@ -84,8 +84,10 @@ export function DownloadPage() {
         {[
           { label: 'Repositório', href: site.repo.url, note: 'código-fonte na branch main' },
           { label: 'Releases', href: site.repo.releases, note: 'versões empacotadas, quando publicadas' },
+          { label: 'Compatibilidade', to: '/docs/compatibilidade', note: 'ambientes, arquiteturas e recursos mínimos' },
           { label: 'Requisitos', to: '/docs/requisitos', note: 'o que cada ambiente precisa' },
           { label: 'Primeiro acesso', to: '/docs/primeiro-acesso', note: 'login, senha e verificação' },
+          { label: 'Backup', to: '/docs/backup', note: 'copiar, restaurar e testar' },
         ].map((l) => (
           <div key={l.label} className="rounded-lg border border-line bg-surface/30 p-4">
             {l.href ? (

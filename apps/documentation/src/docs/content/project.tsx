@@ -1,4 +1,4 @@
-import { C, Callout, CodeBlock, DocTable, Ext, H2, P, Ul } from '../../components/docui';
+import { C, Callout, CodeBlock, DocLink, DocTable, Ext, H2, P, Ul } from '../../components/docui';
 import { site } from '../../site';
 import type { DocPage } from '../types';
 
@@ -108,6 +108,7 @@ export const desenvolvimento: DocPage = {
   sections: [
     { id: 'estrutura', title: 'Estrutura do repositório' },
     { id: 'testes', title: 'Testes' },
+    { id: 'docs', title: 'Site de documentação' },
     { id: 'contribuir', title: 'Como contribuir' },
     { id: 'licenca', title: 'Licença' },
   ],
@@ -160,6 +161,25 @@ npm test`} description="mais de 160 testes. Não precisam de Docker e nunca toca
         </p>
       </Callout>
 
+      <H2 id="docs">Site de documentação</H2>
+      <P>
+        O site público vive em <C>apps/documentation/</C> (Vite + React + Tailwind v4, deploy na Vercel). Cada artigo é
+        um objeto <C>DocPage</C> em <C>src/docs/content/*.tsx</C>; o catálogo de páginas, buscas e navegação ficam em{' '}
+        <C>src/docs/registry.ts</C>, e as URLs/metadados globais em <C>src/site.ts</C>.
+      </P>
+      <CodeBlock
+        platform="docs"
+        title="rodar e validar a documentação"
+        code={`cd apps/documentation\nnpm install\nnpm run dev        # http://localhost:5173\nnpx tsc --noEmit   # checagem de tipos\nnpm run build      # gera dist/index.html (single-file)`}
+        description="O build injeta o commit atual (vite.config.ts) para a página mostrar a versão de referência."
+      />
+      <Ul>
+        <li><strong>Links de fonte:</strong> cada página define <C>sourcePath</C> apontando para o arquivo TSX real — quem clica em “Editar fonte no GitHub” abre o texto efetivamente publicado.</li>
+        <li><strong>Sitemap:</strong> ao adicionar uma página, inclua a URL em <C>public/sitemap.xml</C> (o arquivo é estático).</li>
+        <li><strong>Comandos publicados</strong> devem ser testáveis em clone limpo: caminhos a partir da raiz (<C>apps/frontend</C>, <C>apps/backend</C>, <C>data/</C>).</li>
+        <li><strong>Status dos recursos</strong> (ex.: best-effort) é mantido na <DocLink to="/docs/recursos">matriz de recursos</DocLink> — atualize ao mudar o comportamento do painel.</li>
+      </Ul>
+
       <H2 id="contribuir">Como contribuir</H2>
       <CodeBlock
         platform="git"
@@ -189,6 +209,7 @@ export const changelog: DocPage = {
   title: 'Changelog',
   description: 'Onde acompanhar as mudanças do Pterodroid: commits, releases e o relatório técnico do repositório.',
   keywords: ['versões', 'releases', 'novidades', 'mudanças', 'histórico', 'commits', 'relatorio'],
+  sourcePath: 'apps/documentation/src/docs/content/project.tsx',
   sections: [
     { id: 'como-acompanhar', title: 'Como acompanhar as mudanças' },
     { id: 'estado-atual', title: 'Estado atual do projeto' },

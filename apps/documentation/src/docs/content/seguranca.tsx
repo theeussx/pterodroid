@@ -1,4 +1,4 @@
-import { Callout, CodeBlock, C, DocTable, H2, P, Ul } from '../../components/docui';
+import { Callout, CodeBlock, C, DocLink, DocTable, H2, P, Ul } from '../../components/docui';
 import type { DocPage } from '../types';
 
 export const seguranca: DocPage = {
@@ -22,6 +22,11 @@ export const seguranca: DocPage = {
         (serviços, terminal, banco, arquivos, docker) respondem <C>403 SETUP_REQUIRED</C> até a senha ser trocada.
         Isso impede que quem alcançar o login antes de você ganhe execução remota no dispositivo.
       </Callout>
+      <P>
+        Antes de expor o painel à internet, leia o checklist completo em{' '}
+        <DocLink to="/docs/producao">Publicação segura</DocLink> — e confira o que é realmente testado na{' '}
+        <DocLink to="/docs/recursos">matriz de recursos</DocLink>.
+      </P>
 
       <H2 id="senha-padrao">Senha padrão (obrigatória trocar)</H2>
       <P>
@@ -45,8 +50,8 @@ export const seguranca: DocPage = {
       <H2 id="limite-login">Limite de tentativas de login</H2>
       <P>
         Há uma trava de força bruta por <C>IP + usuário</C>: tentativas erradas consecutivas ficam
-        progressivamente mais lentas e, depois de ~12 falhas, o login responde <C>429</C> com cabeçalho
-        <C> Retry-After</C> — mesmo que a senha digitada esteja certa. Cada usuário tem contador próprio, então um
+        progressivamente mais lentas e, depois de ~8 falhas, o login responde <C>429</C> com cabeçalho{' '}
+        <C>Retry-After</C> — mesmo que a senha digitada esteja certa. Cada usuário tem contador próprio, então um
         atacante a um usuário inventado não derruba o dono do painel.
       </P>
 
@@ -72,8 +77,8 @@ export const seguranca: DocPage = {
         ]}
       />
       <P>
-        O webhook aceita Telegram Bot API, Discord, Slack, ntfy.sh ou qualquer endpoint JSON. Há um botão
-        <strong> Enviar alerta de teste</strong> em Configurações, e um cooldown de 5 minutos por serviço evita spam
+        O webhook aceita Telegram Bot API, Discord, Slack, ntfy.sh ou qualquer endpoint JSON. Há um botão{' '}
+        <strong>Enviar alerta de teste</strong> em Configurações, e um cooldown de 5 minutos por serviço evita spam
         em crash-loops.
       </P>
       <P>
