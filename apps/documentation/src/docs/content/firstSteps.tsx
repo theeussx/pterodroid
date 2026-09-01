@@ -7,7 +7,7 @@ export const primeiroAcesso: DocPage = {
   title: 'Primeiro acesso',
   description: 'Do painel recém-instalado ao login seguro: credenciais padrão, troca de senha e verificação do ambiente.',
   keywords: ['login', 'admin', 'senha padrão', 'trocar senha', 'primeiro login', 'credenciais', '3001', 'configuração inicial'],
-  sourcePath: 'README.md',
+  sourcePath: 'apps/documentation/src/docs/content/firstSteps.tsx',
   sections: [
     { id: 'fluxo', title: 'O fluxo completo' },
     { id: 'credenciais', title: 'Credenciais padrão' },
@@ -46,7 +46,7 @@ export const primeiroAcesso: DocPage = {
       <CodeBlock
         platform="qualquer"
         title="suite de testes do backend"
-        code={`cd backend && npm test`}
+        code={`cd apps/backend && npm test`}
         description="mais de 160 testes. Não exigem Docker instalado e nunca tocam no seu painel real — rodam em diretórios temporários e numa porta separada."
       />
 
@@ -54,9 +54,9 @@ export const primeiroAcesso: DocPage = {
       <DocTable
         head={['Sintoma', 'Causa provável', 'Solução']}
         rows={[
-          ['Página em branco', 'Frontend não compilado', <><C>cd frontend && npm install && npm run build</C></>],
+          ['Página em branco', 'Frontend não compilado', <><C>cd apps/frontend && npm install && npm run build</C></>],
           ['Painel não responde', 'Backend não subiu', <><C>./panelctl.sh logs</C> ou <C>docker compose logs -f</C></>],
-          [<>Erro de porta ao iniciar</>, <>Porta <C>3001</C> ocupada</>, <>Defina <C>PORT=3002</C> no <C>backend/.env</C> (ou no <C>.env</C> da raiz, no Docker)</>],
+          [<>Erro de porta ao iniciar</>, <>Porta <C>3001</C> ocupada</>, <>Defina <C>PORT=3002</C> no <C>apps/backend/.env</C> (ou no <C>.env</C> da raiz, no Docker)</>],
           ['Não abre de outro aparelho', 'Usando localhost fora do dispositivo', <>Use o IP local do aparelho: <C>http://&lt;ip&gt;:3001</C></>],
         ]}
       />
@@ -73,7 +73,7 @@ export const configuracao: DocPage = {
   navLabel: 'Configuração (.env)',
   description: 'Referência completa das variáveis de ambiente do Pterodroid: portas, caminhos, Docker, limites e cloudflared.',
   keywords: ['env', 'PORT', 'JWT_SECRET', 'DATA_ROOT', 'WORKSPACES_ROOT', 'FILES_ROOT', 'HOST_WORKSPACES_ROOT', 'DOCKER_HOST', 'UPLOAD_MAX_BYTES', 'EDITOR_MAX_BYTES', 'CLOUDFLARED_BIN', 'variáveis de ambiente'],
-  sourcePath: '.env.example',
+  sourcePath: 'apps/documentation/src/docs/content/firstSteps.tsx',
   sections: [
     { id: 'onde-fica', title: 'Onde fica o .env' },
     { id: 'basico', title: 'Básico' },
@@ -94,7 +94,7 @@ export const configuracao: DocPage = {
         head={['Instalação', 'Local do .env']}
         rows={[
           ['Docker', <>Copie para <C>.env</C> na <strong>raiz do projeto</strong> (o compose lê daqui).</>],
-          ['Termux / proot / Linux', <>Copie para <C>backend/.env</C>.</>],
+          ['Termux / proot / Linux', <>Copie para <C>apps/backend/.env</C>.</>],
         ]}
       />
 
@@ -111,7 +111,7 @@ export const configuracao: DocPage = {
       <DocTable
         head={['Variável', 'Padrão', 'Descrição']}
         rows={[
-          [<C key="1">DATA_ROOT</C>, <C key="1b">./data</C>, <>Onde fica <strong>tudo</strong>: banco, workspaces e configuração do cloudflared (relativo à pasta <C>backend/</C>).</>],
+          [<C key="1">DATA_ROOT</C>, <C key="1b">./data</C>, <>Onde fica <strong>tudo</strong>: banco, workspaces e configuração do cloudflared (relativo ao diretório de execução do backend; em instalação manual, normalmente <C>apps/backend/</C>).</>],
           [<C key="2">WORKSPACES_ROOT</C>, <C key="2b">&lt;DATA_ROOT&gt;/workspaces</C>, 'Raiz única dos workspaces; cada serviço ganha uma subpasta exclusiva.'],
           [<C key="3">FILES_ROOT</C>, <C key="3b">workspaces</C>, <>Raiz do gerenciador de arquivos global. Aponte para <C>$HOME</C> para navegar o dispositivo inteiro pelo painel.</>],
           [<C key="4">HOST_WORKSPACES_ROOT</C>, '—', <>Só quando o painel roda <strong>dentro</strong> de um container e cria outros no host: caminho dos workspaces como o host os enxerga (senão os bind mounts apontam para um caminho inexistente).</>],
@@ -137,6 +137,9 @@ export const configuracao: DocPage = {
           [<C key="3">LOG_MAX_MEMORY</C>, <C key="3b">500</C>, 'Linhas de log por serviço mantidas em memória.'],
           [<C key="4">LOG_MAX_DB</C>, <C key="4b">1000</C>, 'Linhas de log por serviço persistidas no banco.'],
           [<C key="5">RESTART_STABLE_MS</C>, <C key="5b">60000</C>, 'Tempo que um serviço precisa ficar de pé para o contador de reinícios zerar.'],
+          [<C key="6">BACKUPS_ROOT</C>, <C key="6b">&lt;DATA_ROOT&gt;/backups</C>, 'Diretório dos backups ZIP dos serviços; fica fora da raiz dos workspaces.'],
+          [<C key="7">MAX_BACKUPS_PER_SERVICE</C>, <C key="7b">10</C>, 'Quantidade máxima de backups mantidos por serviço.'],
+          [<C key="8">LOG_PRUNE_INTERVAL_MS</C>, <C key="8b">1800000</C>, 'Intervalo, em milissegundos, para limpeza dos logs persistidos.'],
         ]}
       />
 
@@ -150,7 +153,7 @@ export const configuracao: DocPage = {
       <DocTable
         head={['Instalação', 'Caminho']}
         rows={[
-          ['Termux / proot / Linux', <C key="1">backend/data/</C>],
+          ['Termux / proot / Linux', <C key="1">apps/backend/data/</C>],
           ['Docker', <><C>./data/</C> (na raiz do projeto)</>],
         ]}
       />
@@ -170,7 +173,7 @@ export const primeiroServico: DocPage = {
   navLabel: 'Primeiro serviço',
   description: 'Passo a passo para criar, configurar e iniciar seu primeiro serviço no Pterodroid — com exemplos reais.',
   keywords: ['criar serviço', 'runtime', 'workspace', 'main_file', 'git clone', 'npm install', 'discord bot', 'api', 'node', 'typescript', 'watchdog', 'auto-update', 'starter', 'receita', 'tipo dedicado', 'template', 'scaffold', 'minecraft', 'site estático', 'python'],
-  sourcePath: 'README.md',
+  sourcePath: 'apps/documentation/src/docs/content/firstSteps.tsx',
   sections: [
     { id: 'passo-a-passo', title: 'Passo a passo' },
     { id: 'tipos-dedicados', title: 'Tipos dedicados (receitas)' },

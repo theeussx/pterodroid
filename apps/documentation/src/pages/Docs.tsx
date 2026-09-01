@@ -62,7 +62,7 @@ function Toc({ page }: { page: DocPage }) {
         {page.sections.map((s) => (
           <li key={s.id}>
             <a
-              href={`#/docs/${page.slug}`}
+              href={`/docs/${page.slug}#${s.id}`}
               onClick={(e) => {
                 e.preventDefault();
                 document.getElementById(s.id)?.scrollIntoView();
@@ -95,9 +95,36 @@ export function DocsPage({ route }: { route: string }) {
 
   useEffect(() => {
     if (!page) return;
+    const canonicalUrl = `${site.docsUrl}/docs/${page.slug}`;
     document.title = `${page.title} · Pterodroid Docs`;
+
+    const setMeta = (attribute: 'name' | 'property', key: string, content: string) => {
+      let meta = document.head.querySelector<HTMLMetaElement>(`meta[${attribute}="${key}"]`);
+      if (!meta) {
+        meta = document.createElement('meta');
+        meta.setAttribute(attribute, key);
+        document.head.appendChild(meta);
+      }
+      meta.content = content;
+    };
+
+    let canonical = document.head.querySelector<HTMLLinkElement>('link[rel="canonical"]');
+    if (!canonical) {
+      canonical = document.createElement('link');
+      canonical.rel = 'canonical';
+      document.head.appendChild(canonical);
+    }
+    canonical.href = canonicalUrl;
+    setMeta('name', 'description', page.description);
+    setMeta('property', 'og:url', canonicalUrl);
+    setMeta('property', 'og:title', `${page.title} · Pterodroid Docs`);
+    setMeta('property', 'og:description', page.description);
+    setMeta('name', 'twitter:title', `${page.title} · Pterodroid Docs`);
+    setMeta('name', 'twitter:description', page.description);
+
     return () => {
       document.title = 'Pterodroid — Painel self-hosted para Android, Termux, Linux e Docker';
+      canonical.href = site.docsUrl + '/';
     };
   }, [page]);
 

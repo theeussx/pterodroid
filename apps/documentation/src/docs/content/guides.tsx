@@ -7,7 +7,7 @@ export const arquivos: DocPage = {
   navLabel: 'Arquivos',
   description: 'Workspaces, editor integrado, upload/download e todas as operações do gerenciador de arquivos do Pterodroid.',
   keywords: ['upload', 'download', 'editor', 'workspace', 'renomear', 'mover', 'copiar', 'busca', 'FILES_ROOT', '2MB', 'auditoria', 'path traversal', 'escrita atômica'],
-  sourcePath: 'README.md',
+  sourcePath: 'apps/documentation/src/docs/content/guides.tsx',
   sections: [
     { id: 'workspaces', title: 'Workspaces' },
     { id: 'operacoes', title: 'Operações disponíveis' },
@@ -84,7 +84,7 @@ export const terminal: DocPage = {
   title: 'Terminal no painel',
   description: 'Como usar o terminal embutido do Pterodroid: histórico, cd persistente, Ctrl+C e as limitações por design.',
   keywords: ['terminal', 'comandos', 'histórico', 'cd', 'ctrl+c', 'docker exec', 'pty', 'vim', 'htop', 'npm install', 'git pull'],
-  sourcePath: 'README.md',
+  sourcePath: 'apps/documentation/src/docs/content/guides.tsx',
   sections: [
     { id: 'visao-geral', title: 'Visão geral' },
     { id: 'recursos', title: 'Recursos' },
@@ -149,7 +149,7 @@ export const dockerServices: DocPage = {
   navLabel: 'Serviços Docker',
   description: 'Crie serviços como containers Docker: imagens, bind mounts do workspace, logs, restart e persistência.',
   keywords: ['container', 'imagem', 'bind mount', 'HOST_WORKSPACES_ROOT', 'docker exec', 'DOCKER_HOST', 'restart', 'persistência', 'docker engine'],
-  sourcePath: 'README.md',
+  sourcePath: 'apps/documentation/src/docs/content/guides.tsx',
   sections: [
     { id: 'requisitos', title: 'Requisitos' },
     { id: 'como-funciona', title: 'Como funciona' },
@@ -223,7 +223,7 @@ export const bancos: DocPage = {
   navLabel: 'Bancos de dados',
   description: 'Provisionamento local de PostgreSQL e MySQL/MariaDB pelo Pterodroid: criação, credenciais, portas, persistência e limitações.',
   keywords: ['postgresql', 'mysql', 'mariadb', 'banco de dados', 'credenciais', 'porta', 'persistência', 'watchdog', 'quick tunnel', 'cloudflared access tcp'],
-  sourcePath: 'README.md',
+  sourcePath: 'apps/documentation/src/docs/content/guides.tsx',
   sections: [
     { id: 'visao-geral', title: 'Visão geral' },
     { id: 'criacao', title: 'Criação e credenciais' },
@@ -287,7 +287,7 @@ export const tiposDedicados: DocPage = {
   navLabel: 'Tipos dedicados',
   description: 'Como o Pterodroid usa receitas por tipo de serviço para deixar a criação mais prática — porta, comando, runtime e template prontos.',
   keywords: ['receita', 'tipo dedicado', 'egg', 'nest', 'template', 'scaffold', 'node-api', 'node-bot', 'static-site', 'python-api', 'minecraft', 'docker', 'categoria', 'default'],
-  sourcePath: 'README.md',
+  sourcePath: 'apps/documentation/src/docs/content/guides.tsx',
   sections: [
     { id: 'o-que-e', title: 'O que é uma receita' },
     { id: 'catalogo', title: 'Catálogo de receitas' },

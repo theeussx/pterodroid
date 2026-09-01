@@ -1,9 +1,36 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- O site é uma SPA com rotas por hash; apenas o documento raiz é indexável. -->
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
-    <loc>https://theeussx.github.io/pterodroid/</loc>
+    <loc>https://pterodroid-doc.vercel.app/</loc>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
   </url>
+  <url>
+    <loc>https://pterodroid-doc.vercel.app/download</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url><loc>https://pterodroid-doc.vercel.app/docs/introducao</loc><changefreq>monthly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://pterodroid-doc.vercel.app/docs/requisitos</loc><changefreq>monthly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://pterodroid-doc.vercel.app/docs/instalacao</loc><changefreq>monthly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://pterodroid-doc.vercel.app/docs/termux</loc><changefreq>monthly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://pterodroid-doc.vercel.app/docs/proot</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://pterodroid-doc.vercel.app/docs/docker</loc><changefreq>monthly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://pterodroid-doc.vercel.app/docs/linux</loc><changefreq>monthly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://pterodroid-doc.vercel.app/docs/primeiro-acesso</loc><changefreq>monthly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://pterodroid-doc.vercel.app/docs/configuracao</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://pterodroid-doc.vercel.app/docs/primeiro-servico</loc><changefreq>monthly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://pterodroid-doc.vercel.app/docs/tipos-dedicados</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://pterodroid-doc.vercel.app/docs/arquivos</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://pterodroid-doc.vercel.app/docs/terminal</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://pterodroid-doc.vercel.app/docs/docker-services</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://pterodroid-doc.vercel.app/docs/bancos</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://pterodroid-doc.vercel.app/docs/cloudflare</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://pterodroid-doc.vercel.app/docs/monitoramento</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://pterodroid-doc.vercel.app/docs/seguranca</loc><changefreq>monthly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://pterodroid-doc.vercel.app/docs/troubleshooting</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://pterodroid-doc.vercel.app/docs/faq</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://pterodroid-doc.vercel.app/docs/arquitetura</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://pterodroid-doc.vercel.app/docs/desenvolvimento</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://pterodroid-doc.vercel.app/docs/changelog</loc><changefreq>weekly</changefreq><priority>0.6</priority></url>
 </urlset>

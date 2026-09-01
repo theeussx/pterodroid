@@ -39,7 +39,7 @@ export const arquitetura: DocPage = {
   navLabel: 'Arquitetura',
   description: 'O modelo Supervisor-Filho do Pterodroid, seus componentes internos e as escolhas de tecnologia.',
   keywords: ['supervisor', 'child_process', 'express', 'socket.io', 'sql.js', 'wasm', 'jwt', 'bcryptjs', 'stack', 'tecnologias', 'diagrama'],
-  sourcePath: 'README.md',
+  sourcePath: 'apps/documentation/src/docs/content/project.tsx',
   sections: [
     { id: 'modelo', title: 'Modelo Supervisor-Filho' },
     { id: 'diagrama', title: 'Diagrama' },
@@ -104,7 +104,7 @@ export const desenvolvimento: DocPage = {
   navLabel: 'Contribuição',
   description: 'Estrutura do repositório, como rodar os testes (mais de 160, sem Docker) e o fluxo de contribuição do Pterodroid.',
   keywords: ['contribuir', 'pull request', 'fork', 'testes', 'npm test', 'estrutura do repositório', 'licença mit', 'backend', 'frontend'],
-  sourcePath: 'README.md',
+  sourcePath: 'apps/documentation/src/docs/content/project.tsx',
   sections: [
     { id: 'estrutura', title: 'Estrutura do repositório' },
     { id: 'testes', title: 'Testes' },
@@ -142,7 +142,7 @@ export const desenvolvimento: DocPage = {
       />
 
       <H2 id="testes">Testes</H2>
-      <CodeBlock platform="qualquer" code={`cd backend
+      <CodeBlock platform="qualquer" code={`cd apps/backend
 npm test`} description="mais de 160 testes. Não precisam de Docker e nunca tocam no painel real — rodam em diretórios temporários e porta separada." />
       <P>A suíte cobre:</P>
       <Ul>

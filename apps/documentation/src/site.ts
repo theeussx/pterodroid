@@ -7,6 +7,7 @@ export const site = {
   description:
     'Painel self-hosted leve para gerenciar serviços, containers, arquivos, bancos e túneis diretamente pelo navegador — feito para Android/Termux, Linux e Docker.',
   license: 'MIT',
+  docsUrl: 'https://pterodroid-doc.vercel.app',
   // O projeto não publica releases versionadas; a referência oficial é a branch main.
   versionLabel: 'main',
   defaultPort: 3001,

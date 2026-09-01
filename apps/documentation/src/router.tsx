@@ -1,34 +1,46 @@
 import { useEffect, useState, type AnchorHTMLAttributes } from 'react';
 
-// Router mínimo baseado em hash — o site é servido como um único arquivo
-// estático, então rotas por hash funcionam em qualquer host sem configuração.
+/** Normaliza URLs normais e mantém compatibilidade com links antigos usando hash. */
+export function normalizeRoute(pathname: string, hash = ''): string {
+  const hashRoute = hash.startsWith('#/') ? hash.slice(1) : '';
+  let route = pathname && pathname !== '/' ? pathname : hashRoute || '/';
+  if (!route.startsWith('/')) route = '/' + route;
+  if (route.length > 1 && route.endsWith('/')) route = route.slice(0, -1);
+  return route || '/';
+}
 
 export function normalizeHash(hash: string): string {
-  let r = hash.replace(/^#/, '');
-  if (!r.startsWith('/')) r = '/' + r;
-  if (r.length > 1 && r.endsWith('/')) r = r.slice(0, -1);
-  return r || '/';
+  return normalizeRoute('', hash);
 }
 
 export function useRoute(): string {
-  const [route, setRoute] = useState(() => normalizeHash(window.location.hash));
+  const readRoute = () => normalizeRoute(window.location.pathname, window.location.hash);
+  const [route, setRoute] = useState(readRoute);
+
   useEffect(() => {
-    const onChange = () => setRoute(normalizeHash(window.location.hash));
+    const onChange = () => setRoute(readRoute());
+    window.addEventListener('popstate', onChange);
     window.addEventListener('hashchange', onChange);
-    return () => window.removeEventListener('hashchange', onChange);
+    return () => {
+      window.removeEventListener('popstate', onChange);
+      window.removeEventListener('hashchange', onChange);
+    };
   }, []);
+
   return route;
 }
 
 export function navigate(to: string) {
-  window.location.hash = to;
+  const target = to.startsWith('/') ? to : `/${to}`;
+  window.history.pushState({}, '', target);
+  window.dispatchEvent(new PopStateEvent('popstate'));
 }
 
 type LinkProps = AnchorHTMLAttributes<HTMLAnchorElement> & { to: string };
 
 export function Link({ to, children, ...rest }: LinkProps) {
   return (
-    <a href={'#' + to} {...rest}>
+    <a href={to.startsWith('/') ? to : `/${to}`} {...rest}>
       {children}
     </a>
   );

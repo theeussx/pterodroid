@@ -1,9 +1,11 @@
-# Pterodroid — site público de documentação
+# Pterodroid — documentação pública
+# Domínio oficial: https://pterodroid-doc.vercel.app/
+
 User-agent: *
 Allow: /
-# Áreas que nunca devem ser indexadas (não existem neste site estático,
-# mas ficam bloqueadas por segurança caso o painel seja servido no mesmo host)
+
+# Estas rotas não fazem parte da documentação pública.
 Disallow: /api
 Disallow: /admin
 
-Sitemap: https://theeussx.github.io/pterodroid/sitemap.xml
+Sitemap: https://pterodroid-doc.vercel.app/sitemap.xml

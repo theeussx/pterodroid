@@ -7,7 +7,7 @@ export const cloudflare: DocPage = {
   navLabel: 'Cloudflare Tunnel',
   description: 'Exponha o painel e seus serviços à internet sem abrir portas: Quick Tunnel e Named Tunnel (CLI ou token).',
   keywords: ['cloudflared', 'quick tunnel', 'named tunnel', 'trycloudflare', 'domínio', 'dns', 'cname', 'zero trust', 'token', 'tunnel login', 'access tcp', 'acesso remoto'],
-  sourcePath: 'README.md',
+  sourcePath: 'apps/documentation/src/docs/content/remote.tsx',
   sections: [
     { id: 'visao-geral', title: 'Visão geral' },
     { id: 'quick-tunnel', title: 'Quick Tunnel (túnel rápido)' },
@@ -99,7 +99,7 @@ export const monitoramento: DocPage = {
   navLabel: 'Monitoramento',
   description: 'CPU, RAM, disco, rede, temperatura e processos ativos em tempo real — direto de /proc e /sys. Healthcheck por serviço e limites de recurso.',
   keywords: ['cpu', 'ram', 'disco', 'rede', 'temperatura', 'processos', 'gráficos', '/proc', 'df', 'ps', 'status', 'tempo real', 'healthcheck', 'limite', 'memória', 'cpu'],
-  sourcePath: 'README.md',
+  sourcePath: 'apps/documentation/src/docs/content/remote.tsx',
   sections: [
     { id: 'metricas', title: 'Métricas disponíveis' },
     { id: 'como-funciona', title: 'Como funciona por baixo' },

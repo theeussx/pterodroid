@@ -8,7 +8,7 @@ export const termux: DocPage = {
   navLabel: 'Termux (Android)',
   description: 'Guia completo para instalar e manter o Pterodroid rodando no Termux, incluindo execução em segundo plano.',
   keywords: ['pkg install', 'nodejs-lts', 'install-termux.sh', 'panelctl.sh', 'wake lock', 'termux-wake-lock', 'termux-api', 'bateria', 'android', 'f-droid', 'segundo plano'],
-  sourcePath: 'README.md',
+  sourcePath: 'apps/documentation/src/docs/content/install.tsx',
   sections: [
     { id: 'instalar-termux', title: '1. Instalar o Termux' },
     { id: 'preparar', title: '2. Preparar o ambiente' },
@@ -117,7 +117,7 @@ export const proot: DocPage = {
   navLabel: 'Ubuntu proot',
   description: 'Como instalar o Pterodroid dentro de um Ubuntu proot no Android, e quais são as limitações desse ambiente.',
   keywords: ['proot-distro', 'ubuntu', 'install-ubuntu-proot.sh', 'android', 'userland', 'limitações', 'docker no proot'],
-  sourcePath: 'COMECE-AQUI.md',
+  sourcePath: 'apps/documentation/src/docs/content/install.tsx',
   sections: [
     { id: 'quando-usar', title: 'Quando usar proot' },
     { id: 'preparar', title: '1. Preparar o ambiente' },
@@ -166,7 +166,7 @@ chmod +x install-ubuntu-proot.sh panelctl.sh
       <H2 id="caminhos">Caminhos de dados</H2>
       <P>
         Como no Termux e no Linux, tudo o que o painel guarda (banco, workspaces, configuração do cloudflared) fica em{' '}
-        <C>backend/data/</C>. Backup = copiar essa pasta. Detalhes em{' '}
+        <C>apps/backend/data/</C>. Backup = copiar essa pasta. Detalhes em{' '}
         <DocLink to="/docs/configuracao">Configuração</DocLink>.
       </P>
 
@@ -186,7 +186,7 @@ export const docker: DocPage = {
   navLabel: 'Docker',
   description: 'Suba o Pterodroid com Docker Compose, com acesso ao Docker do host, healthcheck e dados persistentes em ./data.',
   keywords: ['docker compose', 'DOCKER_GID', 'JWT_SECRET', 'docker.sock', 'healthcheck', 'volumes', '.env', 'group_add', 'up -d --build', 'compose ps', 'compose logs'],
-  sourcePath: 'README.md',
+  sourcePath: 'apps/documentation/src/docs/content/install.tsx',
   sections: [
     { id: 'pre-requisitos', title: 'Pré-requisitos' },
     { id: 'clone-env', title: '1. Clonar e configurar o .env' },
@@ -283,7 +283,7 @@ export const linux: DocPage = {
   navLabel: 'Linux',
   description: 'Instale o Pterodroid em qualquer distro Linux com Node 18+ — VPS, Raspberry Pi ou desktop — sem depender de systemd.',
   keywords: ['vps', 'raspberry pi', 'debian', 'ubuntu', 'node 18', 'manual', 'npm start', 'panelctl', 'nohup'],
-  sourcePath: 'COMECE-AQUI.md',
+  sourcePath: 'apps/documentation/src/docs/content/install.tsx',
   sections: [
     { id: 'requisitos', title: 'Requisitos' },
     { id: 'metodo-manual', title: 'Método manual (oficial)' },
@@ -309,7 +309,7 @@ export const linux: DocPage = {
         platform="linux"
         title="build + start"
         code={`git clone ${site.repo.clone}
-cd pterodroid/frontend && npm install && npm run build
+cd pterodroid/apps/frontend && npm install && npm run build
 cd ../backend && npm install && npm start`}
         description="npm start mantém o painel no terminal atual (primeiro plano), em http://localhost:3001."
       />
@@ -344,8 +344,8 @@ chmod +x panelctl.sh
 
       <H2 id="notas">Notas</H2>
       <Ul>
-        <li>Dados em <C>backend/data/</C> (banco, workspaces, cloudflared). Backup = copiar a pasta.</li>
-        <li>Porta padrão <C>3001</C>; mude com <C>PORT</C> no <C>backend/.env</C> — veja <DocLink to="/docs/configuracao">Configuração</DocLink>.</li>
+        <li>Dados em <C>apps/backend/data/</C> (banco, workspaces, cloudflared). Backup = copiar a pasta.</li>
+        <li>Porta padrão <C>3001</C>; mude com <C>PORT</C> no <C>apps/backend/.env</C> — veja <DocLink to="/docs/configuracao">Configuração</DocLink>.</li>
         <li>Para expor o painel na internet, use <DocLink to="/docs/cloudflare">Cloudflare Tunnel</DocLink> em vez de abrir portas.</li>
       </Ul>
     </>

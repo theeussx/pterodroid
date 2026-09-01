@@ -9,7 +9,7 @@ export const introducao: DocPage = {
   navLabel: 'Comece aqui',
   description: 'O que é o Pterodroid, como ele funciona e o caminho mais curto até o seu primeiro serviço rodando.',
   keywords: ['o que é', 'pterodactyl', 'termux', 'android', 'self-hosted', 'painel', 'hospedagem', 'visão geral', 'filosofia'],
-  sourcePath: 'README.md',
+  sourcePath: 'apps/documentation/src/docs/content/intro.tsx',
   sections: [
     { id: 'o-que-e', title: 'O que é o Pterodroid' },
     { id: 'como-funciona', title: 'Como funciona' },
@@ -95,7 +95,7 @@ export const requisitos: DocPage = {
   title: 'Requisitos',
   description: 'O que você precisa em cada ambiente antes de instalar o Pterodroid.',
   keywords: ['node 18', 'nodejs-lts', 'docker compose', 'termux', 'proot-distro', 'git', 'cloudflared', 'pré-requisitos', 'hardware'],
-  sourcePath: 'COMECE-AQUI.md',
+  sourcePath: 'apps/documentation/src/docs/content/intro.tsx',
   sections: [
     { id: 'por-ambiente', title: 'Requisitos por ambiente' },
     { id: 'observacoes', title: 'Observações importantes' },
@@ -156,7 +156,7 @@ export const instalacao: DocPage = {
   navLabel: 'Visão geral',
   description: 'Compare os métodos de instalação do Pterodroid e escolha o ideal para o seu ambiente.',
   keywords: ['instalar', 'install', 'escolher método', 'termux', 'docker', 'proot', 'linux', 'manual', 'node 18'],
-  sourcePath: 'COMECE-AQUI.md',
+  sourcePath: 'apps/documentation/src/docs/content/intro.tsx',
   sections: [
     { id: 'escolha', title: 'Escolha seu ambiente' },
     { id: 'metodo-manual', title: 'Método manual (qualquer sistema com Node 18+)' },
@@ -185,7 +185,7 @@ export const instalacao: DocPage = {
       <CodeBlock
         platform="linux"
         title="instalação manual"
-        code={`cd pterodroid/frontend && npm install && npm run build
+        code={`cd pterodroid/apps/frontend && npm install && npm run build
 cd ../backend && npm install && npm start`}
         description="O backend serve a interface compilada e a API na mesma porta (3001 por padrão)."
       />
@@ -199,7 +199,7 @@ cd ../backend && npm install && npm start`}
       />
       <Callout type="warning" title="Interface em branco?">
         <p>
-          O frontend não foi compilado. Rode <C>cd frontend && npm install && npm run build</C> e recarregue. O{' '}
+          O frontend não foi compilado. Rode <C>cd apps/frontend && npm install && npm run build</C> e recarregue. O{' '}
           <C>panelctl.sh</C> avisa sobre isso no start. Mais casos em{' '}
           <DocLink to="/docs/troubleshooting">Troubleshooting</DocLink>.
         </p>

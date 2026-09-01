@@ -44,7 +44,7 @@ docker compose up -d --build`,
     to: '/docs/linux',
     platform: 'linux',
     code: `git clone ${site.repo.clone}
-cd pterodroid/frontend && npm install && npm run build
+cd pterodroid/apps/frontend && npm install && npm run build
 cd ../backend && npm install && npm start`,
   },
 ];

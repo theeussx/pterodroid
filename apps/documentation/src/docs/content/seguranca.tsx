@@ -7,7 +7,7 @@ export const seguranca: DocPage = {
   navLabel: 'Segurança',
   description: 'Senha padrão obrigatória, cifra em repouso, limite de tentativas, trava de força bruta e alertas de queda de serviço do Pterodroid.',
   keywords: ['senha', 'cifra', 'criptografia', 'secret', 'token', 'brute force', 'CORS', 'setup', 'alerta', 'webhook', 'segurança', 'cifra em repouso', 'hash'],
-  sourcePath: 'README.md',
+  sourcePath: 'apps/documentation/src/docs/content/seguranca.tsx',
   sections: [
     { id: 'senha-padrao', title: 'Senha padrão (obrigatória trocar)' },
     { id: 'cifra-em-repouso', title: 'Segredos cifrados em repouso' },

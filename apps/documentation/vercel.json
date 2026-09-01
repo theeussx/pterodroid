@@ -1,0 +1,6 @@
+{
+  "rewrites": [
+    { "source": "/docs/:path*", "destination": "/index.html" },
+    { "source": "/download", "destination": "/index.html" }
+  ]
+}

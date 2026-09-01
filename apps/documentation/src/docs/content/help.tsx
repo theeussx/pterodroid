@@ -47,7 +47,7 @@ export const troubleshooting: DocPage = {
   title: 'Troubleshooting',
   description: 'Central de problemas do Pterodroid: sintomas, causa provável, solução e comandos para cada caso.',
   keywords: ['erro', 'não inicia', 'porta ocupada', 'página em branco', 'DOCKER_GID', 'wake lock', 'logs', 'upload falha', 'cloudflared', 'container', 'debug'],
-  sourcePath: 'COMECE-AQUI.md',
+  sourcePath: 'apps/documentation/src/docs/content/help.tsx',
   sections: [
     { id: 'coletar-logs', title: 'Antes de tudo: colete os logs' },
     { id: 'painel-nao-inicia', title: 'Painel não inicia' },
@@ -78,16 +78,16 @@ docker compose logs -f    # logs do container do painel`} />
         symptoms="panelctl.sh start falha ou o processo morre poucos segundos após nascer."
         cause="Erro de inicialização: porta ocupada, banco corrompido ou dependências do backend ausentes. O panelctl espera o healthcheck real em /api/health, então ele detecta esses casos e imprime as últimas linhas do log."
         solution={<>Leia as últimas linhas exibidas pelo próprio <C>panelctl.sh</C>. Se faltar <C>node_modules</C>, rode o instalador do seu ambiente novamente.</>}
-        commands={{ code: `./panelctl.sh logs\ncd backend && npm install   # se as dependências estiverem ausentes`, platform: 'termux/linux' }}
+        commands={{ code: `./panelctl.sh logs\ncd apps/backend && npm install   # se as dependências estiverem ausentes`, platform: 'termux/linux' }}
       />
 
       <Problem
         id="pagina-em-branco"
         title="Interface em branco"
         symptoms="O backend responde, mas o navegador mostra uma página vazia."
-        cause="O frontend não foi compilado — o backend serve frontend/dist, que não existe ainda. O panelctl.sh avisa sobre isso no start."
+        cause="O frontend não foi compilado — o backend serve apps/frontend/dist, que não existe ainda. O panelctl.sh avisa sobre isso no start."
         solution={<>Compile o frontend e recarregue a página.</>}
-        commands={{ code: `cd frontend && npm install && npm run build`, platform: 'qualquer' }}
+        commands={{ code: `cd apps/frontend && npm install && npm run build`, platform: 'qualquer' }}
       />
 
       <Problem
@@ -95,8 +95,8 @@ docker compose logs -f    # logs do container do painel`} />
         title="Porta 3001 ocupada"
         symptoms="Erro EADDRINUSE no log, ou o healthcheck nunca responde."
         cause="Outro processo (ou uma instância antiga do painel) já usa a porta 3001."
-        solution={<>Defina outra porta com <C>PORT</C> no <C>backend/.env</C> (ou no <C>.env</C> da raiz, no caso do Docker), ou encerre o processo antigo com <C>./panelctl.sh stop</C>.</>}
-        commands={{ code: `echo "PORT=3002" >> backend/.env\n./panelctl.sh restart`, platform: 'termux/linux' }}
+        solution={<>Defina outra porta com <C>PORT</C> no <C>apps/backend/.env</C> (ou no <C>.env</C> da raiz, no caso do Docker), ou encerre o processo antigo com <C>./panelctl.sh stop</C>.</>}
+        commands={{ code: `echo "PORT=3002" >> apps/backend/.env\n./panelctl.sh restart`, platform: 'termux/linux' }}
       />
 
       <Problem
@@ -195,7 +195,7 @@ export const faq: DocPage = {
   navLabel: 'FAQ',
   description: 'Respostas diretas: root, Docker, Termux, Windows, bots de Discord, domínios próprios, backup e mais.',
   keywords: ['root', 'windows', 'discord bot', 'api', 'domínio', 'backup', 'dados', 'remoto', 'multi-usuário', 'sem docker'],
-  sourcePath: 'README.md',
+  sourcePath: 'apps/documentation/src/docs/content/help.tsx',
   sections: [{ id: 'perguntas', title: 'Perguntas' }],
   render: () => (
     <>
@@ -254,7 +254,7 @@ export const faq: DocPage = {
         </FaqItem>
         <FaqItem q="Onde ficam meus dados?">
           <p>
-            Tudo em uma pasta só — banco, workspaces e configuração do cloudflared: <C>backend/data/</C> (Termux,
+            Tudo em uma pasta só — banco, workspaces e configuração do cloudflared: <C>apps/backend/data/</C> (Termux,
             proot, Linux) ou <C>./data/</C> na raiz do projeto (Docker). Cada serviço tem seu workspace em{' '}
             <C>data/workspaces/&lt;nome&gt;</C>.
           </p>
