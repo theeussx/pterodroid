@@ -366,6 +366,31 @@ limpo com o `doctor` sem `FALHA`.
 
 ---
 
+## 10. Status de implementação (atualizado após a execução)
+
+A Fase 0 foi executada nesta branch. Situação por pacote de trabalho:
+
+| WP | Escopo | Status | Evidência |
+|---|---|---|---|
+| WP-03 | Docker sem root (corrige D1) | ✅ Implementado | `entrypoint.sh` reescrito (fast path de chown + `su-exec node[:gid-sock]`), `su-exec` no Dockerfile, `group_add`/`DOCKER_GID` removidos do compose; prova de regressão no CI |
+| WP-01 | Pipeline de CI | ✅ Implementado | `contrib/ci/workflow.yml` — 6 jobs: backend (Node 20.19/22), frontend, docs, ShellCheck, doctor standalone, docker-build (build + compose config + uid=1000 + healthcheck). **Ativação pendente:** mover para `.github/workflows/ci.yml` (o token do agente não tem escopo `workflows`; ver `contrib/ci/README.md`) |
+| WP-07 | Runner robusto | ✅ Implementado | pré-voo com causa raiz em `run-all.sh`; espera ativa por healthcheck com log no `smoke-test.sh` (fim do `sleep 4` cego e da cascata de JSON) |
+| WP-02 | `panelctl.sh doctor` | ✅ Implementado | relatório OK/AVISO/FALHA + matriz de recursos + exit≠0 em falha bloqueante; roda como 13ª suíte do `npm test` e em job próprio no CI |
+| WP-05 | Lock exclusivo do `panel.db` | ✅ Implementado | `src/db/dbLock.js` (O_EXCL + PID vivo + recuperação de lock obsoleto), `closeDB()` no shutdown gracioso, `flock` para serializar `panelctl start`; teste de integração sobe 2 servidores no mesmo banco |
+| WP-06 | Backup pré-migração | ✅ Implementado | migrações viraram lista declarativa (`MIGRATIONS`); backup `panel.db.mig-backup-*` antes de qualquer ALTER, retenção de 3; teste com fixture de banco legado |
+| WP-04 | Instalação nativa não-root + systemd | ✅ Implementado | guarda anti-root no `panelctl.sh start` (exceções: proot `.allow-root`, container, `PTERODROID_ALLOW_ROOT=1`); `contrib/pterodroid.service` + `contrib/install-service.sh`; `install-linux.sh` oferece o serviço e roda o doctor no final |
+| WP-08 | Matriz + docs de modos | ✅ Implementado | `docs/COMPATIBILIDADE.md` (3 modos, versões, distros, archs, recursos opcionais); README e `.env.example` atualizados |
+
+Suíte final: **13 suítes verdes** (`npm test` no backend), incluindo as duas
+novas (`migration-backup-test.js`, `db-lock-test.js`) e o `doctor`.
+Relatório original arquivado em `docs/RELATORIO-EVOLUCAO.md`.
+
+Pendências registradas que dependem de ambiente fora do sandbox:
+build real da imagem + prova do uid 1000 (job `docker-build` no CI), Fedora
+e ARM físico (documentados na matriz), e as decisões da Fase 1 (seção 9).
+
+---
+
 *Validação executada em 19/09/2026 sobre `3e281a6`, branch
 `arena/01a0bab5-pterodroid`. Todos os caminhos citados referem-se a
 `apps/backend/` salvo indicação contrária.*

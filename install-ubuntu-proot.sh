@@ -165,6 +165,16 @@ if [ ! -f "$ROOT_DIR/apps/frontend/dist/index.html" ]; then
   exit 1
 fi
 
+# Dentro do proot TUDO reporta uid 0 (root falso sem privilégio real): o
+# panelctl recusaria o start por segurança. Este marcador documenta e libera
+# a exceção — ele só existe nos ambientes instalados por este script.
+mkdir -p "$ROOT_DIR/data"
+cat > "$ROOT_DIR/data/.allow-root" <<'EOF'
+Ambiente Ubuntu proot (Termux): uid 0 aqui é falso — não há privilégio real
+sobre o Android. O panelctl.sh aceita o start como "root" por causa deste
+arquivo. Remova-o se esta pasta for movida para um Linux de verdade.
+EOF
+
 echo ""
 echo "=================================================="
 echo " Instalação concluída!"

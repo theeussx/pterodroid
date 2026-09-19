@@ -18,7 +18,35 @@ mkdir -p "$WORKSPACES_ROOT"
 
 node src/server.js > /tmp/smoketest-server.log 2>&1 &
 SERVER_PID=$!
-sleep 4
+
+# Em vez de um `sleep 4` cego (curto demais em máquina lenta, longo demais
+# em máquina rápida), esperamos o healthcheck responder de verdade. Se o
+# servidor não sobe, abortamos aqui com o log — antes disto, um servidor
+# morto produzia uma cascata de erros de JSON.parse nas asserções seguintes
+# e a causa raiz (ex.: porta ocupada, banco travado) ficava enterrada.
+server_ready() {
+  for _ in $(seq 1 60); do
+    if curl -fsS "$BASE/api/health" >/dev/null 2>&1; then
+      return 0
+    fi
+    if ! kill -0 "$SERVER_PID" 2>/dev/null; then
+      echo "  FALHA: o servidor morreu durante o boot. Últimas linhas do log:"
+      tail -n 25 /tmp/smoketest-server.log
+      return 1
+    fi
+    sleep 0.5
+  done
+  echo "  FALHA: o servidor não respondeu ao healthcheck em 30s. Últimas linhas do log:"
+  tail -n 25 /tmp/smoketest-server.log
+  return 1
+}
+
+echo "== aguardando servidor responder =="
+if ! server_ready; then
+  kill "$SERVER_PID" 2>/dev/null
+  rm -rf "$DATA_ROOT"
+  exit 1
+fi
 
 pass() { echo "  PASS: $1"; }
 # Sem o contador, um "FAIL" aqui só aparecia no log — o processo sempre saía

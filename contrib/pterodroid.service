@@ -1,0 +1,55 @@
+# Unidade systemd OPCIONAL do Pterodroid (Linux nativo).
+#
+# Este arquivo é um TEMPLATE — instale com:
+#
+#   ./contrib/install-service.sh
+#
+# que substitui __PTERODROID_USER__, __PTERODROID_DIR__ e __NODE_BIN__
+# pelos valores reais desta máquina. Termux/proot não usam systemd:
+# nesses ambientes o gerenciador de processo é o panelctl.sh.
+#
+# O serviço roda como um usuário comum (nunca root) e escreve apenas no
+# diretório de dados do painel.
+
+[Unit]
+Description=Pterodroid — painel local-first de hospedagem
+Documentation=https://github.com/theeussx/pterodroid
+After=network.target
+# Se o painel gerencia containers do Docker deste host, descomente:
+# After=docker.service
+
+[Service]
+Type=simple
+User=__PTERODROID_USER__
+Group=__PTERODROID_USER__
+WorkingDirectory=__PTERODROID_DIR__/apps/backend
+
+Environment=NODE_ENV=production
+Environment=PORT=3001
+Environment=DATA_ROOT=__PTERODROID_DIR__/data
+
+ExecStart=__NODE_BIN__ src/server.js
+
+Restart=on-failure
+RestartSec=3
+
+# ── Hardening ────────────────────────────────────────────────────────────
+# O painel não precisa de privilégio algum no sistema. NoNewPrivileges
+# garante que nenhum serviço gerenciado escale privilégio via setuid.
+NoNewPrivileges=true
+ProtectSystem=full
+# Escrita fica restrita ao diretório de dados (banco, workspaces, backups):
+ReadWritePaths=__PTERODROID_DIR__/data
+# Home continua legível/gravável DE PROPÓSITO: `npm install` dos serviços
+# grava cache em ~/.npm e `git clone` via SSH lê ~/.ssh. Se os seus serviços
+# não precisam disso, endureça com ProtectHome=tmpfs.
+LimitNOFILE=65536
+# Os processos-filhos dos serviços contam para o TasksMax da unidade:
+TasksMax=512
+# Para usar o Docker do host, adicione o usuário ao grupo docker (ou
+# descomente a linha abaixo) — lembrando que o socket equivale a acesso
+# administrativo ao host:
+# SupplementaryGroups=docker
+
+[Install]
+WantedBy=multi-user.target

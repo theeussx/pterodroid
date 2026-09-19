@@ -1,9 +1,13 @@
 const bcrypt = require('bcryptjs');
+const fs = require('fs');
+const path = require('path');
 const config = require('../config');
 const cipher = require('../services/secretCipher');
 const { openDatabase } = require('./sqliteCompat');
+const { acquireDbLock } = require('./dbLock');
 
 let db;
+let releaseDbLock = null;
 
 function getDB() {
   if (!db) throw new Error('Database not initialized. Call initDB() first.');
@@ -12,20 +16,140 @@ function getDB() {
 
 /**
  * CREATE TABLE IF NOT EXISTS only helps on a brand-new database — it does
- * nothing to a table that already exists but predates a newer column. This
- * adds that column if it's missing, so panel.db from an older version of
- * the app upgrades in place instead of needing to be deleted.
+ * nothing to a table that already exists but predates a newer column. The
+ * MIGRATIONS list below adds those missing columns, so panel.db from an
+ * older version of the app upgrades in place instead of needing to be
+ * deleted. Keeping the list declarative (instead of a series of imperative
+ * calls) is what lets us detect "migrations pending" and back the file up
+ * BEFORE touching anything.
  */
-function ensureColumn(database, table, column, definition) {
-  const cols = database.prepare(`PRAGMA table_info(${table})`).all();
-  const exists = cols.some((c) => c.name === column);
-  if (!exists) {
+const MIGRATIONS = [
+  // services — campos originais adicionados após a primeira versão
+  ['services', 'port', 'INTEGER'],
+  ['services', 'public_url', 'TEXT'],
+  ['services', 'scaffolded_directory', 'INTEGER DEFAULT 0'],
+  ['services', 'tunnel_hostname', 'TEXT'],
+  // Receita dedicada do serviço (ver services/serviceRecipes.js). Nulo para
+  // serviços antigos — o rótulo/ícone é então derivado do campo `type`.
+  ['services', 'recipe', 'TEXT'],
+  // Healthcheck por serviço: quando habilitado, o watchdog também confere se
+  // o serviço está respondendo (e não apenas se o processo está vivo).
+  ['services', 'healthcheck_url', 'TEXT'],
+  ['services', 'healthcheck_interval', 'INTEGER DEFAULT 30'],
+  ['services', 'healthcheck_timeout', 'INTEGER DEFAULT 5'],
+  ['services', 'healthcheck_enabled', 'INTEGER DEFAULT 0'],
+  // Limites de recurso aplicados também a PROCESSOS (não só a containers).
+  // memory_limit em MB e cpu_limit em núcleos são best-effort no processo.
+  ['services', 'process_memory_limit', 'INTEGER'],
+  ['services', 'process_cpu_limit', 'REAL'],
+  // Campos do driver Docker (ver serviceDriverRegistry.js) — todos
+  // nulos/com default, então serviços existentes continuam intactos como
+  // runtime_type='process' e nunca tocam nessas colunas.
+  ['services', 'runtime_type', "TEXT DEFAULT 'process'"],
+  ['services', 'docker_host_id', 'INTEGER'],
+  ['services', 'image', 'TEXT'],
+  ['services', 'container_id', 'TEXT'],
+  ['services', 'volumes', "TEXT DEFAULT '[]'"],
+  ['services', 'docker_networks', "TEXT DEFAULT '[]'"],
+  ['services', 'docker_ports', "TEXT DEFAULT '[]'"],
+  ['services', 'cpu_limit', 'REAL'],
+  ['services', 'memory_limit', 'INTEGER'],
+  // Initial config per-service: git, main file, node packages, args, auto-update, uploads
+  ['services', 'git_repo', 'TEXT'],
+  ['services', 'git_branch', 'TEXT'],
+  ['services', 'git_username', 'TEXT'],
+  ['services', 'git_token', 'TEXT'],
+  ['services', 'main_file', 'TEXT'],
+  ['services', 'node_packages', 'TEXT'],
+  ['services', 'unnode_packages', 'TEXT'],
+  ['services', 'node_args', 'TEXT'],
+  ['services', 'auto_update', 'INTEGER DEFAULT 0'],
+  ['services', 'allow_file_uploads', 'INTEGER DEFAULT 0'],
+  /**
+   * `desired_state` separa o que o usuário QUER ('running'/'stopped') do
+   * que está acontecendo agora (`status`).
+   *
+   * Sem essa separação o auto-resume anunciado no README nunca funcionava:
+   * o desligamento gracioso gravava status='stopped' em todos os serviços,
+   * e o restoreAll() do boot seguinte procurava justamente por
+   * status='running' — ou seja, não encontrava nada. Os serviços só
+   * voltavam sozinhos quando o painel morria de forma abrupta (sem chance
+   * de gravar 'stopped'), que é o oposto do comportamento esperado.
+   *
+   * Serviços já existentes herdam desired_state a partir do status atual.
+   */
+  ['services', 'desired_state', "TEXT DEFAULT 'stopped'"],
+  // ── Setup bootstrap (Etapa 2+) ─────────────────────────────────────
+  // Comando de inicialização explícito (sobrepõe inferência por main_file).
+  ['services', 'startup_command', 'TEXT'],
+  // Estado do último setup executado (para UI mostrar progresso/erro).
+  ['services', 'setup_status', "TEXT DEFAULT 'idle'"],
+  ['services', 'setup_step', "TEXT DEFAULT 'idle'"],
+  ['services', 'setup_progress', 'INTEGER DEFAULT 0'],
+  ['services', 'setup_error', "TEXT DEFAULT ''"],
+  ['services', 'setup_started_at', 'DATETIME'],
+  ['services', 'setup_finished_at', 'DATETIME'],
+  // db_instances — adições posteriores
+  ['db_instances', 'port', 'INTEGER'],
+  ['db_instances', 'public_url', 'TEXT'],
+  ['db_instances', 'tunnel_hostname', 'TEXT'],
+];
+
+function collectPendingMigrations(database) {
+  const pending = [];
+  for (const [table, column, definition] of MIGRATIONS) {
+    const cols = database.prepare(`PRAGMA table_info(${table})`).all();
+    if (!cols.some((c) => c.name === column)) {
+      pending.push([table, column, definition]);
+    }
+  }
+  return pending;
+}
+
+/**
+ * Copia o arquivo do banco ANTES de aplicar migrações num banco que já
+ * existia. Um ADD COLUMN é seguro na prática, mas é exatamente a hora em
+ * que um bug vira perda de dados sem volta — e o arquivo é pequeno, então
+ * o custo é irrisório. Mantém só os 3 backups mais recentes.
+ * (Banco recém-criado não tem arquivo nem nada a perder: nada a copiar.)
+ */
+function backupDatabaseBeforeMigration(pendingCount) {
+  const src = config.DB_PATH;
+  if (!fs.existsSync(src)) return null;
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const dest = `${src}.mig-backup-${stamp}`;
+  fs.copyFileSync(src, dest);
+  console.log(`  🛟 backup pré-migração em ${dest} (${pendingCount} coluna(s) a adicionar)`);
+
+  const prefix = `${path.basename(src)}.mig-backup-`;
+  const backups = fs
+    .readdirSync(path.dirname(src))
+    .filter((f) => f.startsWith(prefix))
+    .sort();
+  while (backups.length > 3) {
+    const oldest = backups.shift();
+    try {
+      fs.unlinkSync(path.join(path.dirname(src), oldest));
+    } catch {
+      /* sem permissão/arquivo sumiu — retenção é best-effort */
+    }
+  }
+  return dest;
+}
+
+function applyMigrations(database, pending) {
+  for (const [table, column, definition] of pending) {
     database.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
     console.log(`  ↳ migração: adicionada coluna ${table}.${column}`);
   }
 }
 
 async function initDB() {
+  // Dois painéis sobre o mesmo panel.db sobrescrevem os dados um do outro
+  // a cada flush (o sql.js reserializa o arquivo inteiro, sem coordenação
+  // de escritores). O lock exclusivo torna esse erro latente explícito e
+  // cedo, com a remediação na própria mensagem (dbLock.js).
+  releaseDbLock = acquireDbLock(config.DB_PATH);
   db = await openDatabase(config.DB_PATH);
   db.pragma('foreign_keys = ON');
 
@@ -131,77 +255,24 @@ async function initDB() {
   `);
 
   // ── Migrations (safe on both a fresh DB and an existing one) ────────────
-  ensureColumn(db, 'services', 'port', 'INTEGER');
-  ensureColumn(db, 'services', 'public_url', 'TEXT');
-  ensureColumn(db, 'services', 'scaffolded_directory', 'INTEGER DEFAULT 0');
-  ensureColumn(db, 'services', 'tunnel_hostname', 'TEXT');
-  // Receita dedicada do serviço (ver services/serviceRecipes.js). Nulo para
-  // serviços antigos — o rótulo/ícone é então derivado do campo `type`.
-  ensureColumn(db, 'services', 'recipe', 'TEXT');
-  // Healthcheck por serviço: quando habilitado, o watchdog também confere se
-  // o serviço está respondendo (e não apenas se o processo está vivo).
-  ensureColumn(db, 'services', 'healthcheck_url', 'TEXT');
-  ensureColumn(db, 'services', 'healthcheck_interval', 'INTEGER DEFAULT 30');
-  ensureColumn(db, 'services', 'healthcheck_timeout', 'INTEGER DEFAULT 5');
-  ensureColumn(db, 'services', 'healthcheck_enabled', 'INTEGER DEFAULT 0');
-  // Limites de recurso aplicados também a PROCESSOS (não só a containers).
-  // memory_limit em MB e cpu_limit em núcleos são best-effort no processo.
-  ensureColumn(db, 'services', 'process_memory_limit', 'INTEGER');
-  ensureColumn(db, 'services', 'process_cpu_limit', 'REAL');
+  // Lista declarativa em MIGRATIONS (topo do arquivo). Detectar o que falta
+  // ANTES de tocar em qualquer coluna é o que permite copiar o arquivo do
+  // banco como estava (backup pré-migração) — sem backup, um bug numa
+  // migração futura vira perda de dados sem volta.
+  const pendingMigrations = collectPendingMigrations(db);
+  if (pendingMigrations.length > 0) {
+    backupDatabaseBeforeMigration(pendingMigrations.length);
+    applyMigrations(db, pendingMigrations);
+  }
 
-  // Campos do driver Docker (ver serviceDriverRegistry.js) — todos
-  // nulos/com default, então serviços existentes continuam intactos como
-  // runtime_type='process' e nunca tocam nessas colunas.
-  ensureColumn(db, 'services', 'runtime_type', "TEXT DEFAULT 'process'");
-  ensureColumn(db, 'services', 'docker_host_id', 'INTEGER');
-  ensureColumn(db, 'services', 'image', 'TEXT');
-  ensureColumn(db, 'services', 'container_id', 'TEXT');
-  ensureColumn(db, 'services', 'volumes', "TEXT DEFAULT '[]'");
-  ensureColumn(db, 'services', 'docker_networks', "TEXT DEFAULT '[]'");
-  ensureColumn(db, 'services', 'docker_ports', "TEXT DEFAULT '[]'");
-  ensureColumn(db, 'services', 'cpu_limit', 'REAL');
-  ensureColumn(db, 'services', 'memory_limit', 'INTEGER');
-  // Initial config per-service: git, main file, node packages, args, auto-update, uploads
-  ensureColumn(db, 'services', 'git_repo', 'TEXT');
-  ensureColumn(db, 'services', 'git_branch', 'TEXT');
-  ensureColumn(db, 'services', 'git_username', 'TEXT');
-  ensureColumn(db, 'services', 'git_token', 'TEXT');
-  ensureColumn(db, 'services', 'main_file', 'TEXT');
-  ensureColumn(db, 'services', 'node_packages', 'TEXT');
-  ensureColumn(db, 'services', 'unnode_packages', 'TEXT');
-  ensureColumn(db, 'services', 'node_args', 'TEXT');
-  ensureColumn(db, 'services', 'auto_update', 'INTEGER DEFAULT 0');
-  ensureColumn(db, 'services', 'allow_file_uploads', 'INTEGER DEFAULT 0');
-
-  /**
-   * `desired_state` separa o que o usuário QUER ('running'/'stopped') do
-   * que está acontecendo agora (`status`).
-   *
-   * Sem essa separação o auto-resume anunciado no README nunca funcionava:
-   * o desligamento gracioso gravava status='stopped' em todos os serviços,
-   * e o restoreAll() do boot seguinte procurava justamente por
-   * status='running' — ou seja, não encontrava nada. Os serviços só
-   * voltavam sozinhos quando o painel morria de forma abrupta (sem chance
-   * de gravar 'stopped'), que é o oposto do comportamento esperado.
-   *
-   * Serviços já existentes herdam desired_state a partir do status atual.
-   */
-  ensureColumn(db, 'services', 'desired_state', "TEXT DEFAULT 'stopped'");
+  // Serviços já existentes herdam desired_state a partir do status atual
+  // (a justificativa completa está documentada na entrada da coluna em
+  // MIGRATIONS: sem ela, o auto-resume após shutdown gracioso nunca achava
+  // serviço nenhum para retomar).
   db.exec(`
     UPDATE services SET desired_state = CASE WHEN status = 'running' THEN 'running' ELSE 'stopped' END
     WHERE desired_state IS NULL OR desired_state = ''
   `);
-
-  // ── Setup bootstrap (Etapa 2+) ─────────────────────────────────────
-  // Comando de inicialização explícito (sobrepõe inferência por main_file).
-  ensureColumn(db, 'services', 'startup_command', 'TEXT');
-  // Estado do último setup executado (para UI mostrar progresso/erro).
-  ensureColumn(db, 'services', 'setup_status', "TEXT DEFAULT 'idle'");
-  ensureColumn(db, 'services', 'setup_step', "TEXT DEFAULT 'idle'");
-  ensureColumn(db, 'services', 'setup_progress', 'INTEGER DEFAULT 0');
-  ensureColumn(db, 'services', 'setup_error', 'TEXT DEFAULT \'\'');
-  ensureColumn(db, 'services', 'setup_started_at', 'DATETIME');
-  ensureColumn(db, 'services', 'setup_finished_at', 'DATETIME');
 
   // Logs de setup por serviço (clone/install/build) — ficam persistidos
   // pra poder reabrir o serviço depois e ver o que aconteceu.
@@ -215,10 +286,6 @@ async function initDB() {
     );
     CREATE INDEX IF NOT EXISTS idx_setup_logs_service ON setup_logs(service_id, id);
   `);
-
-  ensureColumn(db, 'db_instances', 'port', 'INTEGER');
-  ensureColumn(db, 'db_instances', 'public_url', 'TEXT');
-  ensureColumn(db, 'db_instances', 'tunnel_hostname', 'TEXT');
 
   // Tunnels don't survive a panel restart (cloudflared isn't running
   // anymore), so any public_url left over from before this boot is stale —
@@ -267,4 +334,27 @@ async function initDB() {
   return db;
 }
 
-module.exports = { initDB, getDB };
+/**
+ * Fecha o banco (com flush final) e libera o lock exclusivo. Usado pelos
+ * testes de integração e pelo desligamento gracioso do servidor.
+ */
+function closeDB() {
+  try {
+    if (db) db.close();
+  } finally {
+    db = null;
+    if (releaseDbLock) {
+      releaseDbLock();
+      releaseDbLock = null;
+    }
+  }
+}
+
+module.exports = {
+  initDB,
+  getDB,
+  closeDB,
+  // Exposto para os testes de migração (tests/migration-backup-test.js) —
+  // não faz parte da API usada pelas rotas.
+  _internal: { MIGRATIONS, collectPendingMigrations, backupDatabaseBeforeMigration },
+};

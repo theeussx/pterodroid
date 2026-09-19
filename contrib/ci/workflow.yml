@@ -1,0 +1,144 @@
+name: CI
+
+# Pipeline oficial do Pterodroid (Fase 0, WP-01 — ver
+# docs/VALIDACAO-E-PLANO-FASE-0.md). Todo push no main e todo PR roda:
+# testes do backend (Node 20.19 e 22), build do frontend, build da
+# documentação, ShellCheck nos scripts, pré-voo do doctor numa instalação
+# limpa e build da imagem Docker com prova de que o painel NÃO roda como
+# root (regressão do achado D1 — entrypoint que executava como root).
+#
+# ATENÇÃO — local canônico deste arquivo:
+#   .github/workflows/ci.yml
+# Ele está versionado aqui em contrib/ci/ porque o token da integração que
+# gerou esta branch não tem a permissão "workflows" para publicar em
+# .github/. Para ativar, veja contrib/ci/README.md.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CI: true
+
+jobs:
+  backend-tests:
+    name: Backend — testes (Node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        # Piso declarado no engines (>=20.19.0) + linha atual LTS.
+        node: ['20.19.0', '22.x']
+    defaults:
+      run:
+        working-directory: apps/backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+          cache-dependency-path: apps/backend/package-lock.json
+      - run: npm ci
+      - run: npm test
+
+  frontend-build:
+    name: Frontend — build de produção
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: apps/frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          # Vite 8 exige ^20.19.0 || >=22.12.0 (ver engines do frontend).
+          node-version: '22.x'
+          cache: npm
+          cache-dependency-path: apps/frontend/package-lock.json
+      - run: npm ci
+      - run: npm run build
+      - run: test -f dist/index.html
+
+  docs-build:
+    name: Documentação — build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: apps/documentation
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.x'
+          cache: npm
+          cache-dependency-path: apps/documentation/package-lock.json
+      - run: npm ci
+      - run: npm run build
+
+  shellcheck:
+    name: Scripts shell — ShellCheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Instala o ShellCheck
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
+      - name: Analisa todos os scripts
+        run: shellcheck -S warning panelctl.sh install-linux.sh install-termux.sh install-ubuntu-proot.sh entrypoint.sh contrib/*.sh apps/backend/tests/run-all.sh apps/backend/tests/smoke-test.sh
+
+  doctor-standalone:
+    name: Pré-voo — doctor em instalação limpa
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.x'
+          cache: npm
+          cache-dependency-path: apps/backend/package-lock.json
+      # De propósito SEM build do frontend: o doctor deve passar com avisos,
+      # não com falha — é o cenário de uma instalação acabada de clonar.
+      - run: npm ci --prefix apps/backend
+      - run: ./panelctl.sh doctor
+
+  docker-build:
+    name: Docker — build, execução não-root e compose válido
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build da imagem
+        run: docker build -t pterodroid:ci .
+
+      - name: Compose válido
+        run: docker compose config --quiet
+
+      - name: Painel nunca executa como root (regressão do achado D1)
+        run: |
+          uid="$(docker run --rm pterodroid:ci id -u)"
+          echo "uid dentro do container: $uid"
+          test "$uid" = "1000"
+
+      - name: Sobrevida: sobe, responde ao healthcheck e roda como node
+        run: |
+          docker run -d --name ptero-ci -e JWT_SECRET=ci pterodroid:ci
+          out=""
+          for _ in $(seq 1 60); do
+            out="$(docker exec ptero-ci curl -fsS http://127.0.0.1:3001/api/health 2>/dev/null)" && break
+            sleep 1
+          done
+          echo "$out"
+          echo "$out" | grep -q '"ok":true'
+          test "$(docker exec ptero-ci id -u)" = "1000"
+          docker rm -f ptero-ci

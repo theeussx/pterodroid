@@ -5,7 +5,7 @@ const path = require('path');
 const fs = require('fs');
 
 const config = require('./config');
-const { initDB, getDB } = require('./db');
+const { initDB, getDB, closeDB } = require('./db');
 const { setupSockets } = require('./sockets');
 const driver = require('./services/serviceDriverRegistry');
 const dockerHostManager = require('./services/dockerHostManager');
@@ -192,7 +192,10 @@ async function main() {
       console.error('Erro durante o desligamento:', e.message);
     }
 
-    try { getDB().flush(); } catch (e) { console.error('Erro ao gravar o banco:', e.message); }
+    // closeDB() faz o flush final, fecha o banco e libera o lock exclusivo
+    // do panel.db (dbLock.js) — sem isso o próximo boot esperaria expirar
+    // um lock cujo PID acabou de morrer (recuperável, mas evitável).
+    try { closeDB(); } catch (e) { console.error('Erro ao gravar o banco:', e.message); }
     console.log('Até logo.');
     process.exit(0);
   };

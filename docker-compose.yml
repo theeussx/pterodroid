@@ -15,8 +15,11 @@ services:
       # entre um volume nomeado e um bind, e o panel.db acabava escondido
       # dentro do volume.
       - ./data:/data
-      # Necessário para o painel gerenciar containers no host.
-      # Remova esta linha se você só vai rodar serviços como processo.
+      # ⚠ PRIVILEGIADO: gerenciar containers no host. Montar este socket dá
+      # ao painel controle equivalente ao de root sobre o Docker do host.
+      # Remova esta linha se você só vai rodar serviços como processo local
+      # (o painel continua funcionando sem Docker). Veja a seção "Docker
+      # socket" no README.
       - /var/run/docker.sock:/var/run/docker.sock
 
     environment:
@@ -30,14 +33,10 @@ services:
       HOST_WORKSPACES_ROOT: "${PWD}/data/workspaces"
       TZ: "${TZ:-America/Sao_Paulo}"
 
-    # O socket do Docker pertence ao grupo `docker` do host. Entrar nesse
-    # grupo é bem mais seguro do que rodar o container inteiro como root
-    # (que era o que o compose fazia antes, anulando o usuário sem
-    # privilégios criado no Dockerfile).
-    # No ambiente atual o GID do grupo docker é 989; se seu host usar outro
-    # valor, defina DOCKER_GID explicitamente antes de subir o compose.
-    group_add:
-      - "${DOCKER_GID:-989}"
+    # O painel roda como usuário `node` (uid 1000) — o entrypoint descobre
+    # sozinho, em runtime, o GID do /var/run/docker.sock montado e o aplica
+    # como grupo suplementar. Nenhuma configuração de DOCKER_GID é
+    # necessária, e o container nunca executa o painel como root.
 
     restart: unless-stopped
 
