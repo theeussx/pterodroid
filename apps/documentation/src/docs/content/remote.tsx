@@ -21,8 +21,10 @@ export const cloudflare: DocPage = {
       <H2 id="visao-geral">Visão geral</H2>
       <P>
         O Pterodroid integra-se ao <strong>Cloudflare Tunnel</strong> (<C>cloudflared</C>) para expor o painel e seus
-        serviços à internet de forma segura, <strong>sem abrir portas no roteador</strong>. Instale o binário (no
-        Termux: <C>pkg install cloudflared</C>) ou aponte <C>CLOUDFLARED_BIN</C> para o caminho dele.
+        serviços à internet de forma segura, <strong>sem abrir portas no roteador</strong>. Os instaladores oficiais já
+        instalam o binário correto para a sua arquitetura; numa instalação manual, use{' '}
+        <C>pkg install cloudflared</C> (Termux) ou o .deb/.rpm/binário oficial (Linux), ou aponte{' '}
+        <C>CLOUDFLARED_BIN</C> para o caminho dele.
       </P>
       <Callout type="danger" title="Antes de expor o painel">
         <p>

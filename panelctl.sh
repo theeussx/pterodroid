@@ -13,6 +13,23 @@ LOG_FILE="$RUN_DIR/panel.out.log"
 
 mkdir -p "$RUN_DIR"
 
+# O painel (e o build do frontend, Vite 8) exige Node 20.19+ ou 22.12+.
+# Sem esta checagem, quem instalou o `nodejs` do apt do Ubuntu (18.x)
+# ganha um erro críptico depois — aqui o aviso vem antes, com a solução.
+node_ok() {
+  command -v node >/dev/null 2>&1 || return 1
+  local ver rest major minor
+  ver="$(node --version 2>/dev/null | sed 's/^v//')" || return 1
+  major="${ver%%.*}"
+  rest="${ver#*.}"
+  minor="${rest%%.*}"
+  [[ "$major" =~ ^[0-9]+$ ]] && [[ "$minor" =~ ^[0-9]+$ ]] || return 1
+  if [ "$major" -gt 22 ]; then return 0; fi
+  if [ "$major" -eq 22 ] && [ "$minor" -ge 12 ]; then return 0; fi
+  if [ "$major" -eq 20 ] && [ "$minor" -ge 19 ]; then return 0; fi
+  return 1
+}
+
 is_running() {
   [ -f "$PID_FILE" ] && kill -0 "$(cat "$PID_FILE")" 2>/dev/null
 }
@@ -21,6 +38,15 @@ cmd_start() {
   if is_running; then
     echo "Já está rodando (pid $(cat "$PID_FILE"))."
     exit 0
+  fi
+
+  if ! node_ok; then
+    echo "Erro: Node.js $(node --version 2>/dev/null || echo '(não instalado)') — o Pterodroid exige Node 20.19+ ou 22.12+."
+    echo "      Rode o instalador do seu ambiente para corrigir:"
+    echo "        Linux (PC/VPS/Raspberry Pi): ./install-linux.sh"
+    echo "        Termux (Android):            ./install-termux.sh"
+    echo "        Ubuntu proot:                ./install-ubuntu-proot.sh"
+    exit 1
   fi
 
   # Avisa cedo em vez de deixar a pessoa abrir o navegador e ver uma

@@ -133,8 +133,9 @@ export const desenvolvimento: DocPage = {
 │   ├── frontend/         # React + Vite + Tailwind v3
 │   └── documentation/    # site de documentação (este site)
 ├── docs/                 # AUDITORIA.md, RELATORIO.md
-├── install-termux.sh     # instalador Termux
-├── install-ubuntu-proot.sh
+├── install-linux.sh      # instalador Linux (PC/VPS/Raspberry Pi)
+├── install-termux.sh     # instalador Termux (Android)
+├── install-ubuntu-proot.sh  # instalador Ubuntu proot (Android)
 ├── panelctl.sh           # start|stop|restart|status|logs
 ├── Dockerfile / docker-compose.yml / .dockerignore
 ├── .env.example          # referência de configuração

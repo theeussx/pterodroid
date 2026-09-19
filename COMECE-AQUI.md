@@ -28,7 +28,22 @@ chmod +x install-termux.sh panelctl.sh
 Acesse `http://localhost:3001` no navegador do celular. De outro aparelho na
 mesma rede, use `http://<ip-do-celular>:3001`.
 
-### B) Linux / Ubuntu-proot
+### B) Linux — PC, VPS, Raspberry Pi (instalador oficial)
+
+```bash
+cd pterodroid
+chmod +x install-linux.sh panelctl.sh
+./install-linux.sh
+./panelctl.sh start
+```
+
+Funciona em Debian/Ubuntu, Fedora/RHEL, Arch, openSUSE e derivados (x86_64 e
+ARM). O script instala o **Node.js 22 LTS** sozinho quando preciso, além do
+`cloudflared` da arquitetura certa — não instale o `nodejs` via `apt` (é o
+Node 18 e quebra o build do frontend). Opções não interativas:
+`./install-linux.sh --yes --with-postgres` (veja `--help`).
+
+### C) Ubuntu proot (Android)
 
 ```bash
 cd pterodroid
@@ -37,7 +52,10 @@ chmod +x install-ubuntu-proot.sh panelctl.sh
 ./panelctl.sh start
 ```
 
-### C) Docker
+O instalador garante o Node 22 LTS via NodeSource — pelo mesmo motivo acima,
+não use o `nodejs` do `apt` do proot.
+
+### D) Docker
 
 ```bash
 cd pterodroid
@@ -51,7 +69,10 @@ docker compose up -d --build
 docker compose ps        # deve mostrar "healthy"
 ```
 
-### Manual (qualquer sistema com Node 18+)
+### Manual (qualquer sistema com Node 22 LTS)
+
+Mínimo: Node **20.19** / **22.12** (exigência do Vite 8). Use NodeSource,
+`nvm` ou o binário oficial — **não** o `nodejs` do `apt` (Node 18).
 
 ```bash
 cd pterodroid/apps/frontend && npm install && npm run build
@@ -78,7 +99,7 @@ cloudflared:
 
 | Instalação | Caminho |
 |---|---|
-| Termux / Linux | `data/` |
+| Termux / proot / Linux | `data/` |
 | Docker | `./data/` (na raiz do projeto) |
 
 Cada serviço ganha um diretório exclusivo em `data/workspaces/<nome-do-serviço>`.
@@ -113,9 +134,13 @@ São mais de 160 testes. Não exigem Docker instalado e não tocam num painel re
 1. **Veja o log primeiro:** `./panelctl.sh logs` (ou `docker compose logs -f`).
 2. **Interface em branco?** O frontend não foi compilado:
    `cd apps/frontend && npm install && npm run build`
-3. **Docker: painel não enxerga os containers?** O `DOCKER_GID` provavelmente
+3. **Build falha com `styleText` / `EBADENGINE`?** Seu Node é o 18 (do `apt`).
+   Rode o instalador oficial do seu ambiente (`install-linux.sh`,
+   `install-ubuntu-proot.sh` ou `install-termux.sh`) para obter o Node 22 LTS,
+   depois recompile o frontend.
+4. **Docker: painel não enxerga os containers?** O `DOCKER_GID` provavelmente
    está errado. Confira com `getent group docker | cut -d: -f3` e ajuste o `.env`.
-4. **Porta 3001 ocupada?** Defina `PORT=3002` no `apps/backend/.env` (ou no `.env` da
+5. **Porta 3001 ocupada?** Defina `PORT=3002` no `apps/backend/.env` (ou no `.env` da
    raiz, no caso do Docker).
 
 Os pontos que **não puderam ser testados** no ambiente onde este código foi

@@ -46,12 +46,13 @@ export const troubleshooting: DocPage = {
   slug: 'troubleshooting',
   title: 'Troubleshooting',
   description: 'Central de problemas do Pterodroid: sintomas, causa provável, solução e comandos para cada caso.',
-  keywords: ['erro', 'não inicia', 'porta ocupada', 'página em branco', 'DOCKER_GID', 'wake lock', 'logs', 'upload falha', 'cloudflared', 'container', 'debug'],
+  keywords: ['erro', 'não inicia', 'porta ocupada', 'página em branco', 'DOCKER_GID', 'wake lock', 'logs', 'upload falha', 'cloudflared', 'container', 'debug', 'styleText', 'EBADENGINE', 'node 18', 'vite', 'build falha'],
   sourcePath: 'apps/documentation/src/docs/content/help.tsx',
   sections: [
     { id: 'coletar-logs', title: 'Antes de tudo: colete os logs' },
     { id: 'painel-nao-inicia', title: 'Painel não inicia' },
     { id: 'pagina-em-branco', title: 'Interface em branco' },
+    { id: 'build-falha-node', title: 'Build falha (Node antigo / styleText)' },
     { id: 'porta-ocupada', title: 'Porta 3001 ocupada' },
     { id: 'docker-nao-encontrado', title: 'Painel não enxerga o Docker' },
     { id: 'container-sem-arquivos', title: 'Container sobe sem os arquivos' },
@@ -90,6 +91,15 @@ docker compose logs -f    # logs do container do painel`} />
         cause="O frontend não foi compilado — o backend serve apps/frontend/dist, que não existe ainda. O panelctl.sh avisa sobre isso no start."
         solution={<>Compile o frontend e recarregue a página.</>}
         commands={{ code: `cd apps/frontend && npm install && npm run build`, platform: 'qualquer' }}
+      />
+
+      <Problem
+        id="build-falha-node"
+        title="Build do frontend falha (EBADENGINE / styleText)"
+        symptoms="O npm run build quebra com “SyntaxError: The requested module 'node:util' does not provide an export named 'styleText'”, geralmente acompanhado de vários avisos EBADENGINE Unsupported engine (pacotes pedindo ^20.19.0 || >=22.12.0, ambiente com v18.x)."
+        cause="Node.js 18 — quase sempre vindo do apt install nodejs do Debian/Ubuntu. O frontend usa Vite 8, que exige Node 20.19+ ou 22.12+."
+        solution={<>Instale o Node 22 LTS. O caminho mais simples é rodar o instalador oficial do seu ambiente (ele garante a versão certa <strong>antes</strong> do build) e depois recompilar o frontend.</>}
+        commands={{ code: `node --version   # precisa ser 20.19+ ou 22.12+\n\n./install-linux.sh         # Linux: PC, VPS, Raspberry Pi\n./install-ubuntu-proot.sh  # Ubuntu proot (Android)\n./install-termux.sh        # Termux (rode pkg upgrade antes, se preciso)\n\ncd apps/frontend && npm install && npm run build`, platform: 'termux/linux' }}
       />
 
       <Problem
@@ -173,9 +183,9 @@ docker compose up -d --build        # recrie após ajustar`, platform: 'host' }}
         id="banco-nao-inicia"
         title="Instância de banco de dados não inicia"
         symptoms="O status fica em erro/provisionamento e a aba de logs mostra falha do postgres/mysql logo após o start."
-        cause="Binário do banco ausente (pkg/apt não instalou), porta ocupada, diretório de dados com permissão errada — ou execução como root (PostgreSQL/MariaDB recusam)."
-        solution={<>Instale o binário (<C>pkg install postgresql</C> / <C>mariadb</C>), confirme a porta livre e rode o painel como usuário comum. Veja o <DocLink to="/docs/bancos">guia de bancos</DocLink>.</>}
-        commands={{ code: `pkg install postgresql mariadb -y   # Termux\npg_lsclusters 2>/dev/null || true\n./panelctl.sh logs`, platform: 'termux' }}
+        cause="Binário do banco ausente (o instalador não marcou a opção), porta ocupada, diretório de dados com permissão errada — ou execução como root (PostgreSQL/MariaDB recusam)."
+        solution={<>Instale o binário, confirme a porta livre e rode o painel como usuário comum. Veja o <DocLink to="/docs/bancos">guia de bancos</DocLink>.</>}
+        commands={{ code: `pkg install postgresql mariadb -y                  # Termux\nsudo apt install postgresql mariadb-server -y      # Debian/Ubuntu\nsudo dnf install postgresql-server mariadb-server -y  # Fedora\n./panelctl.sh logs`, platform: 'termux/linux' }}
       />
 
       <Callout type="note" title="Ainda travado?">
@@ -214,7 +224,7 @@ export const faq: DocPage = {
   title: 'Perguntas frequentes (FAQ)',
   navLabel: 'FAQ',
   description: 'Respostas diretas: root, Docker, Termux, Windows, bots de Discord, domínios próprios, backup e mais.',
-  keywords: ['root', 'windows', 'discord bot', 'api', 'domínio', 'backup', 'dados', 'remoto', 'multi-usuário', 'sem docker'],
+  keywords: ['root', 'windows', 'discord bot', 'api', 'domínio', 'backup', 'dados', 'remoto', 'multi-usuário', 'sem docker', 'node', 'versão do node', 'vps', 'raspberry pi'],
   sourcePath: 'apps/documentation/src/docs/content/help.tsx',
   sections: [{ id: 'perguntas', title: 'Perguntas' }],
   render: () => (
@@ -239,6 +249,20 @@ export const faq: DocPage = {
             <strong>Sim — é o ambiente principal do projeto.</strong> Toda a stack foi escolhida para evitar
             compilação nativa justamente para funcionar no Termux (SQLite via WASM, bcryptjs puro-JS etc.). Guia:{' '}
             <DocLink to="/docs/termux">Instalação no Termux</DocLink>.
+          </p>
+        </FaqItem>
+        <FaqItem q="Qual versão do Node.js eu preciso?">
+          <p>
+            <strong>Node 22 LTS</strong> (mínimo: 20.19 / 22.12 — exigência do Vite 8). Os instaladores oficiais
+            garantem isso sozinhos. O <C>nodejs</C> do apt das distros (Node 18) <strong>não serve</strong> e quebra o
+            build do frontend — veja <DocLink to="/docs/troubleshooting">Troubleshooting</DocLink>.
+          </p>
+        </FaqItem>
+        <FaqItem q="Funciona em VPS, Raspberry Pi ou PC com Linux?">
+          <p>
+            <strong>Sim — Linux é oficialmente suportado</strong>, em qualquer distro moderna (Debian/Ubuntu,
+            Fedora/RHEL, Arch, openSUSE), x86_64 ou ARM. Use o <C>install-linux.sh</C>: guia em{' '}
+            <DocLink to="/docs/linux">Instalação no Linux</DocLink>.
           </p>
         </FaqItem>
         <FaqItem q="Funciona no Windows?">

@@ -181,7 +181,7 @@ const PLATFORMS = [
   { icon: BRAND_ICONS.android, name: 'Android', note: 'via Termux ou proot', to: '/docs/termux' },
   { icon: BRAND_ICONS.android, name: 'Termux', note: 'ambiente principal', to: '/docs/termux' },
   { icon: BRAND_ICONS.ubuntu, name: 'Ubuntu Proot', note: 'userland completo', to: '/docs/proot' },
-  { icon: BRAND_ICONS.linux, name: 'Linux', note: 'Node 18+, qualquer distro', to: '/docs/linux' },
+  { icon: BRAND_ICONS.linux, name: 'Linux', note: 'instalador oficial, qualquer distro', to: '/docs/linux' },
   { icon: BRAND_ICONS.docker, name: 'Docker', note: 'compose com healthcheck', to: '/docs/docker' },
   { icon: BRAND_ICONS.raspberrypi, name: 'Raspberry Pi', note: 'ARM sem compilação nativa', to: '/docs/linux' },
   { icon: BRAND_ICONS.cloudflare, name: 'VPS', note: 'manual ou Docker', to: '/docs/linux' },
