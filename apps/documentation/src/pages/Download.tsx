@@ -40,12 +40,12 @@ docker compose up -d --build`,
   {
     icon: BRAND_ICONS.linux,
     name: 'Linux',
-    desc: 'Qualquer distro com Node 18+ — VPS, Raspberry Pi ou desktop.',
+    desc: 'Instalador oficial para qualquer distro — VPS, Raspberry Pi ou desktop.',
     to: '/docs/linux',
     platform: 'linux',
     code: `git clone ${site.repo.clone}
-cd pterodroid/apps/frontend && npm install && npm run build
-cd ../backend && npm install && npm start`,
+cd pterodroid && chmod +x install-linux.sh panelctl.sh
+./install-linux.sh && ./panelctl.sh start`,
   },
 ];
 

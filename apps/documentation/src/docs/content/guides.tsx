@@ -248,8 +248,8 @@ export const bancos: DocPage = {
       </Ul>
       <Callout type="note">
         <p>
-          Os binários do banco (PostgreSQL/MariaDB) precisam estar disponíveis no ambiente — no Termux, instaláveis via{' '}
-          <C>pkg</C>.
+          Os binários do banco (PostgreSQL/MariaDB) precisam estar disponíveis no ambiente — os instaladores oficiais
+          oferecem instalar (<C>pkg</C> no Termux; <C>apt</C>/<C>dnf</C>/<C>pacman</C>/<C>zypper</C> no Linux/proot).
         </p>
       </Callout>
 

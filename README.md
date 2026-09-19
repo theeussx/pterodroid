@@ -24,7 +24,7 @@
 
 ## 📖 Sobre o Projeto
 
-O **Pterodroid** é um inovador painel de hospedagem pessoal, concebido com a inspiração do *Pterodactyl*, mas meticulosamente adaptado para operar em ambientes móveis, especificamente dentro do **Termux** ou de um **Ubuntu proot** em dispositivos Android. Este projeto se destaca por sua leveza e independência de sistemas de inicialização como o `systemd`, oferecendo uma solução robusta para gerenciar seus serviços digitais diretamente do seu smartphone ou tablet.
+O **Pterodroid** é um inovador painel de hospedagem pessoal, concebido com a inspiração do *Pterodactyl*, mas meticulosamente adaptado para operar onde painéis tradicionais não funcionam: **Termux** e **Ubuntu proot** em dispositivos Android, além de **Linux** (PC, VPS, Raspberry Pi) e **Docker**. Este projeto se destaca por sua leveza e independência de sistemas de inicialização como o `systemd`, oferecendo uma solução robusta para gerenciar seus serviços digitais diretamente do seu smartphone, tablet ou servidor.
 
 Com o Pterodroid, você pode facilmente hospedar e gerenciar bots de Discord, APIs personalizadas, sites estáticos e instâncias de bancos de dados, tudo através de uma interface de usuário moderna e intuitiva. É a ferramenta perfeita para desenvolvedores e entusiastas que buscam autonomia e controle sobre seus projetos em um ambiente portátil.
 
@@ -129,7 +129,41 @@ O desenvolvimento do Pterodroid foi guiado pela escolha estratégica de tecnolog
 
 ## 🚀 Guia de Instalação
 
-Siga os passos abaixo para configurar o Pterodroid no seu dispositivo Android ou em um ambiente Docker.
+Siga os passos abaixo para configurar o Pterodroid no seu dispositivo Android, em um servidor Linux ou em um ambiente Docker.
+
+### Instalação em Linux (PC, VPS, Raspberry Pi)
+
+Para Debian/Ubuntu, Fedora/RHEL, Arch, openSUSE e derivados (x86_64 e ARM):
+
+1. **Pré-requisitos:** `git` e uma conta com root ou `sudo`. O resto o instalador providencia.
+
+2. **Clone o repositório:**
+
+   ```bash
+   git clone https://github.com/theeussx/pterodroid.git
+   cd pterodroid
+   ```
+
+3. **Rode o instalador oficial:**
+
+   ```bash
+   chmod +x install-linux.sh panelctl.sh
+   ./install-linux.sh
+   ```
+
+   O script garante o **Node.js 22 LTS** (via NodeSource, se o Node atual não servir), instala o `cloudflared` correto para a sua arquitetura, oferece PostgreSQL/MariaDB (opcional), instala as dependências e **valida o build** do frontend antes de terminar. Para modo não interativo: `./install-linux.sh --yes` (veja `--help`).
+
+   > [!WARNING]O pacote `nodejs` do Debian/Ubuntu é o **Node 18**, e o frontend (Vite 8) exige **Node 20.19+ ou 22.12+** — o build quebra no Node 18 (`SyntaxError: ... 'styleText'`). Não instale o Node via `apt`; deixe o `install-linux.sh` cuidar disso (NodeSource, `nvm` ou binário oficial também valem numa instalação manual).
+
+4. **Inicie o painel:**
+
+   ```bash
+   ./panelctl.sh start
+   ```
+
+   Acesse `http://localhost:3001` no navegador (de outro dispositivo na mesma rede: `http://<ip-da-maquina>:3001`).
+
+   > [!NOTE]O painel roda como root, mas **PostgreSQL e MariaDB recusam rodar como root** — o instalador oferece criar um usuário comum. Serviços em container precisam do Docker Engine e do usuário no grupo `docker`; processos locais e bancos funcionam sem Docker.
 
 ### Instalação em Ambiente Docker
 

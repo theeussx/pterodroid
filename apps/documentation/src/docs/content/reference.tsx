@@ -93,7 +93,7 @@ export const compatibilidade: DocPage = {
   title: 'Matriz de compatibilidade',
   navLabel: 'Compatibilidade',
   description: 'O que é suportado em cada ambiente (Termux, proot, Linux, Docker, ARM/x86), versões de Node, recursos mínimos e limitações por plataforma.',
-  keywords: ['compatibilidade', 'android', 'termux', 'proot', 'linux', 'raspberry pi', 'arm', 'x86', 'windows', 'node 18', 'node 20', 'docker', 'recursos mínimos', 'memória', 'armazenamento'],
+  keywords: ['compatibilidade', 'android', 'termux', 'proot', 'linux', 'raspberry pi', 'arm', 'x86', 'windows', 'node 22', 'node 20', 'docker', 'recursos mínimos', 'memória', 'armazenamento'],
   sourcePath: 'apps/documentation/src/docs/content/reference.tsx',
   sections: [
     { id: 'ambientes', title: 'Ambientes suportados' },
@@ -109,9 +109,9 @@ export const compatibilidade: DocPage = {
         rows={[
           ['Android / Termux', <strong key="1">Oficial (principal)</strong>, <>Sem root, sem systemd. Docker <strong>não</strong> roda; use serviços como processo local.</>],
           ['Android / Ubuntu proot', <strong key="2">Oficial</strong>, <>Userland Ubuntu dentro do Termux; sem Docker; I/O mais lento (tradução de syscalls).</>],
-          ['Linux (Debian/Ubuntu/Fedora/Arch…)', <strong key="3">Oficial</strong>, 'Método manual com Node 18+ ou container Docker.'],
-          ['Raspberry Pi (ARM64/ARMv7)', <strong key="4">Oficial</strong>, 'Sem dependências de compilação nativa — a stack foi escolhida para ARM.'],
-          ['Docker (VPS/homelab/PC)', <strong key="5">Oficial</strong>, 'Imagem Alpine + Node 20, healthcheck embutido; gerencia containers do host via docker.sock.'],
+          ['Linux (Debian/Ubuntu/Fedora/Arch…)', <strong key="3">Oficial</strong>, <>Instalador próprio (<C>install-linux.sh</C>, com Node 22 LTS automático), método manual ou container Docker.</>],
+          ['Raspberry Pi (ARM64/ARMv7)', <strong key="4">Oficial</strong>, 'Sem dependências de compilação nativa — a stack foi escolhida para ARM; use o install-linux.sh.'],
+          ['Docker (VPS/homelab/PC)', <strong key="5">Oficial</strong>, 'Imagem Alpine + Node 22, healthcheck embutido; gerencia containers do host via docker.sock.'],
           ['Windows', <C key="6">Não suportado</C>, 'Docker Desktop/WSL é experimental; nenhum script oficial.'],
         ]}
       />
@@ -119,7 +119,7 @@ export const compatibilidade: DocPage = {
       <H2 id="arquiteturas">Arquiteturas e versões</H2>
       <Ul>
         <li><strong>x86_64 e ARM (aarch64/armv7):</strong> suportados. As dependências são instaladas na própria plataforma (por isso o pacote não inclui <C>node_modules</C>).</li>
-        <li><strong>Node.js:</strong> 18+ para o método manual (testado na prática com Node 20/22). No Termux, instale o pacote LTS (<C>nodejs-lts</C>); a imagem Docker usa Node 20 Alpine.</li>
+        <li><strong>Node.js:</strong> 22 LTS (mínimo 20.19 / 22.12 — exigência do Vite 8). Os instaladores Linux/proot garantem essa versão sozinhos; o <C>nodejs</C> do apt (Node 18) <strong>não serve</strong> e quebra o build. No Termux, o pacote <C>nodejs-lts</C> já atende; a imagem Docker usa Node 22 Alpine.</li>
         <li><strong>SQLite via WASM, bcryptjs puro-JS:</strong> nenhum módulo compilado nativamente — é o que permite ARM e Termux.</li>
       </Ul>
 
@@ -139,8 +139,8 @@ export const compatibilidade: DocPage = {
       <DocTable
         head={['Recurso', 'O que instalar', 'Onde']}
         rows={[
-          ['Acesso remoto', <C key="1">cloudflared</C>, <><C>pkg install cloudflared</C> (Termux), <C>apt install cloudflared</C> ou binário oficial (Linux).</>],
-          ['Bancos de dados', <><C>postgresql</C> / <C>mariadb</C></>, 'pkg (Termux) ou apt (proot/Linux). Sem eles, a área de bancos mostra "não instalado".'],
+          ['Acesso remoto', <C key="1">cloudflared</C>, <>Instalado automaticamente pelos instaladores (Termux, proot e Linux — binário da arquitetura certa). Manual: <C>pkg install cloudflared</C> (Termux) ou .deb/.rpm/binário oficial (Linux).</>],
+          ['Bancos de dados', <><C>postgresql</C> / <C>mariadb</C></>, 'Oferecidos pelos instaladores: pkg (Termux), apt (proot/Debian/Ubuntu), dnf/pacman/zypper (demais distros). Sem eles, a área de bancos mostra "não instalado".'],
           ['Servidor Minecraft', <C key="3">Java (JRE 17+)</C>, 'pkg install openjdk-17 (Termux) / apt install default-jre (Linux).'],
           ['Containers', <><C>docker</C> + compose</>, 'Só faz sentido em Linux/VPS — não roda no Termux/proot.'],
           ['Termux:API + wake lock', <C key="5">termux-api</C>, 'Persistência em segundo plano no Android.'],

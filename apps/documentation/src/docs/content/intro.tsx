@@ -94,7 +94,7 @@ export const requisitos: DocPage = {
   slug: 'requisitos',
   title: 'Requisitos',
   description: 'O que você precisa em cada ambiente antes de instalar o Pterodroid.',
-  keywords: ['node 18', 'nodejs-lts', 'docker compose', 'termux', 'proot-distro', 'git', 'cloudflared', 'pré-requisitos', 'hardware'],
+  keywords: ['node 22', 'nodejs-lts', 'docker compose', 'termux', 'proot-distro', 'git', 'cloudflared', 'pré-requisitos', 'hardware'],
   sourcePath: 'apps/documentation/src/docs/content/intro.tsx',
   sections: [
     { id: 'por-ambiente', title: 'Requisitos por ambiente' },
@@ -117,7 +117,7 @@ export const requisitos: DocPage = {
           ],
           [
             <strong key="b">Android / Ubuntu proot</strong>,
-            <>Um Ubuntu proot funcional (ex.: via <C>proot-distro</C> no Termux) com acesso ao shell.</>,
+            <>Um Ubuntu proot funcional (ex.: via <C>proot-distro</C> no Termux) com acesso ao shell. O instalador garante o Node 22 LTS via NodeSource.</>,
             <DocLink key="bl" to="/docs/proot">Instalar no proot</DocLink>,
           ],
           [
@@ -127,7 +127,7 @@ export const requisitos: DocPage = {
           ],
           [
             <strong key="d">Linux / VPS / Raspberry Pi / PC</strong>,
-            <>Node.js <strong>18+</strong>, <C>git</C> e Bash. Qualquer distro serve — o método manual não depende de systemd.</>,
+            <>Instalador oficial (<C>install-linux.sh</C>) com <strong>Node 22 LTS</strong> automático; método manual exige Node 20.19+ / 22.12+. Qualquer distro moderna serve — nada depende de systemd.</>,
             <DocLink key="dl" to="/docs/linux">Instalar no Linux</DocLink>,
           ],
         ]}
@@ -135,7 +135,8 @@ export const requisitos: DocPage = {
       <H2 id="observacoes">Observações importantes</H2>
       <Ul>
         <li><strong>Navegador moderno</strong> (Chrome, Firefox, Safari…) para acessar o painel — inclusive o navegador do próprio celular.</li>
-        <li><strong>Root não é necessário</strong> no Android: o Termux roda inteiramente em userland.</li>
+        <li><strong>Root não é necessário</strong> no Android: o Termux roda inteiramente em userland. No Linux, root/sudo é preciso só para instalar pacotes do sistema.</li>
+        <li><strong>O <C>nodejs</C> do apt (Node 18) não serve:</strong> o frontend exige Node 20.19+ / 22.12+. Os instaladores Linux e proot instalam o Node 22 LTS sozinhos.</li>
         <li><strong>ARM e x86</strong> são suportados — as dependências são instaladas na própria plataforma pelo script de instalação (por isso o pacote não inclui <C>node_modules</C>).</li>
         <li><strong>Windows não tem suporte oficial.</strong> Rodar via Docker Desktop ou WSL pode funcionar, mas não é validado pelo projeto — veja o <DocLink to="/docs/faq">FAQ</DocLink>.</li>
         <li><strong>cloudflared</strong> só é necessário se você quiser <DocLink to="/docs/cloudflare">acesso remoto</DocLink> via Cloudflare Tunnel.</li>
@@ -155,11 +156,11 @@ export const instalacao: DocPage = {
   title: 'Instalação — visão geral',
   navLabel: 'Visão geral',
   description: 'Compare os métodos de instalação do Pterodroid e escolha o ideal para o seu ambiente.',
-  keywords: ['instalar', 'install', 'escolher método', 'termux', 'docker', 'proot', 'linux', 'manual', 'node 18'],
+  keywords: ['instalar', 'install', 'escolher método', 'termux', 'docker', 'proot', 'linux', 'manual', 'node 22'],
   sourcePath: 'apps/documentation/src/docs/content/intro.tsx',
   sections: [
     { id: 'escolha', title: 'Escolha seu ambiente' },
-    { id: 'metodo-manual', title: 'Método manual (qualquer sistema com Node 18+)' },
+    { id: 'metodo-manual', title: 'Método manual (qualquer sistema com Node 22+)' },
     { id: 'depois-de-instalar', title: 'Depois de instalar' },
   ],
   render: () => (
@@ -175,12 +176,14 @@ export const instalacao: DocPage = {
           [<DocLink key="1" to="/docs/termux">Android / Termux</DocLink>, 'Rodar direto no celular ou tablet, sem root.', <C key="1c">install-termux.sh</C>],
           [<DocLink key="2" to="/docs/proot">Ubuntu proot</DocLink>, 'Quem prefere um userland Ubuntu completo dentro do Android.', <C key="2c">install-ubuntu-proot.sh</C>],
           [<DocLink key="3" to="/docs/docker">Docker</DocLink>, 'PCs, VPS e homelabs — com gerenciamento de containers do host.', <C key="3c">docker compose up -d --build</C>],
-          [<DocLink key="4" to="/docs/linux">Linux</DocLink>, 'Qualquer distro com Node 18+ (VPS, Raspberry Pi, desktop).', 'manual (frontend + backend)'],
+          [<DocLink key="4" to="/docs/linux">Linux</DocLink>, 'Qualquer distro moderna (VPS, Raspberry Pi, desktop).', <C key="4c">install-linux.sh</C>],
         ]}
       />
-      <H2 id="metodo-manual">Método manual (qualquer sistema com Node 18+)</H2>
+      <H2 id="metodo-manual">Método manual (qualquer sistema com Node 22+)</H2>
       <P>
-        Documentado no <Ext href={site.repo.comeceAqui}>COMECE-AQUI.md</Ext>: compile o frontend e suba o backend.
+        Documentado no <Ext href={site.repo.comeceAqui}>COMECE-AQUI.md</Ext>: com <strong>Node 22 LTS</strong> (mínimo
+        20.19 / 22.12) já instalado, compile o frontend e suba o backend. O <C>nodejs</C> do apt (Node 18){' '}
+        <strong>não serve</strong> — use NodeSource, <C>nvm</C> ou o binário oficial.
       </P>
       <CodeBlock
         platform="linux"

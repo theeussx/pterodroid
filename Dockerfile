@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # ── Estágio 1: build do frontend ─────────────────────────────────────────
-FROM node:20-alpine AS frontend-builder
+FROM node:22-alpine AS frontend-builder
 WORKDIR /app/frontend
 # Copiar só os manifestos primeiro faz o npm ci ser reaproveitado do cache
 # enquanto as dependências não mudarem — importante em máquina lenta.
@@ -12,13 +12,13 @@ COPY apps/frontend/ ./
 RUN npm run build
 
 # ── Estágio 2: dependências de produção do backend ───────────────────────
-FROM node:20-alpine AS backend-deps
+FROM node:22-alpine AS backend-deps
 WORKDIR /app/backend
 COPY apps/backend/package.json apps/backend/package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 
 # ── Estágio 3: imagem final ──────────────────────────────────────────────
-FROM node:20-alpine
+FROM node:22-alpine
 
 # tini: o Node como PID 1 não faz "reap" de processos filhos órfãos, então
 # cada serviço parado deixava um zumbi na tabela de processos até o

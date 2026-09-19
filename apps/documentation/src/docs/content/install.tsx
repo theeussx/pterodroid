@@ -53,7 +53,8 @@ chmod +x install-termux.sh panelctl.sh
       <Callout type="note">
         <p>
           As dependências (<C>node_modules</C>) são instaladas no próprio aparelho de propósito: pacotes para
-          Android/ARM são diferentes dos de PC/x86.
+          Android/ARM são diferentes dos de PC/x86. O instalador também valida o Node (<C>nodejs-lts</C> já atende ao
+          mínimo 20.19 / 22.12) e o build do frontend antes de terminar.
         </p>
       </Callout>
 
@@ -156,8 +157,16 @@ cd pterodroid
 chmod +x install-ubuntu-proot.sh panelctl.sh
 ./install-ubuntu-proot.sh
 ./panelctl.sh start`}
-        description="O script install-ubuntu-proot.sh prepara as dependências do frontend e do backend; o panelctl.sh inicia o painel em http://localhost:3001."
+        description="O script install-ubuntu-proot.sh garante o Node 22 LTS, instala o cloudflared da arquitetura certa, prepara frontend/backend e valida o build; o panelctl.sh inicia o painel em http://localhost:3001."
       />
+      <Callout type="warning" title="Node 18 do apt quebra o build">
+        <p>
+          O <C>apt install nodejs</C> do Ubuntu entrega o Node 18, e o frontend (Vite 8) exige{' '}
+          <strong>Node 20.19+ ou 22.12+</strong>. O instalador resolve isso via NodeSource automaticamente — se você
+          instalou o Node à mão e o build falhou com <C>styleText</C>, veja{' '}
+          <DocLink to="/docs/troubleshooting">Troubleshooting</DocLink>.
+        </p>
+      </Callout>
       <P>
         O controle do painel é o mesmo do Termux: <C>start</C>, <C>stop</C>, <C>restart</C>, <C>status</C> e{' '}
         <C>logs</C> — veja a <DocLink to="/docs/termux">tabela completa do panelctl.sh</DocLink>.
@@ -281,12 +290,13 @@ export const linux: DocPage = {
   slug: 'linux',
   title: 'Instalação no Linux',
   navLabel: 'Linux',
-  description: 'Instale o Pterodroid em qualquer distro Linux com Node 18+ — VPS, Raspberry Pi ou desktop — sem depender de systemd.',
-  keywords: ['vps', 'raspberry pi', 'debian', 'ubuntu', 'node 18', 'manual', 'npm start', 'panelctl', 'nohup'],
+  description: 'Instalador oficial do Pterodroid para PC, VPS e Raspberry Pi: Node 22 LTS, cloudflared, bancos opcionais e build validado.',
+  keywords: ['vps', 'raspberry pi', 'debian', 'ubuntu', 'fedora', 'arch', 'install-linux.sh', 'node 22', 'manual', 'npm start', 'panelctl', 'nohup', 'nodesource'],
   sourcePath: 'apps/documentation/src/docs/content/install.tsx',
   sections: [
     { id: 'requisitos', title: 'Requisitos' },
-    { id: 'metodo-manual', title: 'Método manual (oficial)' },
+    { id: 'metodo-oficial', title: 'Método oficial (install-linux.sh)' },
+    { id: 'metodo-manual', title: 'Método manual (alternativo)' },
     { id: 'panelctl', title: 'Rodando em segundo plano com panelctl.sh' },
     { id: 'docker-alternativa', title: 'Alternativa: Docker' },
     { id: 'notas', title: 'Notas' },
@@ -295,15 +305,53 @@ export const linux: DocPage = {
     <>
       <H2 id="requisitos">Requisitos</H2>
       <Ul>
-        <li>Node.js <strong>18 ou superior</strong> (e npm).</li>
-        <li><C>git</C> e Bash.</li>
-        <li>Funciona em x86 e ARM (Raspberry Pi) — não há dependências de compilação nativa.</li>
+        <li>Qualquer distro moderna: Debian/Ubuntu, Fedora/RHEL, Arch ou openSUSE (e derivados).</li>
+        <li>Conta com <strong>root ou sudo</strong> para instalar pacotes do sistema.</li>
+        <li><C>git</C> e Bash (o instalador providencia o resto).</li>
+        <li>Funciona em x86_64 e ARM (Raspberry Pi) — não há dependências de compilação nativa.</li>
       </Ul>
+      <Callout type="warning" title="O nodejs do apt NÃO serve">
+        <p>
+          O pacote <C>nodejs</C> do Debian/Ubuntu é o <strong>Node 18</strong>, e o frontend (Vite 8) exige{' '}
+          <strong>Node 20.19+ ou 22.12+</strong> — o build quebra com <C>styleText</C> no Node 18. O{' '}
+          <C>install-linux.sh</C> instala o <strong>Node 22 LTS</strong> via NodeSource automaticamente quando o Node
+          atual não atende. Detalhes em <DocLink to="/docs/troubleshooting">Troubleshooting</DocLink>.
+        </p>
+      </Callout>
 
-      <H2 id="metodo-manual">Método manual (oficial)</H2>
+      <H2 id="metodo-oficial">Método oficial (install-linux.sh)</H2>
       <P>
-        É o método “qualquer sistema com Node 18+” documentado no repositório: compilar o frontend e iniciar o backend,
-        que serve a interface e a API juntos.
+        O instalador garante o <strong>Node 22 LTS</strong>, instala <C>git</C>, <C>curl</C> e o <C>cloudflared</C>{' '}
+        correto para a sua arquitetura, oferece o PostgreSQL/MariaDB (opcional), instala as dependências e{' '}
+        <strong>valida o build</strong> do frontend antes de terminar:
+      </P>
+      <CodeBlock
+        platform="linux"
+        title="instalador oficial"
+        code={`git clone ${site.repo.clone}
+cd pterodroid
+chmod +x install-linux.sh panelctl.sh
+./install-linux.sh
+./panelctl.sh start`}
+        description="Ao final, o painel está em http://localhost:3001. De outro dispositivo na mesma rede, use http://<ip-da-maquina>:3001."
+      />
+      <P>
+        Opções não interativas (úteis em VPS e scripts): <C>--yes</C> pula as perguntas,{' '}
+        <C>--with-postgres</C> e <C>--with-mariadb</C> instalam os bancos sem perguntar. Veja todas com{' '}
+        <C>./install-linux.sh --help</C>.
+      </P>
+      <Callout type="note" title="Rodando como root?">
+        <p>
+          O painel funciona como root, mas <strong>PostgreSQL e MariaDB recusam rodar como root</strong> — o
+          provisionamento de bancos pelo painel ficaria bloqueado. O instalador oferece criar um usuário comum e
+          continuar como ele; aceite, a menos que você saiba o que está fazendo.
+        </p>
+      </Callout>
+
+      <H2 id="metodo-manual">Método manual (alternativo)</H2>
+      <P>
+        Se você prefere controlar cada passo: com <strong>Node 22 LTS</strong> (mínimo 20.19 / 22.12) já instalado,
+        compile o frontend e inicie o backend, que serve a interface e a API juntos.
       </P>
       <CodeBlock
         platform="linux"
@@ -313,6 +361,13 @@ cd pterodroid/apps/frontend && npm install && npm run build
 cd ../backend && npm install && npm start`}
         description="npm start mantém o painel no terminal atual (primeiro plano), em http://localhost:3001."
       />
+      <Callout type="warning">
+        <p>
+          Para o Node, use o <strong>NodeSource</strong> (<C>setup_22.x</C>), <C>nvm</C> ou o binário oficial —{' '}
+          <strong>não</strong> o <C>apt install nodejs</C> da distro. O <C>panelctl.sh</C> e os instaladores recusam
+          iniciar/concluir com Node abaixo do mínimo, com mensagem explicando o motivo.
+        </p>
+      </Callout>
 
       <H2 id="panelctl">Rodando em segundo plano com panelctl.sh</H2>
       <P>
@@ -346,7 +401,8 @@ chmod +x panelctl.sh
       <Ul>
         <li>Dados em <C>data/</C> na raiz do repositório (banco, workspaces, cloudflared). Backup = copiar a pasta.</li>
         <li>Porta padrão <C>3001</C>; mude com <C>PORT</C> no <C>apps/backend/.env</C> — veja <DocLink to="/docs/configuracao">Configuração</DocLink>.</li>
-        <li>Para expor o painel na internet, use <DocLink to="/docs/cloudflare">Cloudflare Tunnel</DocLink> em vez de abrir portas.</li>
+        <li>Serviços em container precisam do Docker Engine e do usuário no grupo <C>docker</C> — o instalador avisa ao final. Processos locais e bancos funcionam sem Docker.</li>
+        <li>Para expor o painel na internet, use <DocLink to="/docs/cloudflare">Cloudflare Tunnel</DocLink> em vez de abrir portas (mantenha <C>ufw</C>/iptables fechando a 3001 para a internet).</li>
       </Ul>
     </>
   ),
