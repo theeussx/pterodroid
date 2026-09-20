@@ -1,6 +1,9 @@
 const router = require('express').Router();
 const hosts = require('../services/dockerHostManager');
 const { DockerEngineError } = require('../services/dockerEngine');
+const { getDB } = require('../db');
+const { recordAudit } = require('../services/auditLog');
+const jobs = require('../services/jobQueue');
 
 // Encapsula o padrão "chama o Docker, devolve 502 com a mensagem dele se falhar"
 // que toda rota abaixo de /hosts/:id/* precisa repetir.
@@ -28,6 +31,10 @@ router.get('/hosts', (req, res) => res.json(hosts.listHosts()));
 router.post('/hosts', (req, res) => {
   try {
     const host = hosts.addHost(req.body || {});
+    recordAudit(getDB(), {
+      action: 'docker_host_adicionado', target: host.name,
+      detail: host.connection, username: req.user?.username, ip: req.ip,
+    });
     return res.status(201).json(host);
   } catch (err) {
     return res.status(400).json({ error: err.message });
@@ -36,7 +43,13 @@ router.post('/hosts', (req, res) => {
 
 // DELETE /api/docker/hosts/:id
 router.delete('/hosts/:id', (req, res) => {
-  hosts.removeHost(parseInt(req.params.id, 10));
+  const id = parseInt(req.params.id, 10);
+  const row = hosts.getHostRow(id);
+  hosts.removeHost(id);
+  recordAudit(getDB(), {
+    action: 'docker_host_removido', target: row?.name || `#${id}`,
+    username: req.user?.username, ip: req.ip,
+  });
   return res.json({ ok: true });
 });
 
@@ -107,11 +120,26 @@ router.get('/hosts/:id/containers/:containerId/stats', withEngine(async (engine,
 
 // ── Imagens (escrita) ────────────────────────────────────────────────────
 
-router.post('/hosts/:id/images/pull', withEngine(async (engine, req, res) => {
-  if (!req.body?.fromImage) return res.status(400).json({ error: 'fromImage é obrigatório' });
-  await engine.pullImage(req.body.fromImage);
-  res.json({ ok: true });
-}));
+// Pull vai para a fila (jobQueue): antes ficava pendurado neste request
+// inteiro — um pull de imagem grande numa conexão que oscila acabava como
+// request morto sem rastro. Agora responde 202 com o job e o progresso
+// chega pelo socket (job:update).
+router.post('/hosts/:id/images/pull', (req, res) => {
+  const hostId = parseInt(req.params.id, 10);
+  const { fromImage } = req.body || {};
+  if (!fromImage) return res.status(400).json({ error: 'fromImage é obrigatório' });
+  try {
+    const row = hosts.getHostRow(hostId);
+    if (!row) return res.status(404).json({ error: 'Host não encontrado' });
+    const job = jobs.enqueue('docker.image_pull', {
+      subject: `[${row.name}] pull ${fromImage}`,
+      payload: { hostId, fromImage: String(fromImage).trim(), by: req.user?.username || '', ip: req.ip || '' },
+    });
+    return res.status(202).json({ ok: true, job });
+  } catch (err) {
+    return res.status(err.status || 500).json({ error: err.message });
+  }
+});
 
 router.delete('/hosts/:id/images/:imageId', withEngine(async (engine, req, res) => {
   await engine.removeImage(req.params.imageId, { force: req.query.force === 'true' });

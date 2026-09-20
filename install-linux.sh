@@ -157,13 +157,20 @@ detect_arch() {
   esac
 }
 
-# ── Aviso para root (bancos recusam rodar como root) ──────────────
+# ── Aviso para root ───────────────────────────────────────────────
+# Dois motivos para não seguir como root:
+#  1. o panelctl.sh RECUSA iniciar o painel como root desde a Fase 0 —
+#     qualquer serviço ou comando de terminal herdaria privilégio total;
+#  2. PostgreSQL e MariaDB recusam rodar como root, bloqueando o
+#     provisionamento de bancos pelo painel.
+# O caminho certo é um usuário de serviço dedicado; a instalação oferece
+# criá-lo aqui mesmo.
 if [ "$(id -u)" = "0" ]; then
   echo "=================================================="
   echo " Você está como root."
-  echo " O painel em si roda como root, mas PostgreSQL e"
-  echo " MariaDB recusam rodar como root — isso vai bloquear"
-  echo " o provisionamento de bancos de dados pelo painel."
+  echo " O painel NÃO inicia como root (recusa ativa no panelctl.sh),"
+  echo " e PostgreSQL/MariaDB também recusam root. A recomendação é"
+  echo " instalar e rodar o painel como um usuário dedicado."
   echo "=================================================="
   if [ "$YES" != "1" ] && [ -t 0 ]; then
     # Pergunta com padrão SIM (Enter = sim):
@@ -197,8 +204,9 @@ if [ "$(id -u)" = "0" ]; then
       exit 0
     fi
   fi
-  echo "Seguindo como root — bancos de dados locais não vão funcionar até você"
-  echo "rodar o painel como um usuário comum."
+  echo "Seguindo como root — a instalação em si funciona, mas lembre-se:"
+  echo "  • o painel só inicia como root com PTERODROID_ALLOW_ROOT=1 (não recomendado);"
+  echo "  • bancos de dados locais não vão provisionar até o painel rodar como usuário comum."
   echo ""
 fi
 
@@ -447,13 +455,46 @@ if [ ! -f "$ROOT_DIR/apps/frontend/dist/index.html" ]; then
   exit 1
 fi
 
-# ── 5. Resumo ─────────────────────────────────────────────────────
+# ── 5. Serviço systemd (opcional, só Linux nativo) ────────────────
+# O painel funciona perfeitamente com o panelctl.sh; o serviço systemd
+# existe para quem quer boot automático e restart gerenciado pelo init.
+# Rodando como root, pulamos: a instalação da unidade exige um usuário
+# comum (o fluxo root acima já instruiu a criar um e voltar aqui).
+if [ "$(id -u)" != "0" ] && have systemctl && [ -d /run/systemd/system ]; then
+  echo ""
+  echo "== Serviço systemd (opcional) =="
+  echo "Posso instalar o painel como serviço do sistema: inicia no boot,"
+  echo "reinicia em falhas e roda como '$(id -un)' (sem privilégios)."
+  if [ "$YES" = "1" ]; then
+    echo "Modo --yes: pulando. Para instalar depois:"
+    echo "  $ROOT_DIR/contrib/install-service.sh"
+  elif ask "Instalar o serviço systemd agora? [s/N] "; then
+    bash "$ROOT_DIR/contrib/install-service.sh" || \
+      echo "Aviso: a instalação do serviço falhou — o painel funciona normal com panelctl.sh."
+  fi
+fi
+
+# ── 6. Pré-voo final ──────────────────────────────────────────────
+echo ""
+echo "== Validando o ambiente (panelctl doctor) =="
+bash "$ROOT_DIR/panelctl.sh" doctor || echo "Resolva as falhas acima antes de iniciar."
+
+# ── 7. Resumo ─────────────────────────────────────────────────────
 echo ""
 echo "=================================================="
 echo " Instalação concluída!"
 echo ""
 echo " Para iniciar o painel:"
-echo "   $ROOT_DIR/panelctl.sh start"
+if [ -f /etc/systemd/system/pterodroid.service ] && have systemctl; then
+  echo "   sudo systemctl start pterodroid   (serviço instalado)"
+  echo "   journalctl -u pterodroid -f       (logs)"
+  echo " Ou manualmente:  $ROOT_DIR/panelctl.sh start"
+else
+  echo "   $ROOT_DIR/panelctl.sh start"
+fi
+echo ""
+echo " Para validar o ambiente a qualquer momento:"
+echo "   $ROOT_DIR/panelctl.sh doctor"
 echo ""
 echo " Acesse http://localhost:3001 no navegador."
 echo " (De outro dispositivo na mesma rede: http://<ip-da-maquina>:3001)"

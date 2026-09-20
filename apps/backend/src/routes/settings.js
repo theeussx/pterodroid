@@ -3,6 +3,7 @@ const { getDB } = require('../db');
 const tm = require('../services/tunnelManager');
 const ntm = require('../services/namedTunnelManager');
 const config = require('../config');
+const { recordAudit } = require('../services/auditLog');
 
 const EDITABLE_KEYS = ['panel_name', 'panel_color', 'log_retention_days', 'alert_webhook_url'];
 const PANEL_TUNNEL_ID = 'main';
@@ -23,8 +24,15 @@ router.put('/', (req, res) => {
     ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP
   `);
 
+  const changed = [];
   for (const key of EDITABLE_KEYS) {
-    if (req.body[key] !== undefined) upsert.run(key, String(req.body[key]));
+    if (req.body[key] !== undefined) { upsert.run(key, String(req.body[key])); changed.push(key); }
+  }
+  if (changed.length) {
+    recordAudit(db, {
+      action: 'config_editada', target: changed.join(', '),
+      username: req.user?.username, ip: req.ip,
+    });
   }
 
   const rows = db.prepare('SELECT key, value FROM settings').all();
@@ -76,6 +84,7 @@ router.get('/remote-access', (req, res) => {
 router.post('/remote-access/start', async (req, res) => {
   try {
     await tm.startTunnel('panel', PANEL_TUNNEL_ID, config.PORT);
+    recordAudit(getDB(), { action: 'tunel_iniciado', target: 'painel', username: req.user?.username, ip: req.ip });
     return res.json({ ok: true });
   } catch (e) {
     return res.status(500).json({ error: e.message });
@@ -85,6 +94,7 @@ router.post('/remote-access/start', async (req, res) => {
 // POST /api/settings/remote-access/stop
 router.post('/remote-access/stop', async (req, res) => {
   await tm.stopTunnel('panel', PANEL_TUNNEL_ID);
+  recordAudit(getDB(), { action: 'tunel_parado', target: 'painel', username: req.user?.username, ip: req.ip });
   return res.json({ ok: true });
 });
 
@@ -108,6 +118,7 @@ router.post('/domains/tunnel', async (req, res) => {
   try {
     const name = (req.body?.name || 'pterodroid').trim();
     const result = await ntm.createTunnel(name);
+    recordAudit(getDB(), { action: 'dominio_tunel_criado', target: name, username: req.user?.username, ip: req.ip });
     return res.json({ ok: true, ...result });
   } catch (e) {
     return res.status(500).json({ error: e.message });
@@ -118,6 +129,7 @@ router.post('/domains/tunnel', async (req, res) => {
 router.post('/domains/apply', async (req, res) => {
   try {
     const result = await ntm.applyConfig();
+    recordAudit(getDB(), { action: 'dominio_config_aplicada', target: '', username: req.user?.username, ip: req.ip });
     return res.json({ ok: true, ...result });
   } catch (e) {
     return res.status(500).json({ error: e.message });
@@ -130,6 +142,7 @@ router.post('/domains/apply', async (req, res) => {
 router.post('/domains/token', async (req, res) => {
   try {
     await ntm.startTokenTunnel(req.body?.token);
+    recordAudit(getDB(), { action: 'dominio_tunel_token_iniciado', target: '', username: req.user?.username, ip: req.ip });
     return res.json({ ok: true, ...ntm.status() });
   } catch (e) {
     return res.status(500).json({ error: e.message });
@@ -139,6 +152,7 @@ router.post('/domains/token', async (req, res) => {
 // POST /api/settings/domains/stop
 router.post('/domains/stop', async (req, res) => {
   await ntm.stop();
+  recordAudit(getDB(), { action: 'dominio_tunel_parado', target: '', username: req.user?.username, ip: req.ip });
   return res.json({ ok: true });
 });
 

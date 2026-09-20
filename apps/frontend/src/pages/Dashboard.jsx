@@ -5,6 +5,7 @@ import { api } from '../lib/api';
 import { useSystemSnapshot, useServiceStatusEvents, useDbStatusEvents } from '../lib/hooks';
 import Card from '../components/Card';
 import StatusDot from '../components/StatusDot';
+import JobsPanel from '../components/JobsPanel';
 import { useToast } from '../stores/ToastContext';
 
 function formatBytes(bytes) {
@@ -126,6 +127,9 @@ export default function Dashboard() {
           )}
         </div>
       </Card>
+
+      {/* Fila persistente: só aparece quando há tarefa ativa ou histórico */}
+      <Card><JobsPanel /></Card>
 
       <div className="grid lg:grid-cols-2 gap-4">
         <Card padded={false}>

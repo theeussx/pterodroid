@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Save, Download, RotateCcw, Trash2, Archive, AlertTriangle } from 'lucide-react';
 import { api } from '../lib/api';
+import { getSocket } from '../lib/socket';
 import { useToast } from '../stores/ToastContext';
 import Button from './Button';
 import { Input } from './Field';
@@ -36,13 +37,35 @@ export default function BackupsTab({ serviceId }) {
 
   useEffect(() => { load(); }, [load]);
 
+  // A criação/restauração acontece na FILA (jobQueue) — o POST responde
+  // na hora com 202 e o resultado real chega pelo evento de socket
+  // `job:update`. Recarregar a lista aqui é o que faz o novo backup
+  // aparecer ("Pronto") ou a entrega da falha, sem F5.
+  useEffect(() => {
+    const socket = getSocket();
+    if (!socket) return undefined;
+    const onJob = (job) => {
+      if (!job || job.payload?.serviceId !== serviceId) return;
+      if (job.type !== 'backup.create' && job.type !== 'backup.restore') return;
+      if (job.status === 'done' || job.status === 'failed') {
+        load();
+        if (job.status === 'done') {
+          notify(job.type === 'backup.create' ? 'Backup criado' : 'Backup restaurado', 'success');
+        } else {
+          notify(`Operação falhou: ${job.result || 'erro desconhecido'}`, 'error');
+        }
+      }
+    };
+    socket.on('job:update', onJob);
+    return () => socket.off('job:update', onJob);
+  }, [serviceId, load, notify]);
+
   const handleCreate = async () => {
     setCreating(true);
     try {
       await api.backups.create(serviceId, name.trim() || undefined);
       setName('');
-      notify('Backup criado', 'success');
-      load();
+      notify('Backup enfileirado — aparece na lista quando terminar', 'success');
     } catch (e) {
       notify(e.message, 'error');
     } finally {
@@ -65,8 +88,8 @@ export default function BackupsTab({ serviceId }) {
     const b = restoreTarget;
     setBusyId(b.id);
     try {
-      const result = await api.backups.restore(serviceId, b.id);
-      notify(`Backup restaurado — ${result.extracted} arquivo(s) recuperado(s)`, 'success');
+      await api.backups.restore(serviceId, b.id);
+      notify('Restauração enfileirada — o aviso de conclusão chega em instantes', 'success');
       setRestoreTarget(null);
     } catch (e) {
       notify(e.message, 'error');

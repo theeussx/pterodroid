@@ -25,7 +25,7 @@ router.use(createFileRoutes({
   label: 'files',
   resolveContext: () => ({ fm, scope: 'global' }),
   onAudit: (req, action, target, detail) =>
-    recordAudit(getDB(), { action, target, detail, username: req.user?.username }),
+    recordAudit(getDB(), { action, target, detail, username: req.user?.username, ip: req.ip }),
 }));
 
 module.exports = router;

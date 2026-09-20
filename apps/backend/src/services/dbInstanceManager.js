@@ -14,6 +14,7 @@ const path = require('path');
 const { getDB } = require('../db');
 const config = require('../config');
 const { classifyLogLevel } = require('./logLevel');
+const cipher = require('./secretCipher');
 const drivers = require('./dbDrivers');
 const workspaces = require('./workspaceManager');
 const { isPortAvailable } = require('./portFinder');
@@ -92,7 +93,9 @@ class DBInstanceManager extends EventEmitter {
         await driver.provision({
           dataDirectory,
           dbUsername: inst.db_username,
-          dbPassword: inst.db_password,
+          // Em repouso a senha fica cifrada (routes/databases o INSERT);
+          // só em claro aqui, na hora de entregar ao binário do banco.
+          dbPassword: cipher.decrypt(inst.db_password),
           port: inst.port,
         });
       } catch (err) {

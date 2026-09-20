@@ -25,7 +25,10 @@ FROM node:22-alpine
 # container reiniciar. tini é ~10 KB e resolve isso corretamente.
 # curl: usado pelo HEALTHCHECK abaixo.
 # git: usado por quem clona projetos direto pelo painel.
-RUN apk add --no-cache tini curl git
+# su-exec: entrypoint baixa de root para o usuário `node` antes de execar o
+# painel (gosu nele é complexo demais; su-exec é um binário de ~10 KB e
+# aceita user:gid numérico, que usamos pro grupo do docker.sock).
+RUN apk add --no-cache tini curl git su-exec
 
 WORKDIR /app
 
@@ -48,9 +51,11 @@ ENV NODE_ENV=production \
 
 RUN mkdir -p /data/workspaces && chown -R node:node /data /app
 
-# O entrypoint ajusta as permissões do volume montado em /data antes de
-# iniciar o processo como usuário node. Isso evita falhas de EACCES quando o
-# host compartilha um diretório com ownership diferente.
+# USER root existe só para o entrypoint conseguir ajustar o ownership do
+# volume montado em /data. O painel em si NUNCA roda como root: o
+# entrypoint chowna /data para node e depois baixa privilégios com su-exec
+# (com o GID do docker.sock como grupo suplementar, se o socket estiver
+# montado) antes de execar o tini → Node.
 USER root
 
 EXPOSE 3001

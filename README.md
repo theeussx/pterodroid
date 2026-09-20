@@ -60,7 +60,9 @@ Descubra o que o Pterodroid pode fazer por você:
 
 - 📝 **Visualização de Logs ao Vivo:** Acesse os logs de console (stdout/stderr) dos seus serviços em tempo real, facilitando a depuração e o acompanhamento de atividades via conexão WebSockets.
 
-- 🔒 **Segurança Robusta:** Autenticação de usuário baseada em JWT (JSON Web Tokens) com validade de 7 dias e armazenamento seguro de senhas utilizando o algoritmo `bcryptjs`.
+- 🔒 **Segurança Robusta:** Autenticação JWT com **2FA TOTP** (dupla verificação), códigos de recuperação, **sessões revogáveis por dispositivo** ("encerrar tudo à distância"), auditoria central com IP de origem e senhas `bcryptjs`. Troca de senha despeja as outras sessões na hora.
+
+- ⏳ **Tarefas em segundo plano (fila persistente):** back-ups, restaurações e pulls de imagem Docker não travam a interface — sobem para uma fila no SQLite, aparecem ao vivo no dashboard (com cancelamento do que ainda não começou) e, se o painel reiniciar no meio, o que ficou pendurado é marcado como falho com explicação, em vez de sumir em silêncio.
 
 - 📱 **Experiência Otimizada para Dispositivos Móveis:** Uma interface de usuário responsiva, construída com Tailwind CSS, que se adapta perfeitamente a telas de diferentes tamanhos, garantindo uma experiência consistente em smartphones e tablets.
 
@@ -163,7 +165,9 @@ Para Debian/Ubuntu, Fedora/RHEL, Arch, openSUSE e derivados (x86_64 e ARM):
 
    Acesse `http://localhost:3001` no navegador (de outro dispositivo na mesma rede: `http://<ip-da-maquina>:3001`).
 
-   > [!NOTE]O painel roda como root, mas **PostgreSQL e MariaDB recusam rodar como root** — o instalador oferece criar um usuário comum. Serviços em container precisam do Docker Engine e do usuário no grupo `docker`; processos locais e bancos funcionam sem Docker.
+   > [!IMPORTANT]O painel **não inicia como root** — qualquer serviço ou comando de terminal herdaria privilégio total do sistema. O instalador oferece criar um usuário dedicado no começo do processo (e ele também é o caminho para PostgreSQL/MariaDB, que recusam root). Para máquinas com systemd, o instalador oferece registrar o `pterodroid.service` (boot automático, restart em falha, sem privilégios); manualmente: `./contrib/install-service.sh`. Sem systemd, o `panelctl.sh` segue sendo o gerenciador de processo.
+
+   Serviços em container precisam do Docker Engine e do usuário no grupo `docker`; processos locais e bancos funcionam sem Docker. Para validar o ambiente a qualquer momento: `./panelctl.sh doctor`. Veja a matriz completa de suporte em [docs/COMPATIBILIDADE.md](docs/COMPATIBILIDADE.md).
 
 ### Instalação em Ambiente Docker
 
@@ -178,11 +182,10 @@ Para rodar o Pterodroid em um ambiente Docker, siga estas instruções:
    cd pterodroid
    ```
 
-3. **(Opcional) Ajuste a configuração:**O `Dockerfile`, o `docker-compose.yml` e o `.dockerignore` já vêm prontos no repositório. Para gerenciar os containers do host, informe o GID do grupo `docker` e defina um segredo:
+3. **(Opcional) Ajuste a configuração:**O `Dockerfile`, o `docker-compose.yml` e o `.dockerignore` já vêm prontos no repositório. Para gerenciar os containers do host basta manter o `/var/run/docker.sock` montado (vem no padrão) — o painel descobre sozinho, em runtime, o GID do socket, sem `DOCKER_GID` manual. Para produção, defina um segredo:
 
    ```bash
    cp .env.example .env
-   echo "DOCKER_GID=$(getent group docker | cut -d: -f3)" >> .env
    echo "JWT_SECRET=$(openssl rand -hex 32)" >> .env
    ```
 
@@ -201,7 +204,7 @@ Para rodar o Pterodroid em um ambiente Docker, siga estas instruções:
 
 5. **Acesse o Painel:**Após a inicialização, o painel estará disponível em `http://localhost:3001`.
 
-   > [!IMPORTANT]O Pterodroid interage com o daemon Docker do host através de `/var/run/docker.sock`. O container roda como usuário **sem privilégios** e usa `group_add` para acessar o socket — por isso o `DOCKER_GID` acima. Se o painel não conseguir falar com o Docker, confira esse valor.
+   > [!IMPORTANT]O Pterodroid interage com o daemon Docker do host através de `/var/run/docker.sock`. **Montar esse socket equivale a dar ao painel acesso administrativo ao host** — se você não vai gerenciar containers, remova a linha do socket no `docker-compose.yml` (o painel continua funcionando, só sem Docker). O container executa o painel como o usuário **sem privilégios `node` (uid 1000)**: o entrypoint ajusta o ownership de `./data` e aplica o GID real do socket como grupo suplementar antes de baixar privilégios, então nenhuma configuração de GID é necessária.
 
    > [!IMPORTANT]**Todos os dados ficam em `./data`** (banco, workspaces dos serviços e configuração do cloudflared). Fazer backup é copiar essa pasta; para começar do zero, apague-a.
 
@@ -321,6 +324,12 @@ Em **Configurações**, defina um `alert_webhook_url` (Telegram Bot API, Discord
 
 Detalhes de como o painel força a troca de senha, cifra segredos, limita tentativas de login e dispara alertas estão na documentação em `apps/documentation` (aba **Guias → Segurança**).
 
+### Dupla verificação (2FA) e sessões
+
+Em **Configurações → Verificação em 2 etapas** você ativa o TOTP (Aegis, 2FAS, Google Authenticator…) e recebe 8 códigos de recuperação de uso único. O segredo fica cifrado no banco, e o login passa a pedir o código do app — ou um código de recuperação, se o celular sumir.
+
+Em **Configurações → Dispositivos conectados** você vê todas as sessões abertas (navegador + IP) e pode encerrar qualquer uma à distância, inclusive "todas as outras". Trocar a senha já encerra as outras sessões automaticamente, e o logout revoga a sua. Toda essa movimentação fica registrada na **trilha de auditoria** (página *Logs → Auditoria*), com filtros por ação, usuário e período.
+
 ## 🧪 Testes
 
 O backend traz uma bateria de testes que **não precisa de Docker instalado** e nunca toca no seu painel real (tudo roda em diretórios temporários e numa porta separada):
@@ -330,7 +339,9 @@ cd apps/backend
 npm test
 ```
 
-Cobre: resolução de caminhos e proteção contra path traversal, operações de arquivo, parser de comandos, cliente da Docker Engine, montagem do container (incluindo a tradução de bind mount para o host) e o ciclo de vida completo de um serviço via HTTP.
+Cobre: resolução de caminhos e proteção contra path traversal, operações de arquivo, parser de comandos, cliente da Docker Engine, montagem do container (incluindo a tradução de bind mount para o host), o lock exclusivo do `panel.db` (dois painéis no mesmo banco não sobrevivem ao boot), o backup automático pré-migração do banco e o ciclo de vida completo de um serviço via HTTP — encerrando com o pré-voo do `./panelctl.sh doctor`. O runner falha cedo e com a causa raiz se as dependências não estiverem instaladas (`npm ci` primeiro).
+
+A mesma bateria roda no **CI** em cada push/PR: testes do backend no Node 20.19 e 22, build do frontend e da documentação, ShellCheck nos scripts shell, pré-voo do doctor numa instalação limpa e build da imagem Docker com prova de que o painel **não executa como root** dentro do container. O workflow está versionado em `contrib/ci/workflow.yml` — para ativá-lo no GitHub, mova-o para `.github/workflows/ci.yml` (instruções em `contrib/ci/README.md`).
 
 ---
 

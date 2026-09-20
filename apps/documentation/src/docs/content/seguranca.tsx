@@ -10,6 +10,9 @@ export const seguranca: DocPage = {
   sourcePath: 'apps/documentation/src/docs/content/seguranca.tsx',
   sections: [
     { id: 'senha-padrao', title: 'Senha padrão (obrigatória trocar)' },
+    { id: '2fa', title: 'Dupla verificação (2FA)' },
+    { id: 'sessoes', title: 'Sessões revogáveis' },
+    { id: 'auditoria', title: 'Auditoria central' },
     { id: 'cifra-em-repouso', title: 'Segredos cifrados em repouso' },
     { id: 'limite-login', title: 'Limite de tentativas de login' },
     { id: 'cors', title: 'CORS configurável' },
@@ -39,13 +42,56 @@ export const seguranca: DocPage = {
         <li>A nova senha precisa ter <strong>pelo menos 8 caracteres</strong> e ser diferente da atual.</li>
       </Ul>
 
+      <H2 id="2fa">Dupla verificação (2FA)</H2>
+      <P>
+        Em <strong>Configurações → Verificação em 2 etapas</strong> você ativa um segundo fator TOTP (Aegis, 2FAS,
+        Google Authenticator...). O segredo é cifrado em repouso e só passa a valer para o login quando o primeiro
+        código correto é apresentado — um segredo pendente não tranca por acidente. Na ativação o painel emite{' '}
+        <strong>8 códigos de recuperação</strong> de uso único (formato <C>XXXX-XXXX</C>), mostrados uma única vez;
+        no banco ficam apenas os <strong>hashes</strong>.
+      </P>
+      <Ul>
+        <li>Com 2FA ativo, o login sem código volta <C>401 TOTP_REQUIRED</C> — a interface então pede o código (ou um código de recuperação).</li>
+        <li>Desativar ou regenerar recuperação exige digitar a <strong>senha</strong> de novo (reautenticação para ações sensíveis).</li>
+        <li>Os códigos TOTP errados contam para a trava de força bruta; pedidos apenas de relatório de código (<C>TOTP_REQUIRED</C>), não.</li>
+      </Ul>
+
+      <H2 id="sessoes">Sessões revogáveis</H2>
+      <P>
+        Cada login vira uma <strong>sessão com identidade própria</strong> (o <C>jti</C> do JWT): você vê em
+        Configurações quais dispositivos ainda estão conectados (navegador e IP de origem) e pode{' '}
+        <strong>encerrar qualquer um à distância</strong> — o token daquele dispositivo morre na próxima
+        requisição, não em 7 dias, quando o JWT expiraria.
+      </P>
+      <Ul>
+        <li><strong>Trocar a senha</strong> encerra automaticamente todas as outras sessões (um invasor logado é despejado na hora).</li>
+        <li><strong>Sair (logout)</strong> revoga só a sessão atual; <strong>“Encerrar todas as outras”</strong> revoga as demais.</li>
+        <li>Tokens emitidos por versões antigas (sem <C>jti</C>) deixam de valer e ganham <C>401</C> pedindo novo login — os dispositivos precisam entrar de novo uma única vez.</li>
+        <li>O socket de logs ao vivo também exige token válido no handshake: sessão revogada não conecta de novo.</li>
+      </Ul>
+
+      <H2 id="auditoria">Auditoria central</H2>
+      <P>
+        Na página <strong>Logs → Auditoria</strong> fica a trilha completa: quem logou (e de que IP), falhas de
+        login e bloqueios, ativações/desativações de 2FA, sessões encerradas, criação/edição/remoção de serviços e
+        bancos, backups, hosts Docker, túneis, edições de configuração e todas as operações de arquivo/terminal que
+        já existiam. Filtre por ação, usuário, período ou texto livre.
+      </P>
+
       <H2 id="cifra-em-repouso">Segredos cifrados em repouso</H2>
       <P>
-        <C>git_token</C> (para clonar repositórios) e o conteúdo do <C>environment</C> de cada serviço são
-        <strong> cifrados</strong> antes de ir para o banco. O painel só devolve o valor em claro para o dono
-        autenticado; quem lê o arquivo <C>panel.db</C> cru não vê os segredos.
+        <strong>Cifrados antes de ir para o banco:</strong> <C>git_token</C> dos serviços, <strong>senhas das
+        instâncias de banco de dados</strong>, <strong>chaves/certificados TLS dos hosts Docker</strong>,{' '}
+        <strong>token do Cloudflare Tunnel</strong> e o <strong>segredo TOTP</strong> do 2FA. O painel só devolve o
+        valor em claro para o código que precisa dele de verdade; quem lê o arquivo <C>panel.db</C> cru não vê os
+        segredos.
       </P>
-      <P>Serviços antigos que guardaram <C>git_token</C> em texto puro são migrados automaticamente na inicialização.</P>
+      <P>
+        Bancos de instalações antigas com os valores em texto puro são cifrados automaticamente na inicialização
+        seguinte (migração idempotente, sem intervenção do usuário). A chave da cifra deriva de <C>JWT_SECRET</C> —
+        trocar a secret invalida os segredos guardados (re-cadastre-os depois de trocá-la); uma chave mestra
+        separada é item previsto da Fase 3 do roadmap.
+      </P>
 
       <H2 id="limite-login">Limite de tentativas de login</H2>
       <P>

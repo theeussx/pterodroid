@@ -13,6 +13,7 @@ const router = require('express').Router({ mergeParams: true });
 const { resolveContext } = require('./serviceFiles');
 const backups = require('../services/backupManager');
 const { recordAudit } = require('../services/auditLog');
+const jobs = require('../services/jobQueue');
 const { getDB } = require('../db');
 
 function sendError(res, err, label = 'backups') {
@@ -28,7 +29,8 @@ const audit = (req, action, service, detail = '') => {
       target: `[${service.name}] backup`,
       detail,
       username: req.user?.username,
-    });
+      ip: req.ip,
+      });
   } catch (err) {
     console.error('[backups] falha ao registrar auditoria:', err.message);
   }
@@ -43,14 +45,27 @@ router.get('/', async (req, res) => {
   }
 });
 
+// POST cria: o trabalho em si roda NA FILA (jobQueue), não dentro deste
+// request — um painel que reinicia no meio de um zip deixava o backup
+// com status 'creating' para sempre e bloqueava os próximos. Quem pediu
+// acompanha o progresso por socket (job:update) e a lista de backups
+// atualiza quando o job termina. A auditoria sai do handler, com a
+// identidade de quem enfileirou (payload.by/ip preservadas no job).
 router.post('/', async (req, res) => {
   try {
     const { service } = await resolveContext(req);
-    const created = await backups.createBackup(service, { name: req.body?.name });
-    audit(req, 'backup_criado', service, `${created.name} (${created.size_bytes} bytes)`);
-    res.json(created);
+    // Validações baratas que merecem resposta síncrona ao usuário:
+    const existing = backups.listForService(service.id);
+    if (existing.some((b) => b.status === 'creating' || b.status === 'restoring')) {
+      return res.status(409).json({ error: 'Já existe uma operação de backup em andamento para este serviço.' });
+    }
+    const job = jobs.enqueue('backup.create', {
+      subject: `[${service.name}] backup`,
+      payload: { serviceId: service.id, name: req.body?.name, by: req.user?.username || '', ip: req.ip || '' },
+    });
+    return res.status(202).json({ ok: true, job });
   } catch (err) {
-    sendError(res, err);
+    return sendError(res, err);
   }
 });
 
@@ -76,11 +91,19 @@ router.post('/:backupId/restore', async (req, res) => {
   try {
     const { service } = await resolveContext(req);
     const backupId = parseInt(req.params.backupId, 10);
-    const result = await backups.restoreBackup(service, backupId);
-    audit(req, 'backup_restaurado', service, `${result.extracted} arquivo(s) restaurado(s)`);
-    res.json({ ok: true, ...result });
+    // Valida cedo (404/409 síncronos quando o backup não existe ou o
+    // serviço já tem operação em andamento) — o resto é trabalho de fila.
+    const backup = backups.getOne(service.id, backupId);
+    if (backup.status === 'restoring') {
+      return res.status(409).json({ error: 'Este backup já está sendo restaurado.' });
+    }
+    const job = jobs.enqueue('backup.restore', {
+      subject: `[${service.name}] restaurar "${backup.name}"`,
+      payload: { serviceId: service.id, backupId, by: req.user?.username || '', ip: req.ip || '' },
+    });
+    return res.status(202).json({ ok: true, job });
   } catch (err) {
-    sendError(res, err);
+    return sendError(res, err);
   }
 });
 

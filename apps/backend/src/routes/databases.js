@@ -2,6 +2,16 @@ const router = require('express').Router();
 const { getDB } = require('../db');
 const dbm = require('../services/dbInstanceManager');
 const drivers = require('../services/dbDrivers');
+const cipher = require('../services/secretCipher');
+const { recordAudit } = require('../services/auditLog');
+
+// Helper: registra ciclo de vida com o NOME do banco (mais legível na tela
+// de auditoria central do que o id numérico).
+function auditDb(req, action) {
+  const db = getDB();
+  const inst = db.prepare('SELECT name FROM db_instances WHERE id = ?').get(req.params.id);
+  recordAudit(db, { action, target: inst?.name || `#${req.params.id}`, username: req.user?.username, ip: req.ip });
+}
 
 const VALID_TYPES = Object.keys(drivers); // ['postgresql', 'mysql']
 
@@ -118,13 +128,21 @@ router.post('/', (req, res) => {
   // Math.random() não é criptograficamente seguro e era usado para gerar a
   // senha do banco — previsível o bastante para não servir como segredo.
   const password = db_password || require('crypto').randomBytes(18).toString('base64url');
+  // Senha de banco é segredo: em repouso fica cifrada (secretCipher) e a
+  // versão em claro aparece uma única vez na resposta de criação (quando
+  // gerada automaticamente). O manager decifra na hora de provisionar.
 
   const result = db.prepare(`
     INSERT INTO db_instances (name, type, port, db_username, db_password, tunnel_hostname)
     VALUES (?, ?, ?, ?, ?, ?)
-  `).run(name.trim(), type, portNum, username, password, tunnel_hostname?.trim() || null);
+  `).run(name.trim(), type, portNum, username, cipher.encrypt(password), tunnel_hostname?.trim() || null);
 
   const created = db.prepare('SELECT * FROM db_instances WHERE id = ?').get(result.lastInsertRowid);
+  recordAudit(db, {
+    action: 'banco_criado', target: created.name,
+    detail: `${type} na porta ${portNum}`,
+    username: req.user?.username, ip: req.ip,
+  });
   const { db_password: _pw, ...safe } = created;
   return res.status(201).json({ ...safe, generatedPassword: db_password ? undefined : password });
 });
@@ -172,6 +190,7 @@ router.put('/:id', (req, res) => {
   );
 
   const updated = db.prepare('SELECT * FROM db_instances WHERE id = ?').get(existing.id);
+  recordAudit(db, { action: 'banco_editado', target: updated.name, username: req.user?.username, ip: req.ip });
   const { db_password: _pw, ...safe } = updated;
   return res.json(safe);
 });
@@ -186,6 +205,11 @@ router.delete('/:id', async (req, res) => {
 
   db.prepare('DELETE FROM db_instances WHERE id = ?').run(inst.id);
   db.prepare('DELETE FROM logs WHERE db_instance_id = ?').run(inst.id);
+  recordAudit(db, {
+    action: 'banco_removido', target: inst.name,
+    detail: `${inst.type} — diretório de dados mantido em disco`,
+    username: req.user?.username, ip: req.ip,
+  });
   return res.json({ ok: true, note: 'Data directory on disk was left untouched — delete it manually if you want to reclaim space.' });
 });
 
@@ -193,6 +217,7 @@ router.delete('/:id', async (req, res) => {
 router.post('/:id/start', async (req, res) => {
   try {
     const pid = await dbm.startInstance(parseInt(req.params.id, 10));
+    auditDb(req, 'banco_iniciado');
     return res.json({ ok: true, pid });
   } catch (e) {
     return res.status(e.status || 500).json({ error: e.message });
@@ -203,6 +228,7 @@ router.post('/:id/start', async (req, res) => {
 router.post('/:id/stop', async (req, res) => {
   try {
     await dbm.stopInstance(parseInt(req.params.id, 10));
+    auditDb(req, 'banco_parado');
     return res.json({ ok: true });
   } catch (e) {
     return res.status(500).json({ error: e.message });
@@ -213,6 +239,7 @@ router.post('/:id/stop', async (req, res) => {
 router.post('/:id/restart', async (req, res) => {
   try {
     const pid = await dbm.restartInstance(parseInt(req.params.id, 10));
+    auditDb(req, 'banco_reiniciado');
     return res.json({ ok: true, pid });
   } catch (e) {
     return res.status(e.status || 500).json({ error: e.message });

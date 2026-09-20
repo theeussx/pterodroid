@@ -5,7 +5,7 @@ const path = require('path');
 const fs = require('fs');
 
 const config = require('./config');
-const { initDB, getDB } = require('./db');
+const { initDB, getDB, closeDB } = require('./db');
 const { setupSockets } = require('./sockets');
 const driver = require('./services/serviceDriverRegistry');
 const dockerHostManager = require('./services/dockerHostManager');
@@ -27,6 +27,7 @@ const backupRoutes = require('./routes/backups');
 const dockerRoutes = require('./routes/docker');
 const { authMiddleware } = require('./middleware/auth');
 const { setupRequired } = require('./middleware/setupRequired');
+const jobQueue = require('./services/jobQueue');
 
 /**
  * Se o painel morreu à força (OOM killer do Android, bateria acabando,
@@ -69,6 +70,10 @@ async function main() {
 
   reconcileStaleState(db);
   dockerHostManager.ensureDefaultHost?.();
+  // Fila de jobs: registra os handlers e reconcilia o que o processo
+  // anterior deixou para trás (jobs zumbis + backups/setups frustrados).
+  require('./services/jobHandlers').registerAll();
+  jobQueue.reconcileBoot();
   const stopPrune = schedulePrune(db);
 
   const app = express();
@@ -119,6 +124,11 @@ async function main() {
   app.use('/api/settings', authMiddleware, setupRequired, settingsRoutes);
   app.use('/api/files', authMiddleware, setupRequired, fileRoutes);
   app.use('/api/docker', authMiddleware, setupRequired, dockerRoutes);
+  // Auditoria central unificada (Fase 1): substitui a visão parcial
+  // /api/files/audit, que continua existindo por compatibilidade.
+  app.use('/api/audit', authMiddleware, setupRequired, require('./routes/audit'));
+  // Fila persistente de operações longas (Fase 1): backup, restore, pull.
+  app.use('/api/jobs', authMiddleware, setupRequired, require('./routes/jobs'));
 
   // 404 para rotas de API não encontradas — precisa vir antes do fallback
   // do SPA, senão /api/inexistente devolveria o index.html.
@@ -192,7 +202,10 @@ async function main() {
       console.error('Erro durante o desligamento:', e.message);
     }
 
-    try { getDB().flush(); } catch (e) { console.error('Erro ao gravar o banco:', e.message); }
+    // closeDB() faz o flush final, fecha o banco e libera o lock exclusivo
+    // do panel.db (dbLock.js) — sem isso o próximo boot esperaria expirar
+    // um lock cujo PID acabou de morrer (recuperável, mas evitável).
+    try { closeDB(); } catch (e) { console.error('Erro ao gravar o banco:', e.message); }
     console.log('Até logo.');
     process.exit(0);
   };

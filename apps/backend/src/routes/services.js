@@ -10,6 +10,7 @@ const setup = require('../services/setupManager');
 const { forgetService } = require('./serviceFiles');
 const backups = require('../services/backupManager');
 const terminals = require('../services/terminalManager');
+const { recordAudit } = require('../services/auditLog');
 
 const VALID_TYPES = ['node', 'python', 'shell', 'bot', 'api', 'web', 'other'];
 const RUNTIME_TYPES = ['process', 'docker'];
@@ -283,6 +284,11 @@ router.post('/', (req, res) => {
     });
   }
 
+  recordAudit(db, {
+    action: 'servico_criado', target: created.name,
+    detail: `runtime ${created.runtime_type || 'process'}${created.image ? ' · imagem ' + created.image : ''}`,
+    username: req.user?.username, ip: req.ip,
+  });
   return res.status(201).json({ ...envForResponse(redactService(created)), recipe: recipes.describeRow(created) });
 });
 
@@ -453,6 +459,10 @@ router.put('/:id', (req, res) => {
   );
 
   const updated = db.prepare('SELECT * FROM services WHERE id = ?').get(existing.id);
+  recordAudit(db, {
+    action: 'servico_editado', target: updated.name,
+    username: req.user?.username, ip: req.ip,
+  });
   return res.json({ ...envForResponse(redactService(updated)), recipe: recipes.describeRow(updated) });
 });
 
@@ -498,6 +508,11 @@ router.delete('/:id', async (req, res) => {
   backups.forgetService(svc.id);
   terminals.closeForService(svc.id);
 
+  recordAudit(db, {
+    action: 'servico_removido', target: svc.name,
+    detail: filesRemoved ? 'workspace apagado junto' : 'workspace mantido',
+    username: req.user?.username, ip: req.ip,
+  });
   console.log(`[services] removido "${svc.name}"${filesRemoved ? ' (workspace apagado)' : ''}`);
   return res.json({ ok: true, filesRemoved });
 });
@@ -508,6 +523,14 @@ const lifecycle = (action, verb) => async (req, res) => {
   if (id === null) return undefined;
   try {
     const result = await driver[action](id);
+    // Auditoria com o nome (e não só o id) — a tela central fica legível.
+    const db = getDB();
+    const svc = db.prepare('SELECT name FROM services WHERE id = ?').get(id);
+    recordAudit(db, {
+      action: `servico_${action === 'startService' ? 'iniciado' : action === 'stopService' ? 'parado' : 'reiniciado'}`,
+      target: svc?.name || `#${id}`,
+      username: req.user?.username, ip: req.ip,
+    });
     return res.json({ ok: true, pid: result ?? null });
   } catch (e) {
     console.error(`[services] falha ao ${verb} serviço ${id}: ${e.message}`);

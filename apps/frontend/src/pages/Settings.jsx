@@ -9,6 +9,8 @@ import StatusDot from '../components/StatusDot';
 import DomainSettings from '../components/DomainSettings';
 import { Label, Input } from '../components/Field';
 import { useToast } from '../stores/ToastContext';
+import SecuritySettings from '../components/SecuritySettings';
+import SessionsSettings from '../components/SessionsSettings';
 
 export default function Settings() {
   const [settings, setSettings] = useState(null);
@@ -248,6 +250,12 @@ export default function Settings() {
           a trava ativa, a resposta é 403 — remontar quando a trava abre faz
           ele recarregar sem precisar de F5. */}
       <DomainSettings key={setupDone ? 'unlocked' : 'locked'} />
+
+      {/* key por estado de setup: enquanto a senha padrão está em uso,
+          essas rotas voltam 403 e os cards só carregam de verdade quando a
+          trava abre — remontar força o refetch sem F5. */}
+      <SecuritySettings key={`sec-${setupDone}`} />
+      <SessionsSettings key={`sess-${setupDone}`} />
 
       <Card>
         <h2 className="font-display font-semibold text-sm text-ink mb-4">Alterar senha</h2>
