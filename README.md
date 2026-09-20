@@ -60,7 +60,7 @@ Descubra o que o Pterodroid pode fazer por você:
 
 - 📝 **Visualização de Logs ao Vivo:** Acesse os logs de console (stdout/stderr) dos seus serviços em tempo real, facilitando a depuração e o acompanhamento de atividades via conexão WebSockets.
 
-- 🔒 **Segurança Robusta:** Autenticação de usuário baseada em JWT (JSON Web Tokens) com validade de 7 dias e armazenamento seguro de senhas utilizando o algoritmo `bcryptjs`.
+- 🔒 **Segurança Robusta:** Autenticação JWT com **2FA TOTP** (dupla verificação), códigos de recuperação, **sessões revogáveis por dispositivo** ("encerrar tudo à distância"), auditoria central com IP de origem e senhas `bcryptjs`. Troca de senha despeja as outras sessões na hora.
 
 - 📱 **Experiência Otimizada para Dispositivos Móveis:** Uma interface de usuário responsiva, construída com Tailwind CSS, que se adapta perfeitamente a telas de diferentes tamanhos, garantindo uma experiência consistente em smartphones e tablets.
 
@@ -321,6 +321,12 @@ Em **Configurações**, defina um `alert_webhook_url` (Telegram Bot API, Discord
 ### Senha padrão e trava de segurança
 
 Detalhes de como o painel força a troca de senha, cifra segredos, limita tentativas de login e dispara alertas estão na documentação em `apps/documentation` (aba **Guias → Segurança**).
+
+### Dupla verificação (2FA) e sessões
+
+Em **Configurações → Verificação em 2 etapas** você ativa o TOTP (Aegis, 2FAS, Google Authenticator…) e recebe 8 códigos de recuperação de uso único. O segredo fica cifrado no banco, e o login passa a pedir o código do app — ou um código de recuperação, se o celular sumir.
+
+Em **Configurações → Dispositivos conectados** você vê todas as sessões abertas (navegador + IP) e pode encerrar qualquer uma à distância, inclusive "todas as outras". Trocar a senha já encerra as outras sessões automaticamente, e o logout revoga a sua. Toda essa movimentação fica registrada na **trilha de auditoria** (página *Logs → Auditoria*), com filtros por ação, usuário e período.
 
 ## 🧪 Testes
 

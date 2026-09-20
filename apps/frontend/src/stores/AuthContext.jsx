@@ -32,8 +32,8 @@ export function AuthProvider({ children }) {
     return () => disconnectSocket();
   }, [bootstrap]);
 
-  const login = useCallback(async (username, password) => {
-    const res = await api.login(username, password);
+  const login = useCallback(async (username, password, totp) => {
+    const res = await api.login(username, password, totp);
     setToken(res.token);
     const me = await api.me();
     setUser({ username: me.username });
@@ -42,6 +42,10 @@ export function AuthProvider({ children }) {
   }, []);
 
   const logout = useCallback(() => {
+    // Revoga a sessão no servidor (best-effort: se a rede falhar, o token
+    // local ainda é descartado abaixo — nunca prende o usuário por causa
+    // de um logout remoto não confirmado).
+    api.logout().catch(() => {});
     setToken(null);
     setUser(null);
     disconnectSocket();

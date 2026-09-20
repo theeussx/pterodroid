@@ -119,6 +119,9 @@ async function main() {
   app.use('/api/settings', authMiddleware, setupRequired, settingsRoutes);
   app.use('/api/files', authMiddleware, setupRequired, fileRoutes);
   app.use('/api/docker', authMiddleware, setupRequired, dockerRoutes);
+  // Auditoria central unificada (Fase 1): substitui a visão parcial
+  // /api/files/audit, que continua existindo por compatibilidade.
+  app.use('/api/audit', authMiddleware, setupRequired, require('./routes/audit'));
 
   // 404 para rotas de API não encontradas — precisa vir antes do fallback
   // do SPA, senão /api/inexistente devolveria o index.html.

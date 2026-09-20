@@ -11,9 +11,11 @@
  * Abordagem:
  *  - AES-256-GCM (autenticado: qualquer adulteração do ciphertext é
  *    detectada e rejeitada).
- *  - A chave é derivada de JWT_SECRET via HKDF/SHA-256, então quem tem o
- *    .jwt-secret / JWT_SECRET consegue decifrar — e trocar a secret
- *    invalida os segredos antigos (re-sete-os após trocar).
+ *  - A chave é derivada de JWT_SECRET via SHA-256 (ver deriveKey), então
+ *    quem tem o .jwt-secret / JWT_SECRET consegue decifrar — e trocar a
+ *    secret invalida os segredos antigos (re-sete-os após trocar). Isso é
+ *    uma limitação conhecida e documentada: uma chave mestra separada é
+ *    item da Fase 3 do roadmap (ver docs/VALIDACAO-E-PLANO-FASE-0.md).
  *  - Formato em repouso: "enc:v1:<iv-hex>:<tag-hex>:<ciphertext-hex>".
  *    Valores que não começam com "enc:" são tratados como texto claro
  *    legado (instalações que já existiam) e retornados como estão — assim

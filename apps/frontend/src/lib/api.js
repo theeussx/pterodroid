@@ -28,6 +28,9 @@ async function request(path, { method = 'GET', body, headers = {} } = {}) {
     const message = data?.error || `Request failed (${res.status})`;
     const err = new Error(message);
     err.status = res.status;
+    // Respostas do backend podem diferenciar o erro por código estável —
+    // o login usa isso para saber que precisa do passo do 2FA.
+    if (data?.code) err.code = data.code;
     throw err;
   }
   return data;
@@ -35,9 +38,34 @@ async function request(path, { method = 'GET', body, headers = {} } = {}) {
 
 export const api = {
   // auth
-  login: (username, password) => request('/auth/login', { method: 'POST', body: { username, password } }),
+  // `totp` é opcional: quando a conta tem 2FA ativo e o campo não vai, o
+  // backend responde 401 com code TOTP_REQUIRED e a UI pede o código.
+  login: (username, password, totp) =>
+    request('/auth/login', { method: 'POST', body: { username, password, totp: totp || undefined } }),
   me: () => request('/auth/me'),
+  logout: () => request('/auth/logout', { method: 'POST' }),
   changePassword: (current, next) => request('/auth/change-password', { method: 'POST', body: { current, next } }),
+
+  // sessões (Fase 1): user-agent/IP de onde cada login ainda está ativo
+  listSessions: () => request('/auth/sessions'),
+  revokeSession: (jti) => request(`/auth/sessions/${jti}`, { method: 'DELETE' }),
+  revokeOtherSessions: () => request('/auth/sessions/revoke-others', { method: 'POST' }),
+
+  // 2FA TOTP (Fase 1). disable/regen pedem a SENHA de novo (reautenticação
+  // para ação sensível — o código do app não basta para tirar o 2FA).
+  totpStatus: () => request('/auth/2fa/status'),
+  totpSetup: () => request('/auth/2fa/setup', { method: 'POST' }),
+  totpEnable: (token) => request('/auth/2fa/enable', { method: 'POST', body: { token } }),
+  totpDisable: (currentPassword) => request('/auth/2fa/disable', { method: 'POST', body: { current: currentPassword } }),
+  totpNewRecoveryCodes: (currentPassword) => request('/auth/2fa/recovery-codes', { method: 'POST', body: { current: currentPassword } }),
+
+  // auditoria central (Fase 1) — substitui a visão parcial /files/audit
+  audit: (params = {}) => {
+    const qs = new URLSearchParams(
+      Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== ''),
+    ).toString();
+    return request(`/audit${qs ? `?${qs}` : ''}`);
+  },
 
   // services
   listServices: () => request('/services'),

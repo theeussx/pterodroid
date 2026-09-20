@@ -1,6 +1,8 @@
 const router = require('express').Router();
 const hosts = require('../services/dockerHostManager');
 const { DockerEngineError } = require('../services/dockerEngine');
+const { getDB } = require('../db');
+const { recordAudit } = require('../services/auditLog');
 
 // Encapsula o padrão "chama o Docker, devolve 502 com a mensagem dele se falhar"
 // que toda rota abaixo de /hosts/:id/* precisa repetir.
@@ -28,6 +30,10 @@ router.get('/hosts', (req, res) => res.json(hosts.listHosts()));
 router.post('/hosts', (req, res) => {
   try {
     const host = hosts.addHost(req.body || {});
+    recordAudit(getDB(), {
+      action: 'docker_host_adicionado', target: host.name,
+      detail: host.connection, username: req.user?.username, ip: req.ip,
+    });
     return res.status(201).json(host);
   } catch (err) {
     return res.status(400).json({ error: err.message });
@@ -36,7 +42,13 @@ router.post('/hosts', (req, res) => {
 
 // DELETE /api/docker/hosts/:id
 router.delete('/hosts/:id', (req, res) => {
-  hosts.removeHost(parseInt(req.params.id, 10));
+  const id = parseInt(req.params.id, 10);
+  const row = hosts.getHostRow(id);
+  hosts.removeHost(id);
+  recordAudit(getDB(), {
+    action: 'docker_host_removido', target: row?.name || `#${id}`,
+    username: req.user?.username, ip: req.ip,
+  });
   return res.json({ ok: true });
 });
 

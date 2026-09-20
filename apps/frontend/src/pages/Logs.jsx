@@ -1,17 +1,22 @@
 import { useEffect, useState } from 'react';
+import { Shield } from 'lucide-react';
 import { api } from '../lib/api';
 import { useLiveLogs } from '../lib/hooks';
 import Card from '../components/Card';
 import StatusDot from '../components/StatusDot';
 import LogViewer from '../components/LogViewer';
+import AuditView from '../components/AuditView';
 import { useToast } from '../stores/ToastContext';
 
 export default function Logs() {
   const [services, setServices] = useState([]);
   const [instances, setInstances] = useState([]);
+  // kind: 'service' | 'db' | 'audit' — auditoria não tem live tail, por
+  // isso recebe kind/id nulos no hook abaixo (não pode abrir socket).
   const [selected, setSelected] = useState(null); // { kind, id, name, status }
   const { notify } = useToast();
-  const { lines, seedOnce } = useLiveLogs(selected?.kind, selected?.id);
+  const liveKind = selected?.kind === 'audit' ? null : selected?.kind;
+  const { lines, seedOnce } = useLiveLogs(liveKind, liveKind ? selected.id : null);
 
   useEffect(() => {
     Promise.all([api.listServices(), api.listDatabases()])
@@ -74,10 +79,30 @@ export default function Logs() {
             </button>
           ))}
         </div>
+        <div className="p-4 pb-2 border-t border-line-soft">
+          <p className="text-xs font-medium text-ink-faint uppercase tracking-wide">Painel</p>
+        </div>
+        <div className="pb-3">
+          <button
+            onClick={() => setSelected({ kind: 'audit', id: 0, name: 'Auditoria', status: null })}
+            className={`w-full flex items-center gap-2 px-4 py-2 text-sm transition-colors
+              ${selected?.kind === 'audit' ? 'bg-signal-soft text-signal' : 'text-ink-dim hover:bg-raised hover:text-ink'}`}
+          >
+            <Shield size={14} className="shrink-0" />
+            <span>Auditoria</span>
+          </button>
+        </div>
       </Card>
 
       <div>
-        {selected ? (
+        {selected?.kind === 'audit' ? (
+          <>
+            <div className="flex items-center gap-3 mb-3">
+              <h2 className="font-display font-semibold text-ink">Trilha de auditoria</h2>
+            </div>
+            <AuditView />
+          </>
+        ) : selected ? (
           <>
             <div className="flex items-center gap-3 mb-3">
               <h2 className="font-display font-semibold text-ink">{selected.name}</h2>

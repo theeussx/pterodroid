@@ -31,6 +31,7 @@ const path = require('path');
 const EventEmitter = require('events');
 const { getDB } = require('../db');
 const config = require('../config');
+const cipher = require('./secretCipher');
 
 const CERT_PATHS = [
   path.join(process.env.HOME || '', '.cloudflared', 'cert.pem'),
@@ -75,15 +76,20 @@ class NamedTunnelManager extends EventEmitter {
       "SELECT key, value FROM settings WHERE key IN " +
       "('base_domain','panel_tunnel_hostname','named_tunnel_name','named_tunnel_id','named_tunnel_token','named_tunnel_mode')"
     ).all();
-    return Object.fromEntries(rows.map((r) => [r.key, r.value]));
+    const out = Object.fromEntries(rows.map((r) => [r.key, r.value]));
+    // O token do túnel é segredo: em repouso fica cifrado (setSetting),
+    // decifrado só na memória de quem precisa dele de verdade.
+    out.named_tunnel_token = cipher.decrypt(out.named_tunnel_token || '');
+    return out;
   }
 
   setSetting(key, value) {
     const db = getDB();
+    const stored = key === 'named_tunnel_token' && value ? cipher.encrypt(value) : value;
     db.prepare(`
       INSERT INTO settings (key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)
       ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP
-    `).run(key, value);
+    `).run(key, stored);
   }
 
   isRunning() {

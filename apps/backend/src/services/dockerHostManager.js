@@ -5,6 +5,7 @@ const path = require('path');
 const { getDB } = require('../db');
 const config = require('../config');
 const { DockerEngine, parseDockerHost } = require('./dockerEngine');
+const cipher = require('./secretCipher');
 
 // Uma instância DockerEngine por host cadastrado, reaproveitada entre
 // requests — abrir uma conexão HTTP nova a cada chamada seria desperdício,
@@ -19,7 +20,10 @@ function rowToClient(row) {
   if (cached && cached.connection === row.connection) return cached.engine;
 
   const conn = parseDockerHost(row.connection);
-  const tls = row.tls_ca ? { ca: row.tls_ca, cert: row.tls_cert, key: row.tls_key } : null;
+  // TLS fica cifrado em repouso (addHost/boot-migração); decifra só aqui.
+  const tls = row.tls_ca
+    ? { ca: cipher.decrypt(row.tls_ca), cert: cipher.decrypt(row.tls_cert), key: cipher.decrypt(row.tls_key) }
+    : null;
   // apiVersion vinha do default do client e ignorava a configuração —
   // DOCKER_API_VERSION existia no config.js sem nenhum efeito (P19).
   const engine = new DockerEngine({ ...conn, tls, apiVersion: config.DOCKER_API_VERSION });
@@ -83,10 +87,19 @@ function addHost({ name, connection, tls_ca = null, tls_cert = null, tls_key = n
 
   const db = getDB();
   if (is_default) db.prepare('UPDATE docker_hosts SET is_default = 0').run();
+  // Chaves/certs TLS são segredos: em repouso ficam cifrados (secretCipher)
+  // e só são decifrados na montagem do client da Engine (engineFor).
   const result = db.prepare(`
     INSERT INTO docker_hosts (name, connection, tls_ca, tls_cert, tls_key, is_default)
     VALUES (?, ?, ?, ?, ?, ?)
-  `).run(name.trim(), connection.trim(), tls_ca, tls_cert, tls_key, is_default ? 1 : 0);
+  `).run(
+    name.trim(),
+    connection.trim(),
+    tls_ca ? cipher.encrypt(tls_ca) : null,
+    tls_cert ? cipher.encrypt(tls_cert) : null,
+    tls_key ? cipher.encrypt(tls_key) : null,
+    is_default ? 1 : 0,
+  );
 
   return getHostRow(result.lastInsertRowid);
 }

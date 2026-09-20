@@ -70,6 +70,7 @@ const router = createFileRoutes({
       target: name ? `[${name}] ${target}` : target,
       detail,
       username: req.user?.username,
+      ip: req.ip,
     });
   },
 });

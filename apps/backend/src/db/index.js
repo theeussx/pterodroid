@@ -93,6 +93,14 @@ const MIGRATIONS = [
   ['db_instances', 'port', 'INTEGER'],
   ['db_instances', 'public_url', 'TEXT'],
   ['db_instances', 'tunnel_hostname', 'TEXT'],
+  // Fase 1 — conta e segurança:
+  // 2FA TOTP por usuário (segredo fica CIFRADO — secretCipher — mesmo em
+  // repouso; os códigos de recuperação guardam apenas hashes SHA-256).
+  ['users', 'totp_secret', 'TEXT'],
+  ['users', 'totp_enabled', 'INTEGER DEFAULT 0'],
+  ['users', 'recovery_codes', "TEXT DEFAULT '[]'"],
+  // Auditoria central registra também o IP de origem da ação.
+  ['audit_log', 'ip', "TEXT DEFAULT ''"],
 ];
 
 function collectPendingMigrations(database) {
@@ -141,6 +149,25 @@ function applyMigrations(database, pending) {
   for (const [table, column, definition] of pending) {
     database.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
     console.log(`  ↳ migração: adicionada coluna ${table}.${column}`);
+  }
+}
+
+/** Cifra in-place uma coluna de segredo que possa estar em texto claro. */
+function encryptLegacyColumn(database, table, column) {
+  try {
+    const rows = database
+      .prepare(`SELECT id, ${column} AS value FROM ${table} WHERE ${column} IS NOT NULL AND ${column} != ''`)
+      .all();
+    const update = database.prepare(`UPDATE ${table} SET ${column} = ? WHERE id = ?`);
+    for (const row of rows) {
+      if (!cipher.isEncrypted(row.value)) {
+        update.run(cipher.encrypt(row.value), row.id);
+      }
+    }
+  } catch {
+    // Coluna ainda não existe neste banco legado — as migrações do boot
+    // correm DEPOIS do CREATE TABLE mas este helper é chamado só então;
+    // qualquer ausência inesperada não pode derrubar a inicialização.
   }
 }
 
@@ -248,6 +275,19 @@ async function initDB() {
       created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
+    -- Sessões JWT revogáveis (Fase 1). Cada token emitido aponta via 'jti'
+    -- para uma linha aqui; revogar a linha invalida o token na próxima
+    -- requisição, sem esperar a expiração natural do JWT.
+    CREATE TABLE IF NOT EXISTS sessions (
+      id           TEXT PRIMARY KEY,          -- jti (uuid)
+      user_id      INTEGER NOT NULL,
+      created_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
+      last_seen_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      ip           TEXT DEFAULT '',
+      user_agent   TEXT DEFAULT '',
+      revoked      INTEGER DEFAULT 0
+    );
+
     CREATE INDEX IF NOT EXISTS idx_logs_service ON logs(service_id, timestamp DESC);
     CREATE INDEX IF NOT EXISTS idx_logs_db      ON logs(db_instance_id, timestamp DESC);
     CREATE INDEX IF NOT EXISTS idx_audit_time    ON audit_log(timestamp DESC);
@@ -306,15 +346,22 @@ async function initDB() {
   for (const [k, v] of defaults) upsert.run(k, v);
 
   // ── Cifra de segredos legados (não cifrados) ──────────────────────────
-  // Um banco já existente pode ter git_token em texto claro. Cifrar aqui,
+  // Um banco já existente pode ter segredos em texto claro. Cifrar aqui,
   // no boot, migra os valores sem exigir ação do usuário. Valores já
   // cifrados (com o prefixo enc:) são pulados.
-  const legacy = db.prepare("SELECT id, git_token FROM services WHERE git_token IS NOT NULL AND git_token != ''").all();
-  const encToken = db.prepare('UPDATE services SET git_token = ? WHERE id = ?');
-  for (const row of legacy) {
-    if (!cipher.isEncrypted(row.git_token)) {
-      encToken.run(cipher.encrypt(row.git_token), row.id);
-    }
+  encryptLegacyColumn(db, 'services', 'git_token');
+  // Fase 1: cobertura estendida a senhas de banco, chaves TLS do Docker e
+  // token do Cloudflare Tunnel (achados D2 do plano de validação).
+  encryptLegacyColumn(db, 'db_instances', 'db_password');
+  encryptLegacyColumn(db, 'docker_hosts', 'tls_ca');
+  encryptLegacyColumn(db, 'docker_hosts', 'tls_cert');
+  encryptLegacyColumn(db, 'docker_hosts', 'tls_key');
+
+  // O token do túnel nomeado mora na tabela settings (chave/valor).
+  const legacyTunnel = db.prepare("SELECT value FROM settings WHERE key = 'named_tunnel_token'").get();
+  if (legacyTunnel?.value && !cipher.isEncrypted(legacyTunnel.value)) {
+    db.prepare("UPDATE settings SET value = ? WHERE key = 'named_tunnel_token'")
+      .run(cipher.encrypt(legacyTunnel.value));
   }
 
   // default ao cadastrar novas variáveis de ambiente fica como está; a

@@ -19,10 +19,10 @@ const config = require('../config');
 const MAX_MESSAGE_LENGTH = 2000;
 const MAX_AUDIT_ROWS = 500;
 
-function recordAudit(db, { action, target, detail = '', username = '' }) {
+function recordAudit(db, { action, target, detail = '', username = '', ip = '' }) {
   try {
-    db.prepare('INSERT INTO audit_log (action, target, detail, username) VALUES (?,?,?,?)')
-      .run(action, String(target ?? ''), String(detail ?? '').slice(0, 500), username || '');
+    db.prepare('INSERT INTO audit_log (action, target, detail, username, ip) VALUES (?,?,?,?,?)')
+      .run(action, String(target ?? ''), String(detail ?? '').slice(0, 500), username || '', String(ip || '').slice(0, 64));
   } catch (err) {
     // Auditoria nunca pode derrubar a operação que ela está registrando.
     console.error('[audit] falha ao registrar:', err.message);

@@ -28,7 +28,8 @@ const audit = (req, action, service, detail = '') => {
       target: `[${service.name}] backup`,
       detail,
       username: req.user?.username,
-    });
+      ip: req.ip,
+      });
   } catch (err) {
     console.error('[backups] falha ao registrar auditoria:', err.message);
   }

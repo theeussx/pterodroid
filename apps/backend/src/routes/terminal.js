@@ -98,7 +98,8 @@ router.post('/', handle(async (req) => {
     });
     recordAudit(getDB(), {
       action: 'terminal', target: `[${service.name}] sessão aberta`, username: req.user?.username,
-    });
+      ip: req.ip,
+  });
     return terminals.describe(session);
   }
 
@@ -110,6 +111,7 @@ router.post('/', handle(async (req) => {
   const session = terminals.create({ serviceId: service.id, serviceName: service.name, cwd });
   recordAudit(getDB(), {
     action: 'terminal', target: `[${service.name}] sessão aberta`, username: req.user?.username,
+    ip: req.ip,
   });
   return terminals.describe(session);
 }));
@@ -132,7 +134,8 @@ router.post('/:sessionId/exec', handle((req) => {
     action: 'exec',
     target: `[${service.name}] ${String(command).slice(0, 200)}`,
     username: req.user?.username,
-  });
+      ip: req.ip,
+    });
   return { ok: true, ...terminals.describe(session), pid: started?.pid ?? null };
 }));
 

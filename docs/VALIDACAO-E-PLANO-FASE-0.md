@@ -389,6 +389,43 @@ Pendências registradas que dependem de ambiente fora do sandbox:
 build real da imagem + prova do uid 1000 (job `docker-build` no CI), Fedora
 e ARM físico (documentados na matriz), e as decisões da Fase 1 (seção 9).
 
+## 11. Fase 1 — slice de segurança (executado nesta branch)
+
+O primeiro bloco da Fase 1 (segurança de acesso e segredos) foi executado
+como continuação direta da Fase 0. Itens e evidências:
+
+| Item | Escopo | Status | Evidência |
+|---|---|---|---|
+| Cifra — cobertura completa (D2) | Cifrar em repouso também `db_instances.db_password`, `docker_hosts.tls_*`, `settings.named_tunnel_token` e segredo TOTP; migrar valores legados em claro no boot | ✅ | `services/secretCipher.js` reaplicado nos managers/rotas (escrita) e leituras (`dbInstanceManager`, `dockerHostManager`, `namedTunnelManager`); migração idempotente `encryptLegacyColumn` + branch do token de túnel no `initDB`; suíte `secret-coverage-test.js` (18 asserções) |
+| 2FA TOTP (P1-segurança) | Segundo fator sem dependência externa, com códigos de recuperação | ✅ | `services/totp.js` (RFC 6238 puro: base32/HOTP/TOTP, janela ±1 com comparação em tempo constante, 8 códigos de recuperação `XXXX-XXXX` guardados só como hash SHA-256); rotas `GET /2fa/status`, `POST /2fa/setup|enable|disable|recovery-codes`; login responde `401 TOTP_REQUIRED` quando a conta exige o código; UI em `Settings → Verificação em 2 etapas` e passo dedicado no `Login.jsx` |
+| Sessões revogáveis (P0-segurança) | Token JWT deixa de ser "só assinatura + expiração" | ✅ | Tabela `sessions` (jti uuid, ip, user-agent, last_seen, revoked); `services/sessionManager.js` (teto de 25 sessões/usuário, touch ≤1/min); tokens antigos sem `jti` ganham `401 SESSION_UPGRADE_REQUIRED`; revogado ganha `401 SESSION_REVOKED`; `POST /logout`, `GET/DELETE /sessions`, `POST /sessions/revoke-others`; troca de senha revoga as outras; socket também valida a sessão; UI em `Settings → Dispositivos conectados` |
+| Auditoria central (P1-segurança) | Uma visão única para todas as ações auditadas | ✅ | Coluna `audit_log.ip` + `recordAudit` com IP; `GET /api/audit` com filtros (ação, usuário, texto, período, paginação) e lista de ações distintas; instrumentação das rotas de serviços, bancos, backups, Docker, configurações e autenticação (as de arquivos/terminal, que já existiam, ganharam IP); UI em `Logs → Auditoria` |
+| Documentação | Manter o material de operação alinhado | ✅ | Seção ✅ "2FA/Sessões/Auditoria" na página Segurança do site de docs; README com 2FA, dispositivos e trilha de auditoria |
+
+Suíte final com a Fase 1: **15 suítes verdes** (`npm test`), incluindo as
+novas `auth-sessions-2fa-test.js` (37 asserções) e `secret-coverage-test.js`
+(18 asserções); builds do frontend (`vite build`) e do site de docs verdes.
+
+Decisões tomadas no slice (registradas para quem pegar os próximos blocos):
+
+* **Tokens legados são rejeitados, não converter.** Reemitir exige um login
+  — a conveniência de manter tokens antigos não compensa o furo na
+  revogabilidade ("tokens que não estão na tabela não morrem nunca").
+* **Cifra aplicada no ponto de escrita/leitura existe no código, não no
+  driver do banco** — o SQL nas rotas continua idiomático e a migração de
+  legados acontece UMA vez no boot, sem interceptador mágico.
+* **Desativar/regenerar 2FA pede a senha** (reautenticação), não o código
+  TOTP: continua viável recuperar a conta quando o celular some.
+* A chave da cifra segue derivada de `JWT_SECRET` (ver seção 9, item 3) —
+  a chave mestre separada permanece como decisão aberta da Fase 3, já com o
+  contrato `enc:v1:` isolado no `secretCipher` para trocar a derivação sem
+  tocar nos consumidores.
+
+Fora do escopo deste slice (permanecem na lista da Fase 1): fila de jobs
+persistente, métricas históricas e alertas, backups off-site/dump nativo,
+proxy reverso/TLS, hardening do socket e perfis de usuário, migração
+sql.js → better-sqlite3, e a chave mestra da cifra.
+
 ---
 
 *Validação executada em 19/09/2026 sobre `3e281a6`, branch
