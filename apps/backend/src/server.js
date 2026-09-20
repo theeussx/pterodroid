@@ -27,6 +27,7 @@ const backupRoutes = require('./routes/backups');
 const dockerRoutes = require('./routes/docker');
 const { authMiddleware } = require('./middleware/auth');
 const { setupRequired } = require('./middleware/setupRequired');
+const jobQueue = require('./services/jobQueue');
 
 /**
  * Se o painel morreu à força (OOM killer do Android, bateria acabando,
@@ -69,6 +70,10 @@ async function main() {
 
   reconcileStaleState(db);
   dockerHostManager.ensureDefaultHost?.();
+  // Fila de jobs: registra os handlers e reconcilia o que o processo
+  // anterior deixou para trás (jobs zumbis + backups/setups frustrados).
+  require('./services/jobHandlers').registerAll();
+  jobQueue.reconcileBoot();
   const stopPrune = schedulePrune(db);
 
   const app = express();
@@ -122,6 +127,8 @@ async function main() {
   // Auditoria central unificada (Fase 1): substitui a visão parcial
   // /api/files/audit, que continua existindo por compatibilidade.
   app.use('/api/audit', authMiddleware, setupRequired, require('./routes/audit'));
+  // Fila persistente de operações longas (Fase 1): backup, restore, pull.
+  app.use('/api/jobs', authMiddleware, setupRequired, require('./routes/jobs'));
 
   // 404 para rotas de API não encontradas — precisa vir antes do fallback
   // do SPA, senão /api/inexistente devolveria o index.html.

@@ -62,6 +62,8 @@ Descubra o que o Pterodroid pode fazer por você:
 
 - 🔒 **Segurança Robusta:** Autenticação JWT com **2FA TOTP** (dupla verificação), códigos de recuperação, **sessões revogáveis por dispositivo** ("encerrar tudo à distância"), auditoria central com IP de origem e senhas `bcryptjs`. Troca de senha despeja as outras sessões na hora.
 
+- ⏳ **Tarefas em segundo plano (fila persistente):** back-ups, restaurações e pulls de imagem Docker não travam a interface — sobem para uma fila no SQLite, aparecem ao vivo no dashboard (com cancelamento do que ainda não começou) e, se o painel reiniciar no meio, o que ficou pendurado é marcado como falho com explicação, em vez de sumir em silêncio.
+
 - 📱 **Experiência Otimizada para Dispositivos Móveis:** Uma interface de usuário responsiva, construída com Tailwind CSS, que se adapta perfeitamente a telas de diferentes tamanhos, garantindo uma experiência consistente em smartphones e tablets.
 
 ---

@@ -65,6 +65,7 @@ run "Integração — driver Docker (engine simulada)"       node tests/docker-d
 run "Integração — segurança da autenticação"             node tests/auth-security-test.js
 run "Integração — sessões revogáveis e 2FA TOTP"        node tests/auth-sessions-2fa-test.js
 run "Unidade — cobertura da cifra de segredos"          node tests/secret-coverage-test.js
+run "Fila — jobs persistentes (FIFO, cancel, zumbi)"    node tests/job-queue-test.js
 run "Integração — segurança das instâncias de banco"    node tests/database-security-test.js
 run "Segurança — compactar/descompactar (Zip Slip)"      node tests/archive-test.js
 run "Integração — terminal do serviço"                   node tests/terminal-test.js

@@ -154,21 +154,41 @@ WORKDIR=$(echo "$GET1" | node -e "process.stdin.on('data',d=>console.log(JSON.pa
 echo "conteudo-original" > "$WORKDIR/marcador.txt"
 [ -f "$WORKDIR/marcador.txt" ] && pass "arquivo de teste criado no workspace" || fail "não criou arquivo de teste no workspace"
 
-echo "== backups: create =="
+echo "== backups: create (agora assíncrono, via fila de jobs) =="
+# Desde a Fase 1, POST /backups enfileira e responde 202 {job} — o resultado
+# chega quando o worker termina; aqui pollamos a listagem até 'ready'.
 BK=$(curl -s -X POST "$BASE/api/services/$SVC_ID/backups" -H "$AUTH" -H "Content-Type: application/json" -d '{"name":"teste-1"}')
 echo "$BK"
-BK_ID=$(echo "$BK" | node -e "process.stdin.on('data',d=>console.log(JSON.parse(d).id))")
-echo "$BK" | grep -q '"status":"ready"' && pass "backup criado e pronto" || fail "backup não ficou 'ready': $BK"
+echo "$BK" | grep -q '"type":"backup.create"' && pass "criar backup responde com o job da fila" || fail "criar backup não enfileirou: $BK"
 
-echo "== backups: list =="
-LIST=$(curl -s "$BASE/api/services/$SVC_ID/backups" -H "$AUTH")
-echo "$LIST" | grep -qE "\"id\":$BK_ID[,}]" && pass "backup aparece na listagem" || fail "backup sumiu da listagem: $LIST"
+wait_backup_ready() {
+  local name="$1" tries=25
+  while [ $tries -gt 0 ]; do
+    local FOUND
+    FOUND=$(curl -s "$BASE/api/services/$SVC_ID/backups" -H "$AUTH" | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{const a=JSON.parse(d);const b=a.find(x=>x.name==='$name'&&x.status==='ready');console.log(b?b.id:'')})")
+    if [ -n "$FOUND" ]; then echo "$FOUND"; return 0; fi
+    tries=$((tries-1)); sleep 0.4
+  done
+  echo ""; return 1
+}
+
+BK_ID=$(wait_backup_ready "teste-1")
+[ -n "$BK_ID" ] && pass "backup da fila aparece pronto na listagem" || fail "backup 'teste-1' não ficou pronto"
 
 echo "== backups: limit is enforced =="
 for i in $(seq 1 12); do
   curl -s -X POST "$BASE/api/services/$SVC_ID/backups" -H "$AUTH" -H "Content-Type: application/json" -d "{\"name\":\"extra-$i\"}" > /dev/null
 done
-OVERLIMIT_COUNT=$(curl -s "$BASE/api/services/$SVC_ID/backups" -H "$AUTH" | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>console.log(JSON.parse(d).length))")
+# Drena a fila: o limite é aplicado DENTRO do job, então antes de contar
+# precisamos que nada esteja executando/esperando.
+tries=40
+while [ $tries -gt 0 ]; do
+  ACTIVE=$(curl -s "$BASE/api/jobs" -H "$AUTH" | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>console.log(JSON.parse(d).active))")
+  [ "$ACTIVE" = "0" ] && break
+  tries=$((tries-1)); sleep 0.5
+done
+[ "$ACTIVE" = "0" ] && pass "fila drenou após os 12 enfileiramentos" || fail "fila não drenou (active=$ACTIVE)"
+OVERLIMIT_COUNT=$(curl -s "$BASE/api/services/$SVC_ID/backups" -H "$AUTH" | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>console.log(JSON.parse(d).filter(b=>b.status!=='failed').length))")
 [ "$OVERLIMIT_COUNT" -le 10 ] && pass "limite de backups por serviço respeitado ($OVERLIMIT_COUNT <= 10)" || fail "limite não foi respeitado: $OVERLIMIT_COUNT backups"
 
 echo "== backups: download is a real zip =="
@@ -196,7 +216,16 @@ echo "== backups: restore brings the original content back =="
 echo "modificado-depois-do-backup" > "$WORKDIR/marcador.txt"
 RESTORE=$(curl -s -X POST "$BASE/api/services/$SVC_ID/backups/$BK_ID/restore" -H "$AUTH")
 echo "$RESTORE"
-CONTENT_AFTER=$(cat "$WORKDIR/marcador.txt" 2>/dev/null)
+echo "$RESTORE" | grep -q '"type":"backup.restore"' && pass "restaurar responde com o job da fila" || fail "restaurar não enfileirou: $RESTORE"
+# Restauração roda na fila — o arquivo só volta ao conteúdo original quando
+# o worker terminar; sondamos com tempo de sobra em vez de presumir timing.
+CONTENT_AFTER=""
+tries=30
+while [ $tries -gt 0 ]; do
+  CONTENT_AFTER=$(cat "$WORKDIR/marcador.txt" 2>/dev/null)
+  [ "$CONTENT_AFTER" = "conteudo-original" ] && break
+  tries=$((tries-1)); sleep 0.4
+done
 [ "$CONTENT_AFTER" = "conteudo-original" ] && pass "restauração trouxe o conteúdo original de volta" || fail "restauração não recuperou o conteúdo (leu: '$CONTENT_AFTER')"
 
 echo "== backups: delete =="

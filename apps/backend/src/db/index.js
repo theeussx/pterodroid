@@ -288,10 +288,27 @@ async function initDB() {
       revoked      INTEGER DEFAULT 0
     );
 
+    -- Fila persistente de operacoes longas (Fase 1): backup, restore,
+    -- pull de imagem. Estado sobrevive a processo; o boot reconcilia os
+    -- zumbis para failed. Detalhes em services/jobQueue.js.
+    CREATE TABLE IF NOT EXISTS jobs (
+      id          TEXT PRIMARY KEY,   -- uuid
+      type        TEXT NOT NULL,
+      subject     TEXT DEFAULT '',
+      payload     TEXT DEFAULT '{}',
+      status      TEXT DEFAULT 'queued', -- queued | running | done | failed | cancelled
+      progress    INTEGER DEFAULT 0,
+      result      TEXT DEFAULT '',
+      created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+      started_at  DATETIME,
+      finished_at DATETIME
+    );
+
     CREATE INDEX IF NOT EXISTS idx_logs_service ON logs(service_id, timestamp DESC);
     CREATE INDEX IF NOT EXISTS idx_logs_db      ON logs(db_instance_id, timestamp DESC);
     CREATE INDEX IF NOT EXISTS idx_audit_time    ON audit_log(timestamp DESC);
     CREATE INDEX IF NOT EXISTS idx_backups_service ON backups(service_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_jobs_status     ON jobs(status, created_at);
   `);
 
   // ── Migrations (safe on both a fresh DB and an existing one) ────────────

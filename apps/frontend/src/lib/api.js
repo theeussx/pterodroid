@@ -67,6 +67,18 @@ export const api = {
     return request(`/audit${qs ? `?${qs}` : ''}`);
   },
 
+  // fila de operações longas (Fase 1) — o andamento em tempo real chega
+  // pelo socket (job:update); aqui fica a hidratação da tela e o cancel.
+  jobs: {
+    list: (params = {}) => {
+      const qs = new URLSearchParams(
+        Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== ''),
+      ).toString();
+      return request(`/jobs${qs ? `?${qs}` : ''}`);
+    },
+    cancel: (id) => request(`/jobs/${id}/cancel`, { method: 'POST' }),
+  },
+
   // services
   listServices: () => request('/services'),
   listServiceRecipes: () => request('/services/recipes'),

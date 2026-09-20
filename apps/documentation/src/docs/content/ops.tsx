@@ -55,11 +55,14 @@ export const backup: DocPage = {
           { title: 'Confira o arquivo', body: <>Verifique o tamanho (arquivos de serviço e bancos dominam) e guarde o backup <strong>fora do dispositivo</strong> (PC, nuvem, cartão).</> },
         ]}
       />
-      <Callout type="tip" title="Backup por serviço (sem parar nada)">
+      <Callout type="tip" title="Backup por serviço (na fila, sem parar nada)">
         <p>
           Para o código de um serviço específico, use a aba <strong>Backups</strong> do serviço: gera um <C>.zip</C> sem
           parar o painel nem o serviço. Ele não inclui banco do painel nem instâncias de banco de dados — para esses,
-          use o backup completo acima.
+          use o backup completo acima. Criar e restaurar passam pela <strong>fila de tarefas</strong>: a operação
+          aparece no cartão <em>Tarefas em segundo plano</em> do dashboard, sobrevive a um reinício do painel (o que
+          estava no meio fica claramente marcado como falho) e pode ser cancelada enquanto ainda estiver esperando
+          na fila.
         </p>
       </Callout>
 

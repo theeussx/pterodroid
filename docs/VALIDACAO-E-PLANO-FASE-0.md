@@ -422,9 +422,49 @@ Decisões tomadas no slice (registradas para quem pegar os próximos blocos):
   tocar nos consumidores.
 
 Fora do escopo deste slice (permanecem na lista da Fase 1): fila de jobs
-persistente, métricas históricas e alertas, backups off-site/dump nativo,
-proxy reverso/TLS, hardening do socket e perfis de usuário, migração
-sql.js → better-sqlite3, e a chave mestra da cifra.
+persistente (feita na seção 12), métricas históricas e alertas, backups
+off-site/dump nativo, proxy reverso/TLS, hardening do socket e perfis de
+usuário, migração sql.js → better-sqlite3, e a chave mestra da cifra.
+
+## 12. Fase 1 — fila de jobs persistente (executado nesta branch)
+
+A "fila de jobs" era o único item P0 que faltava da matriz de prioridades
+do relatório (seção 12 de `docs/RELATORIO-EVOLUCAO.md`). O que entrou:
+
+| Item | Status | Evidência |
+|---|---|---|
+| `services/jobQueue.js` — fila FIFO persistente no SQLite (tabela `jobs`), 1 job por vez, retenção de 200 registros, cancelamento do que ainda está `queued`, evento socket `job:update` | ✅ | suíte `tests/job-queue-test.js` (25 asserções: ordem FIFO, falha de handler, cancelamento, reconciliação de zumbis, fluxo HTTP completo) |
+| Reconciliação no boot — jobs `queued`/`running` viram `failed` com explicação; status zumbis anteriores à fila são limpos no mesmo passe (`backups` em `creating`/`restoring`, `setup_status='running'`) | ✅ | `reconcileBoot()` + asserções na suíte; complementa o `reconcileStaleState` de serviços |
+| `backup.create` e `backup.restore` migrados para a fila (202 `{job}` imediato, auditoria atribuída a quem enfileirou via `payload.by/ip`) | ✅ | `routes/backups.js` + handlers em `services/jobHandlers.js`; UI (`BackupsTab`) mostra o aviso por socket e recarrega a lista ao terminar |
+| `docker.image_pull` migrado para a fila (progresso em rampa via callback do engine) | ✅ | `routes/docker.js` + handler; antes o request ficava pendurado no pull inteiro |
+| API `GET /api/jobs` (filtros/paginação), `GET /api/jobs/:id`, `POST /api/jobs/:id/cancel` | ✅ | `routes/jobs.js`, mesmo middleware de auth/setup das demais |
+| Painel "Tarefas em segundo plano" no dashboard (ao vivo pelo socket; some quando vazio) | ✅ | `components/JobsPanel.jsx` + `pages/Dashboard.jsx` |
+| Smoke test adaptado ao modelo assíncrono (sonda 'ready' na listagem, drena fila antes de contar limite, espera o restore) | ✅ | `tests/smoke-test.sh`; suíte final: **16 suítes verdes** |
+
+Decisões deste slice:
+
+* **Um job por vez, globalmente.** Um painel pessoal sofre mais com
+  contenção de disco/rede (zip grande + pull gordo simultâneos) do que com
+  espera — e a explicação de fila fica trivial: olhar a tabela `jobs`.
+* **Nada de replay automático dos zumbis.** Handlers não são reentrantes;
+  a decisão honesta no boot é falhar com mensagem clara e deixar o operador
+  repetir a operação, nunca repetir efeitos colaterais no escuro.
+* **Cancelar só o que ainda não começou.** Interromper um handler em voo
+  exigiria checkpoints por etapa dentro dele; fora do tamanho deste slice.
+* **O setup de serviço (clone/install/build) NÃO migrou para a fila** —
+  ele já tinha runner próprio assíncrono com estado persistido por serviço
+  (`setup_status` + tolerância a staleness); a ÚNICA melhoria que a fila
+  acrescentaria ali (visibilidade unificada) não compensa fazer dois
+  sistemas conversarem. Em troca, o boot agora também limpa o zumbi de
+  `setup_status='running'` que ficava eterno em reinício no meio do setup.
+* **Respostas HTTP de backup mudaram** (202 + job em vez do objeto pronto) —
+  a UI de backups foi adaptada no mesmo commit; API externa que depender do
+  formato antigo precisa desse ajuste (não documentado antes).
+
+O que continua fora do escopo e segue na fila da Fase 1: métricas
+históricas e alertas por limiar, backups off-site e restore verificado
+agendado (a fila viabiliza: o agendador tem onde enfileirar), dump
+engine-aware (pg_dump/mysqldump), proxy reverso/TLS, hardening do socket.
 
 ---
 
