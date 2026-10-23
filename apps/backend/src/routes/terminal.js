@@ -95,6 +95,7 @@ router.post('/', handle(async (req) => {
       serviceName: service.name,
       engine,
       containerId: service.container_id,
+      ownerJti: req.user.jti,
     });
     recordAudit(getDB(), {
       action: 'terminal', target: `[${service.name}] sessão aberta`, username: req.user?.username,
@@ -108,7 +109,7 @@ router.post('/', handle(async (req) => {
   const cwd = workspaces.normalize(service.working_directory)
     || workspaces.createForService(service.name);
 
-  const session = terminals.create({ serviceId: service.id, serviceName: service.name, cwd });
+  const session = terminals.create({ serviceId: service.id, serviceName: service.name, cwd, ownerJti: req.user.jti });
   recordAudit(getDB(), {
     action: 'terminal', target: `[${service.name}] sessão aberta`, username: req.user?.username,
     ip: req.ip,

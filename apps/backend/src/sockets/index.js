@@ -1,7 +1,6 @@
 /**
- * Real-time layer. Single-user panel, so every event is broadcast to every
- * connected socket — no per-user rooms needed. The frontend filters by
- * serviceId/instanceId client-side.
+ * Real-time layer. Eventos gerais continuam sendo broadcasts do painel, mas
+ * a saída de terminal é privada à sessão que o socket explicitamente abriu.
  */
 const { Server } = require('socket.io');
 const { verifySocketToken } = require('../middleware/auth');
@@ -57,10 +56,13 @@ function setupSockets(httpServer, config = {}) {
   tm.on('url', (payload) => io.emit('tunnel:url', payload));
   ntm.on('status', (payload) => io.emit('domains:status', payload));
   ntm.on('log', (payload) => io.emit('domains:log', payload));
-  // Saída do terminal: mesmo caminho dos logs, para o comando ir
-  // aparecendo enquanto roda em vez de só no fim.
-  terminals.on('data', (payload) => io.emit('terminal:data', payload));
-  terminals.on('exit', (payload) => io.emit('terminal:exit', payload));
+  const terminalRoom = (sessionId) => `terminal:${sessionId}`;
+  terminals.on('data', (payload) => {
+    if (payload.sessionId) io.to(terminalRoom(payload.sessionId)).emit('terminal:data', payload);
+  });
+  terminals.on('exit', (payload) => {
+    if (payload.sessionId) io.to(terminalRoom(payload.sessionId)).emit('terminal:exit', payload);
+  });
 
   // ── Periodic system snapshot, only while someone's listening ─────────
   let snapshotTimer = null;
@@ -101,6 +103,19 @@ function setupSockets(httpServer, config = {}) {
     startSnapshotLoop();
     // Manda um snapshot imediato pra tela não ficar vazia até o próximo tick.
     getSnapshot().then((s) => socket.emit('monitor:snapshot', s)).catch(() => {});
+    socket.on('terminal:join', (sessionId, callback) => {
+      const session = terminals.get(String(sessionId || ''));
+      const allowed = session && session.ownerJti && session.ownerJti === socket.user.jti;
+      if (!allowed) {
+        if (typeof callback === 'function') callback({ ok: false, error: 'unauthorized' });
+        return;
+      }
+      socket.join(terminalRoom(session.id));
+      if (typeof callback === 'function') callback({ ok: true });
+    });
+    socket.on('terminal:leave', (sessionId) => {
+      if (sessionId) socket.leave(terminalRoom(String(sessionId)));
+    });
     socket.on('disconnect', stopSnapshotLoopIfIdle);
   });
 

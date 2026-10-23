@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { TerminalSquare, Square, Trash2, CornerDownLeft, RefreshCw } from 'lucide-react';
 import { api } from '../lib/api';
-import { getSocket } from '../lib/socket';
+import { getSocket, joinTerminal, leaveTerminal } from '../lib/socket';
 import Button from './Button';
 import { useToast } from '../stores/ToastContext';
 
@@ -75,12 +75,16 @@ export default function ServiceTerminal({ serviceId, serviceName }) {
     };
   }, [serviceId, append]);
 
-  // Saída ao vivo. Filtra por sessão: o socket é global e outra aba pode
-  // ter um terminal aberto ao mesmo tempo.
+  // O backend entrega apenas a room autorizada; o filtro permanece como
+  // defesa em profundidade e para compatibilidade com clientes antigos.
   useEffect(() => {
     const socket = getSocket();
     if (!socket || !session) return undefined;
 
+    let active = true;
+    joinTerminal(session.id).then((result) => {
+      if (active && result?.ok === false) setError('Não foi possível assinar a sessão do terminal');
+    });
     const onData = (payload) => {
       if (payload.sessionId !== session.id) return;
       if (payload.stream === 'exit') {
@@ -95,7 +99,11 @@ export default function ServiceTerminal({ serviceId, serviceName }) {
     };
 
     socket.on('terminal:data', onData);
-    return () => socket.off('terminal:data', onData);
+    return () => {
+      active = false;
+      leaveTerminal(session.id);
+      socket.off('terminal:data', onData);
+    };
   }, [session, append]);
 
   // Rola para o fim quando chega saída nova, a menos que o usuário tenha

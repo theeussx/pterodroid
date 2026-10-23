@@ -59,11 +59,12 @@ function sanitizeEnv(base) {
 }
 
 class TerminalSession extends EventEmitter {
-  constructor({ id, serviceId, serviceName, cwd, env = {} }) {
+  constructor({ id, serviceId, serviceName, cwd, env = {}, ownerJti = null }) {
     super();
     this.id = id;
     this.serviceId = serviceId;
     this.serviceName = serviceName;
+    this.ownerJti = ownerJti;
     this.cwd = cwd;
     this.env = env;
     this.scrollback = [];
@@ -268,11 +269,12 @@ class TerminalSession extends EventEmitter {
  * isola o processo, então não há grupo pra gerenciar.
  */
 class DockerTerminalSession extends EventEmitter {
-  constructor({ id, serviceId, serviceName, engine, containerId, cwd = '/app' }) {
+  constructor({ id, serviceId, serviceName, engine, containerId, cwd = '/app', ownerJti = null }) {
     super();
     this.id = id;
     this.serviceId = serviceId;
     this.serviceName = serviceName;
+    this.ownerJti = ownerJti;
     this.engine = engine;
     this.containerId = containerId;
     this.cwd = cwd;
@@ -366,13 +368,13 @@ class TerminalManager extends EventEmitter {
     this._reaper.unref?.();
   }
 
-  create({ serviceId, serviceName, cwd, engine = null, containerId = null }) {
+  create({ serviceId, serviceName, cwd, engine = null, containerId = null, ownerJti = null }) {
     this._counter += 1;
     const id = `t${Date.now().toString(36)}${this._counter}`;
 
     const session = containerId
-      ? new DockerTerminalSession({ id, serviceId, serviceName, engine, containerId })
-      : new TerminalSession({ id, serviceId, serviceName, cwd: workspaces.ensureDir(cwd) });
+      ? new DockerTerminalSession({ id, serviceId, serviceName, engine, containerId, ownerJti })
+      : new TerminalSession({ id, serviceId, serviceName, cwd: workspaces.ensureDir(cwd), ownerJti });
 
     // Reemite no manager para o socket.io não precisar assinar cada sessão.
     session.on('data', (payload) => this.emit('data', { serviceId, ...payload }));

@@ -58,7 +58,14 @@ function authMiddleware(req, res, next) {
 /** Socket.io: mesma verificação, sem tocar o last_seen (conexão longa). */
 function verifySocketToken(token) {
   const result = checkToken(token);
-  return result.ok ? result.payload : null;
+  if (!result.ok) return null;
+  try {
+    const user = getDB().prepare('SELECT totp_enabled FROM users WHERE id = ?').get(result.payload.id);
+    if (user?.totp_enabled === 1 && result.payload.totpVerified !== true) return null;
+  } catch {
+    return null;
+  }
+  return result.payload;
 }
 
 /** Protege o terminal sem alterar as demais rotas autenticadas. */

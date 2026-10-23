@@ -82,13 +82,18 @@ async function api(path, { method = 'GET', body, token } = {}) {
   socket.on('terminal:data', (p) => chunks.push(p));
   const exits = [];
   socket.on('terminal:exit', (p) => exits.push(p));
+  const observer = io(B, { auth: { token }, reconnection: false });
+  const observerChunks = [];
+  observer.on('terminal:data', (p) => observerChunks.push(p));
   await new Promise((r) => socket.on('connect', r));
+  await new Promise((r) => observer.on('connect', r));
 
   console.log('Abertura de sessão:');
   const { data: session, status } = await api(`/services/${svc.id}/terminal`, { method: 'POST', token });
   ok('sessão criada', status === 200 && !!session.id, JSON.stringify(session));
   ok('cwd é o workspace do serviço', session.cwd === svc.working_directory, session.cwd);
   const sid = session.id;
+  await new Promise((resolve) => socket.emit('terminal:join', sid, resolve));
 
   const waitForIdle = async (timeout = 5000) => {
     const deadline = Date.now() + timeout;
@@ -120,6 +125,7 @@ async function api(path, { method = 'GET', body, token } = {}) {
   ok('saída chega pelo socket', r.text.includes('ola mundo'), JSON.stringify(r.text));
   ok('código de saída 0', r.exit?.code === 0, JSON.stringify(r.exit));
   ok('eco do comando digitado', r.chunks.some((c) => c.stream === 'input' && c.text.includes('echo ola mundo')));
+  ok('socket autenticado sem join não recebe a saída', observerChunks.length === 0, JSON.stringify(observerChunks));
 
   r = await runAndWait('pwd');
   ok('roda dentro do workspace', r.text.trim() === svc.working_directory, r.text.trim());
@@ -190,6 +196,7 @@ async function api(path, { method = 'GET', body, token } = {}) {
   ok('sessão some depois de fechada', gone.status === 404);
 
   socket.close();
+  observer.close();
   cleanup();
   console.log(`\n${pass} passaram, ${fail} falharam`);
   process.exit(fail === 0 ? 0 : 1);

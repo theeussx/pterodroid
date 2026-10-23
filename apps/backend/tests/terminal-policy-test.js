@@ -6,6 +6,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const totp = require('../src/services/totp');
+const { io } = require('socket.io-client');
 
 const PORT = 4010 + Math.floor(Math.random() * 8);
 const BASE = `http://127.0.0.1:${PORT}`;
@@ -56,6 +57,15 @@ async function api(route, { method = 'GET', body, token } = {}) {
   return { status: response.status, data: await response.json().catch(() => null) };
 }
 
+function socketHandshake(token) {
+  return new Promise((resolve) => {
+    const socket = io(BASE, { auth: { token }, reconnection: false, timeout: 3000 });
+    const finish = (result) => { socket.close(); resolve(result); };
+    socket.once('connect', () => finish({ connected: true }));
+    socket.once('connect_error', (error) => finish({ connected: false, error: error.message }));
+  });
+}
+
 (async () => {
   await startServer();
   let r = await api('/auth/login', { method: 'POST', body: { username: 'admin', password: 'admin' } });
@@ -78,9 +88,13 @@ async function api(route, { method = 'GET', body, token } = {}) {
   ok('token anterior à ativação não abre terminal', r.status === 403 && r.data.code === 'TOTP_REQUIRED', JSON.stringify(r.data));
   r = await api('/auth/login', { method: 'POST', body: { username: 'admin', password: 'policy-pass-123' } });
   ok('login sem TOTP continua sendo recusado', r.status === 401 && r.data.code === 'TOTP_REQUIRED');
+  const oldSocket = await socketHandshake(token);
+  ok('handshake rejeita token sem TOTP quando 2FA está ativo', !oldSocket.connected, oldSocket.error);
   r = await api('/auth/login', { method: 'POST', body: { username: 'admin', password: 'policy-pass-123', totp: totp.totpAt(secret) } });
   const verifiedToken = r.data.token;
   ok('login com TOTP fornece sessão válida', r.status === 200 && !!verifiedToken);
+  const verifiedSocket = await socketHandshake(verifiedToken);
+  ok('handshake aceita token com TOTP verificado', verifiedSocket.connected, verifiedSocket.error);
   r = await api(`/services/${serviceId}/terminal`, { method: 'POST', token: verifiedToken });
   ok('sessão com TOTP abre terminal', r.status === 200 && !!r.data.id, JSON.stringify(r.data));
 
