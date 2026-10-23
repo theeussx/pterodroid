@@ -21,13 +21,13 @@ function clientIp(req) {
   return (req.headers['cf-connecting-ip'] || req.ip || '').toString();
 }
 
-function issueToken(res, user, req) {
+function issueToken(res, user, req, { totpVerified = false } = {}) {
   const jti = sessions.createSession(user.id, {
     ip: clientIp(req),
     userAgent: req.headers['user-agent'],
   });
   const token = jwt.sign(
-    { id: user.id, username: user.username, jti },
+    { id: user.id, username: user.username, jti, totpVerified: Boolean(totpVerified) },
     config.JWT_SECRET,
     { expiresIn: config.JWT_EXPIRES },
   );
@@ -87,6 +87,7 @@ router.post('/login', async (req, res) => {
   }
 
   // ── Segundo fator (TOTP + códigos de recuperação) ──────────────────────
+  let totpVerified = false;
   if (user.totp_enabled && user.totp_secret) {
     if (!totpCode) {
       // Não registra falha no throttle (a senha ESTAVA certa): pedir o
@@ -125,11 +126,12 @@ router.post('/login', async (req, res) => {
       recordAudit(db, { action: '2fa_falha', target: username, ip: clientIp(req) });
       return res.status(401).json({ error: 'Código de verificação inválido' });
     }
+    totpVerified = true;
   }
 
   throttle.registerSuccess(key);
   recordAudit(db, { action: 'login_sucesso', target: username, username, ip: clientIp(req) });
-  return issueToken(res, user, req);
+  return issueToken(res, user, req, { totpVerified });
 });
 
 // GET /api/auth/me

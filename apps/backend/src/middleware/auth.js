@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const config = require('../config');
+const { getDB } = require('../db');
 const sessions = require('../services/sessionManager');
 
 /**
@@ -60,4 +61,20 @@ function verifySocketToken(token) {
   return result.ok ? result.payload : null;
 }
 
-module.exports = { authMiddleware, verifySocketToken };
+/** Protege o terminal sem alterar as demais rotas autenticadas. */
+function terminalAccessMiddleware(req, res, next) {
+  if (!config.WEB_TERMINAL_ENABLED) {
+    return res.status(404).json({ error: 'Recurso não encontrado' });
+  }
+
+  const user = getDB().prepare('SELECT totp_enabled FROM users WHERE id = ?').get(req.user.id);
+  if (user?.totp_enabled === 1 && req.user.totpVerified !== true) {
+    return res.status(403).json({
+      error: 'Autenticação de dois fatores necessária',
+      code: 'TOTP_REQUIRED',
+    });
+  }
+  return next();
+}
+
+module.exports = { authMiddleware, verifySocketToken, terminalAccessMiddleware };

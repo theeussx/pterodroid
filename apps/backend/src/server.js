@@ -25,7 +25,7 @@ const serviceFileRoutes = require('./routes/serviceFiles');
 const terminalRoutes = require('./routes/terminal');
 const backupRoutes = require('./routes/backups');
 const dockerRoutes = require('./routes/docker');
-const { authMiddleware } = require('./middleware/auth');
+const { authMiddleware, terminalAccessMiddleware } = require('./middleware/auth');
 const { setupRequired } = require('./middleware/setupRequired');
 const jobQueue = require('./services/jobQueue');
 
@@ -137,7 +137,7 @@ async function main() {
   // fica bloqueada (só auth/me/change-password respondem). É a diferença
   // entre "avisar" e "impedir" que o login admin/admin vire acesso remoto.
   app.use('/api/services/:id/files', authMiddleware, setupRequired, serviceFileRoutes);
-  app.use('/api/services/:id/terminal', authMiddleware, setupRequired, terminalRoutes);
+  app.use('/api/services/:id/terminal', authMiddleware, setupRequired, terminalAccessMiddleware, terminalRoutes);
   app.use('/api/services/:id/backups', authMiddleware, setupRequired, backupRoutes);
   app.use('/api/services', authMiddleware, setupRequired, serviceRoutes);
   app.use('/api/databases', authMiddleware, setupRequired, databaseRoutes);

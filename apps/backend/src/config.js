@@ -13,6 +13,11 @@ function toAbsolute(value, fallback) {
   return path.isAbsolute(raw) ? path.normalize(raw) : path.resolve(raw);
 }
 
+function toBoolean(value, fallback) {
+  if (value === undefined || value === null || value === '') return fallback;
+  return !['0', 'false', 'no', 'off'].includes(String(value).trim().toLowerCase());
+}
+
 const DATA_ROOT = toAbsolute(process.env.DATA_ROOT, path.join(__dirname, '../../../data'));
 
 /**
@@ -142,4 +147,5 @@ module.exports = {
   CSP_FRAME_ANCESTORS: (process.env.CSP_FRAME_ANCESTORS || "'self'").trim(),
   CSP: (process.env.CSP || '').trim(),
   HSTS_MAX_AGE: parseInt(process.env.HSTS_MAX_AGE || String(180 * 24 * 60 * 60), 10),
+  WEB_TERMINAL_ENABLED: toBoolean(process.env.WEB_TERMINAL_ENABLED, true),
 };
