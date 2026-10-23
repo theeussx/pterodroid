@@ -78,9 +78,11 @@ async function main() {
 
   const app = express();
 
-  // CORS configurável. Padrão: abre para qualquer origem (o painel é servido
-  // pelo próprio backend e o cliente usa Bearer token; sem cookies, CSRF não
-  // é um vetor). Para restringir, defina CORS_ORIGINS="https://meu.dominio".
+  if (config.NODE_ENV === 'production' && config.CORS_ORIGINS.length === 0) {
+    throw new Error('CORS_ORIGINS é obrigatório em produção; não é permitido publicar o painel com origin *');
+  }
+  // Em desenvolvimento, sem origens configuradas, o frontend local continua
+  // funcionando. Em produção, o guard acima exige a lista explícita.
   if (config.CORS_ORIGINS.length > 0) {
     app.use(cors({ origin: config.CORS_ORIGINS }));
   } else {
@@ -90,13 +92,32 @@ async function main() {
   // ── Headers de segurança ──────────────────────────────────────────────
   // O painel é feito para ficar exposto à internet via Cloudflare Tunnel e
   // roda um terminal embutido, então esconder o stack (X-Powered-By) e
-  // configurar os headers defensivos vale a pena. Nada de X-Frame-Options
-  // nem CSP frame-ancestors: o painel é embutido em iframe por origens
-  // diferentes (nuvens de preview/uso), e isso quebraria a visualização.
+  // configurar os headers defensivos vale a pena. O framing é controlado por
+  // CSP_FRAME_ANCESTORS; instalações que usam iframe devem listar os hosts
+  // confiáveis nessa variável, em vez de abrir a política implicitamente.
   app.use((req, res, next) => {
     res.removeHeader('X-Powered-By');
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+    res.setHeader('Permissions-Policy', 'accelerometer=(), camera=(), geolocation=(), gyroscope=(), microphone=(), payment=(), usb=()');
+    const csp = config.CSP || [
+      "default-src 'self'",
+      "base-uri 'self'",
+      "object-src 'none'",
+      "script-src 'self'",
+      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+      "font-src 'self' https://fonts.gstatic.com data:",
+      "img-src 'self' data: blob:",
+      "connect-src 'self' ws: wss:",
+      `frame-ancestors ${config.CSP_FRAME_ANCESTORS}`,
+      "form-action 'self'",
+    ].join('; ');
+    res.setHeader('Content-Security-Policy', csp);
+    // Só anuncia HTTPS quando a conexão já é HTTPS (direto ou via proxy).
+    const forwardedProto = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim();
+    if (config.NODE_ENV === 'production' && (req.secure || forwardedProto === 'https')) {
+      res.setHeader('Strict-Transport-Security', `max-age=${config.HSTS_MAX_AGE}; includeSubDomains`);
+    }
     return next();
   });
 
@@ -168,7 +189,7 @@ async function main() {
   });
 
   const httpServer = http.createServer(app);
-  setupSockets(httpServer);
+  setupSockets(httpServer, config);
 
   httpServer.listen(config.PORT, () => {
     console.log(`\n🚀 Pterodroid ouvindo em http://0.0.0.0:${config.PORT}`);

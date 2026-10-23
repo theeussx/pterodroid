@@ -69,6 +69,7 @@ run "Fila — jobs persistentes (FIFO, cancel, zumbi)"    node tests/job-queue-t
 run "Integração — segurança das instâncias de banco"    node tests/database-security-test.js
 run "Segurança — compactar/descompactar (Zip Slip)"      node tests/archive-test.js
 run "Integração — terminal do serviço"                   node tests/terminal-test.js
+run "Integração — CORS, headers e handshake Socket.IO"   node tests/security-cors-test.js
 run "Integração — API HTTP completa"                     bash tests/smoke-test.sh
 run "Pré-voo — panelctl doctor"                          bash ../../panelctl.sh doctor
 

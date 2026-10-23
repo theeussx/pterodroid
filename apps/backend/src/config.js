@@ -131,8 +131,15 @@ module.exports = {
   // tabela docker_hosts (ver dockerHostManager.js), não por aqui.
   DOCKER_DEFAULT_HOST: process.env.DOCKER_HOST || null,
   DOCKER_API_VERSION: process.env.DOCKER_API_VERSION || 'v1.43',
-  // CORS configuravel. Padrão '*', ok para painel pessoal autenticado por
-  // Bearer (sem cookies, então CSRF não se aplica). Em uso mais restrito,
-  // defina CORS_ORIGINS com uma lista separada por vírgula.
+  // CORS configurável. Em desenvolvimento, uma lista vazia mantém o modo
+  // aberto para facilitar o uso local. Em produção, server.js rejeita uma
+  // lista vazia para impedir que o painel seja publicado acidentalmente com
+  // origin '*'.
+  NODE_ENV: String(process.env.NODE_ENV || 'development').toLowerCase(),
   CORS_ORIGINS: (process.env.CORS_ORIGINS || '').split(',').map((s) => s.trim()).filter(Boolean),
+  // Política de framing explícita; use uma lista de origens separada por
+  // espaços quando o painel precisar ser embutido por um host confiável.
+  CSP_FRAME_ANCESTORS: (process.env.CSP_FRAME_ANCESTORS || "'self'").trim(),
+  CSP: (process.env.CSP || '').trim(),
+  HSTS_MAX_AGE: parseInt(process.env.HSTS_MAX_AGE || String(180 * 24 * 60 * 60), 10),
 };

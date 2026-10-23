@@ -16,9 +16,20 @@ const lazyIo = require('./lazyIo');
 
 const SNAPSHOT_INTERVAL_MS = 2000;
 
-function setupSockets(httpServer) {
+function setupSockets(httpServer, config = {}) {
+  const origins = Array.isArray(config.CORS_ORIGINS) ? config.CORS_ORIGINS : [];
+  const production = config.NODE_ENV === 'production';
   const io = new Server(httpServer, {
-    cors: { origin: '*' }, // LAN-only personal panel; tighten if ever exposed publicly
+    // HTTP e WebSocket usam a mesma política. Em produção server.js já
+    // rejeita origins vazias; manter [] aqui também evita fallback para '*'.
+    cors: { origin: origins.length > 0 ? origins : (production ? [] : '*') },
+    // `cors` cobre o polling, mas allowRequest também bloqueia handshake
+    // WebSocket direto, mantendo os dois transportes com a mesma allowlist.
+    allowRequest: (req, callback) => {
+      const origin = req.headers.origin;
+      const allowed = origin ? origins.includes(origin) : !production;
+      callback(null, allowed);
+    },
   });
   lazyIo.setIo(io);
 
